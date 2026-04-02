@@ -6,6 +6,11 @@ on:
          - main
          - hugo
 
+permissions:
+   contents: read # needed to read the repo
+   pages: write # needed to deploy to GitHub Pages
+   id-token: write # required for actions/deploy-pages
+
 jobs:
    build-deploy:
       runs-on: ubuntu-latest

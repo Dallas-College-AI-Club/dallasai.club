@@ -1,5 +1,5 @@
 
-baseURL = "https://Dallas-College-AI-Club.github.io/dallasai.club/"
+baseURL = "https://dallas-college-ai-club.github.io/dallasai.club/"
 languageCode = "en-us"
 title = "Dallas AI Club"
 theme = "ai-theme"

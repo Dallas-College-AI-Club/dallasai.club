@@ -1,0 +1,35 @@
+<footer class="footer">
+   <p>© 2026 Dallas AI Club</p>
+</footer>
+
+<script>
+   const dropdown = document.querySelector(".discord-dropdown");
+   const panel = document.querySelector(".dropdown-panel");
+
+   dropdown.addEventListener("click", (e) => {
+      e.stopPropagation();
+      panel.classList.toggle("open");
+   });
+
+   document.addEventListener("click", () => {
+      panel.classList.remove("open");
+   });
+
+   async function loadDiscordStats() {
+      try {
+         const res = await fetch(
+            "https://discord.com/api/guilds/1488571969569034476/widget.json",
+         );
+         const data = await res.json();
+
+         document.getElementById("online-count").innerText =
+            data.presence_count;
+
+         document.getElementById("invite-link").href = data.instant_invite;
+      } catch (err) {
+         console.error("Discord widget failed:", err);
+      }
+   }
+
+   loadDiscordStats();
+</script>

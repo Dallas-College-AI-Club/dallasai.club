@@ -1,0 +1,11 @@
+{{ define "main" }}
+<h1>📢 News</h1>
+<ul>
+   {{ range .Pages }}
+   <li>
+      <strong>{{ .Title }}</strong>
+      <p>{{ .Summary }}</p>
+   </li>
+   {{ end }}
+</ul>
+{{ end }}

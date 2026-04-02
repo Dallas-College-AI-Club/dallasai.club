@@ -1,0 +1,36 @@
+{{ define "main" }}
+
+<section class="hero">
+   <h1>Dallas AI Club</h1>
+   <p>Build. Learn. Connect. 🚀</p>
+</section>
+
+<section>
+   <h2>🧠 Latest Blog</h2>
+   <div class="card-grid">
+      {{ range first 3 (sort (where .Site.RegularPages "Section" "blog") "Date"
+      "desc") }}
+      <div class="card">
+         <h3>{{ .Title }}</h3>
+         <p>{{ .Summary }}</p>
+         <a href="{{ .RelPermalink }}">Read →</a>
+      </div>
+      {{ end }}
+   </div>
+</section>
+
+<section>
+   <h2>📢 Latest News</h2>
+   <div class="card-grid">
+      {{ range first 3 (sort (where .Site.RegularPages "Section" "news") "Date"
+      "desc") }}
+      <div class="card">
+         <h3>{{ .Title }}</h3>
+         <p>{{ .Summary }}</p>
+         <a href="{{ .RelPermalink }}">Read →</a>
+      </div>
+      {{ end }}
+   </div>
+</section>
+
+{{ end }}

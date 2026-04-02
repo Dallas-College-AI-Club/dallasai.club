@@ -1,9 +1,28 @@
 name: Deploy Hugo site to GitHub Pages
 
 on:
-   push:
-      branches:
-         - main # or master
+  push:
+    branches:
+      - main
+      - hugo
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Hugo
+        uses: peaceiris/actions-hugo@v3
+        with:
+          hugo-version: 'latest'
+          extended: true
+      - run: hugo --minify
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./public
+      - uses: actions/deploy-pages@v4
+        with:
+          # Optionally you can specify different destinations based on branch
 
 jobs:
    build-deploy:

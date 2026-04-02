@@ -2,6 +2,8 @@
 baseURL = "https://dallas-college-ai-club.github.io/dallasai.club/"
 languageCode = "en-us"
 title = "Dallas AI Club"
+relativeURLs = true
+canonifyURLs = true
 theme = "ai-theme"
 
 [params]

@@ -1,36 +1,118 @@
 {{ define "main" }}
 
-<section class="hero">
-   <h1>Dallas AI Club</h1>
-   <p>Build. Learn. Connect. 🚀</p>
-</section>
+<header class="hero">
+   <div class="hero-content">
+      <h1>Build. Learn. Connect. 🚀</h1>
+      <p>Dallas AI Club: Learning, Building, and Innovating Together</p>
+      <a href="#" class="btn-primary">View Our Projects</a>
+   </div>
+   <div class="hero-image">
+      <svg
+         width="300"
+         height="300"
+         viewBox="0 0 24 24"
+         fill="none"
+         stroke="#3e8894"
+         stroke-width="1"
+         stroke-linecap="round"
+         stroke-linejoin="round"
+      >
+         <circle cx="18" cy="5" r="3"></circle>
+         <circle cx="6" cy="12" r="3"></circle>
+         <circle cx="18" cy="19" r="3"></circle>
+         <line x1="8.59" y1="13.51" x2="15.42" y2="17.49"></line>
+         <line x1="15.41" y1="6.51" x2="8.59" y2="10.49"></line>
+      </svg>
+   </div>
+</header>
 
-<section>
-   <h2>🧠 Latest Blog</h2>
-   <div class="card-grid">
-      {{ range first 3 (sort (where .Site.RegularPages "Section" "blog") "Date"
-      "desc") }}
-      <div class="card">
-         <h3>{{ .Title }}</h3>
-         <p>{{ .Summary }}</p>
-         <a href="{{ .RelPermalink }}">Read →</a>
+<main>
+   <section class="about section-container">
+      <div class="about-text">
+         <h2>About the Club</h2>
+         <p>
+            Dallas AI Club mission - A place for Dallas College students to explore machine learning, data science, and AI development, fostering a community of learners and future engineers.
+         </p>
+         <p>
+            We are dedicated to community developing, and exploring new
+            technologies together, and fostering a community of learners.
+         </p>
       </div>
+      <div class="about-image">
+         <img
+            src="{{"images/group.jpg" | relURL }}"
+            alt="Members attending the first club meeting"
+         />
+      </div>
+   </section>
+
+   <section class="projects section-container">
+      <h2>Featured Projects</h2>
+      <div class="project-grid">
+         <div class="card">
+            <div class="icon">🤖</div>
+            <h3>Project 1: Success Coach / College Guide Chatbot</h3>
+            <p>
+               AI for good: helping Dallas College students with everything from their degree plan to where to find things on campus.
+            </p>
+            <a href="#" class="link-more">Learn More ></a>
+         </div>
+         <div class="card">
+            <div class="icon">📈</div>
+            <h3>Project 2: AI Trading</h3>
+            <p>
+               Predicting market trends and their use in trading.
+            </p>
+            <a href="#" class="link-more">Learn More ></a>
+         </div>
+         <div class="card">
+            <div class="icon">💬</div>
+            <h3>Project 3: Analyzing World Events for their Impact on Stock Prices</h3>
+            <p>
+               How does the everyday news cycle affect the stock market?
+            </p>
+            <a href="#" class="link-more">Learn More ></a>
+         </div>
+      </div>
+   </section>
+
+   <section class="events section-container">
+      <h2>Upcoming Events</h2>
+         <div class="event-list">
+      {{ range first 3 (sort (where .Site.RegularPages "Section" "events") "Date"
+      "desc") }}
+			<div class="event-item">
+						<div class="event-date">
+							<span class="day">{{ .Date.Format "02" }}</span>
+							<span class="month">{{ .Date.Format "Jan" }}</span>
+							<span class="time">{{ .Date.Format "03:04 PM" }}</span>
+						</div>
+            <div class="event-details">
+               <h4>{{ .Title }}</h4>
+               <p>{{ .Summary }}</p>
+            </div>
+            <div class="event-arrow"><a href="{{ .RelPermalink }}">→</a></div>
+         </div>
       {{ end }}
    </div>
-</section>
+   </section>
 
-<section>
-   <h2>📢 Latest News</h2>
-   <div class="card-grid">
-      {{ range first 3 (sort (where .Site.RegularPages "Section" "news") "Date"
-      "desc") }}
-      <div class="card">
-         <h3>{{ .Title }}</h3>
-         <p>{{ .Summary }}</p>
-         <a href="{{ .RelPermalink }}">Read →</a>
-      </div>
-      {{ end }}
-   </div>
-</section>
+	 <section class="events section-container">
+		<h2>Latest News</h2>
+		<div class="card-grid">
+				{{ range first 3 (sort (where .Site.RegularPages "Section" "news") "Date"
+				"desc") }}
+				<div class="card">
+					<h3>{{ .Title }}</h3>
+					<p>{{ .Summary }}</p>
+					<a href="{{ .RelPermalink }}">Read →</a>
+				</div>
+				{{ end }}
+		</div>
+	</section>
+</main>
+
+
+
 
 {{ end }}

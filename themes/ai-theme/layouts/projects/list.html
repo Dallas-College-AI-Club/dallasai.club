@@ -1,0 +1,19 @@
+{{ define "main" }}
+<header class="page-hero">
+   <div class="page-hero-content">
+      <h1>Projects</h1>
+   </div>
+   <div class="page-hero-image">💻</div>
+</header>
+
+<section class="page-section">
+   <div class="projects-list">
+      {{ range .Pages }}
+      <a href="{{ .RelPermalink }}" class="projects-item">
+         <div class="projects-title">{{ .Title }}</div>
+         <div class="projects-content"><p>{{ .Summary }}</p></div>
+      </a>
+      {{ end }}
+   </div>
+</section>
+{{ end }}

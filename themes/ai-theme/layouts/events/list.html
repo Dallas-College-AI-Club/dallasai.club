@@ -1,14 +1,45 @@
 {{ define "main" }}
-<h1>📅 Upcoming Events</h1>
+<header class="page-hero">
+   <div class="page-hero-content">
+      <h1>Events</h1>
+   </div>
+   <div class="page-hero-image">📅</div>
+</header>
+<section class="page-section">
+   <h1>Upcoming Events</h1>
+   <div class="event-page-wrapper">
+      <div style="margin: auto; text-align: center">
+         <iframe
+            src="https://calendar.google.com/calendar/embed?src=8946b3966a05103c5ac9faabb49003d5983d093a96230cc0148e68816fb14d65%40group.calendar.google.com&ctz=America%2FChicago"
+            style="border: 0"
+            width="600"
+            height="500"
+            frameborder="0"
+            scrolling="no"
+         ></iframe>
+      </div>
 
-<div style="margin: auto; text-align: center">
-   <iframe
-      src="https://calendar.google.com/calendar/embed?src=8946b3966a05103c5ac9faabb49003d5983d093a96230cc0148e68816fb14d65%40group.calendar.google.com&ctz=America%2FChicago"
-      style="border: 0"
-      width="800"
-      height="600"
-      frameborder="0"
-      scrolling="no"
-   ></iframe>
-</div>
+      <section class="events section-container">
+         <div class="event-list">
+            {{ range first 10 (sort (where .Site.RegularPages "Section"
+            "events") "Date" "desc") }}
+            <div class="event-item">
+               <div class="event-date">
+                  <span class="day">{{ .Date.Format "02" }}</span>
+                  <span class="month">{{ .Date.Format "Jan" }}</span>
+                  <span class="time">{{ .Date.Format "03:04 PM" }}</span>
+               </div>
+               <div class="event-details">
+                  <h4>{{ .Title }}</h4>
+                  <p>{{ .Summary }}</p>
+               </div>
+               <div class="event-arrow">
+                  <a href="{{ .RelPermalink }}">→</a>
+               </div>
+            </div>
+            {{ end }}
+         </div>
+      </section>
+   </div>
+</section>
 {{ end }}

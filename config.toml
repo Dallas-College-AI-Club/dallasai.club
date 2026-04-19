@@ -1,5 +1,5 @@
 
-baseURL = "https://dallas-college-ai-club.github.io/dallasai.club/"
+baseURL = "/"
 languageCode = "en-us"
 title = "Dallas AI Club"
 relativeURLs = true
@@ -14,9 +14,13 @@ description = "Student-led AI Club at Dallas College"
 name = "Home"
 url = "/"
 weight = 1
+# [[menu.main]]
+# name = "Blog"
+# url = "/blog/"
+# weight = 2
 [[menu.main]]
-name = "Blog"
-url = "/blog/"
+name = "Projects"
+url = "/projects/"
 weight = 2
 [[menu.main]]
 name = "News"

@@ -1,0 +1,24 @@
+<div id="discord-stats" class="discord-card">
+    <h3>🧠 Dallas AI Club Community</h3>
+    <p>Total Members: <span id="member-count">Loading...</span></p>
+    <p>Online Now: <span id="online-count">Loading...</span></p>
+    <a id="invite-link" href="#" target="_blank">Join our Discord</a>
+</div>
+
+<script>
+    async function loadDiscordStats() {
+        const res = await fetch(
+            "https://discord.com/api/guilds/1488571969569034476/widget.json",
+        );
+        const data = await res.json();
+
+        document.getElementById("online-count").innerText = data.presence_count;
+
+        // Approximation (widget doesn't expose total members directly)
+        document.getElementById("member-count").innerText = data.members.length;
+
+        document.getElementById("invite-link").href = data.instant_invite;
+    }
+
+    loadDiscordStats();
+</script>

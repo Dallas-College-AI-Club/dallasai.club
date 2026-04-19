@@ -1,0 +1,24 @@
+{{ define "main" }}
+<header class="page-hero">
+   <div class="page-hero-content">
+      <h1>News</h1>
+   </div>
+   <div class="page-hero-image">📰</div>
+</header>
+<section class="page-section">
+   <div class="news-list">
+      {{ range .Pages }}
+      <div class="news-item">
+         <div class="news-title">
+            <div class="event-date">
+               <span class="day">{{ .Date.Format "02" }}</span>
+               <span class="month">{{ .Date.Format "Jan" }}</span>
+            </div>
+            {{ .Title }}
+         </div>
+         <div class="news-content"><p>{{ .Summary }}</p></div>
+      </div>
+      {{ end }}
+   </div>
+</section>
+{{ end }}

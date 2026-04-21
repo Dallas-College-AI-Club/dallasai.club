@@ -4,7 +4,7 @@
 
 ## Website Team
 
-* Student Name 1
+* Matthew Htang
   - Github:
   - LinkedIn:
 

@@ -5,8 +5,8 @@
 ## Website Team
 
 * Matthew Htang
-  - Github:
-  - LinkedIn:
+  - Github: https://github.com/MatthewHtang
+  - LinkedIn: https://www.linkedin.com/in/matthew-htang/
 
 * Student Name 2
   - Github:

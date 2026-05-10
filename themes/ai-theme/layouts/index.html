@@ -88,7 +88,7 @@
 							<span class="time">{{ .Date.Format "03:04 PM" }}</span>
 						</div>
             <div class="event-details">
-               <h4>{{ .Title }}</h4>
+                <h4><a href="{{ .RelPermalink }}">{{ .Title }}</a></h4>
                <p>{{ .Summary }}</p>
             </div>
             <div class="event-arrow"><a href="{{ .RelPermalink }}">→</a></div>

@@ -5,4 +5,4 @@ location: "Discord"
 draft: false
 ---
 
-Join us for our weekly meeting. This meeting will take place on Discord 🎮.
+Join us for our weekly meeting. This meeting will take place online

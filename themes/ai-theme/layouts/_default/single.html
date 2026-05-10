@@ -1,4 +1,7 @@
 {{ define "main" }}
-<h1>{{ .Title }}</h1>
-<p>{{ .Content }}</p>
+<section class="single-item">
+    <h1>{{ .Title }}</h1>
+    <hr style="background-color: #3e8894" />
+    {{ .Content }}
+</section>
 {{ end }}

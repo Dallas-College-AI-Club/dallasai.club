@@ -8,6 +8,10 @@ summary: Learn to code using AI in Antigravity
 
 Come join us as we look at how to use AI to help us code.
 
+<div style="max-width: 500px; margin: 0 auto;">
+{{< youtube m11LPYmSvJk >}}
+</div>
+
 Here are some resources to help you get started.
 
 - [Antigravity](https://antigravity.google/) A code editor specifically designed for Agentic coding

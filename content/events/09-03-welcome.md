@@ -1,7 +1,7 @@
 ---
 title: "Fall 2026 Welcome"
 date: 2026-09-03T17:00:00-06:00
-location: "Richland TBD & Teams"
+location: "Richland Campus; Red River Hall; ROOM RR1246 & Teams"
 draft: false
 summary: "Come learn about the club and tell us what you want to learn."
 ---
@@ -14,4 +14,4 @@ The agenda will include the follow:
 - A overview of the summer coding project
 - Get your feedback on what you hope to learn and do in the club.
 
-You are welcome to come in person or attend virtually.
+You are welcome to come in person (Richland Campus; Red River Hall; ROOM RR1246) or attend virtually.

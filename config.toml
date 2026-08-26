@@ -1,7 +1,7 @@
 
 baseURL = "/"
 languageCode = "en-us"
-title = "Dallas AI Club"
+title = "Dallas College AI Club"
 relativeURLs = true
 canonifyURLs = true
 theme = "ai-theme"

@@ -1,13 +1,13 @@
-# Dallas AI Club Website
+# Dallas College AI Club Website
 
 [dallasai.club](https://dallasai.club/)
 
 ## Website Team
 
-* Matthew Htang
+- Matthew Htang
   - Github: https://github.com/MatthewHtang
   - LinkedIn: https://www.linkedin.com/in/matthew-htang/
 
-* Student Name 2
+- Student Name 2
   - Github:
   - LinkedIn:

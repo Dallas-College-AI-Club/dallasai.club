@@ -2,7 +2,7 @@
 title: "5/7/2026 AI Coding Workshop"
 date: 2026-05-07T16:30:00-06:00
 location: "Richland D-143"
-draft: false
+draft: true
 summary: Learn to code using AI in Antigravity
 ---
 

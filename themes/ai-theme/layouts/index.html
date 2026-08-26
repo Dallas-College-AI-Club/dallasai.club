@@ -80,7 +80,7 @@
       <h2>Upcoming Events</h2>
          <div class="event-list">
       {{ range first 3 (sort (where .Site.RegularPages "Section" "events") "Date"
-      "desc") }}
+      "asc") }}
 			<div class="event-item">
 						<div class="event-date">
 							<span class="day">{{ .Date.Format "02" }}</span>

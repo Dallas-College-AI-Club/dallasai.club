@@ -5,6 +5,7 @@ title = "Dallas College AI Club"
 relativeURLs = true
 canonifyURLs = true
 theme = "ai-theme"
+buildFuture = true
 
 [params]
 description = "Student-led AI Club at Dallas College"

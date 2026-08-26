@@ -1,5 +1,5 @@
 ---
-title: "9/3/2026 Fall 2026 Welcome"
+title: "Fall 2026 Welcome"
 date: 2026-09-02T17:00:00-06:00
 location: "Richland TBD & Teams"
 draft: false

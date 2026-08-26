@@ -38,14 +38,36 @@
             technologies together, and fostering a community of learners.
          </p>
       </div>
-      <div class="about-image">
+      <!--<div class="about-image">
          <img
             src="{{"images/DallasCollegeAIClub.png" | relURL }}"
+            style="height:400px; width: auto"
             alt="Club Poster"
          />
-      </div>
+      </div>-->
    </section>
 
+   <section class="events section-container">
+      <h2>Upcoming Events</h2>
+         <div class="event-list">
+      {{ range first 3 (sort (where .Site.RegularPages "Section" "events") "Date"
+      "asc") }}
+			<div class="event-item">
+						<div class="event-date">
+							<span class="day">{{ .Date.Format "02" }}</span>
+							<span class="month">{{ .Date.Format "Jan" }}</span>
+							<span class="time">{{ .Date.Format "03:04 PM" }}</span>
+						</div>
+            <div class="event-details">
+                <h4><a href="{{ .RelPermalink }}">{{ .Title }}</a></h4>
+               <p>{{ .Summary }}</p>
+            </div>
+            <div class="event-arrow"><a href="{{ .RelPermalink }}">→</a></div>
+         </div>
+      {{ end }}
+   </div>
+   </section>
+   
    <section class="projects section-container">
       <h2>Featured Projects</h2>
       <div class="project-grid">
@@ -76,28 +98,9 @@
       </div>
    </section>
 
-   <section class="events section-container">
-      <h2>Upcoming Events</h2>
-         <div class="event-list">
-      {{ range first 3 (sort (where .Site.RegularPages "Section" "events") "Date"
-      "asc") }}
-			<div class="event-item">
-						<div class="event-date">
-							<span class="day">{{ .Date.Format "02" }}</span>
-							<span class="month">{{ .Date.Format "Jan" }}</span>
-							<span class="time">{{ .Date.Format "03:04 PM" }}</span>
-						</div>
-            <div class="event-details">
-                <h4><a href="{{ .RelPermalink }}">{{ .Title }}</a></h4>
-               <p>{{ .Summary }}</p>
-            </div>
-            <div class="event-arrow"><a href="{{ .RelPermalink }}">→</a></div>
-         </div>
-      {{ end }}
-   </div>
-   </section>
 
-	 <section class="events section-container">
+
+	 <!--<section class="events section-container">
 		<h2>Latest News</h2>
 		<div class="card-grid">
 				{{ range first 3 (sort (where .Site.RegularPages "Section" "news") "Date"
@@ -109,7 +112,7 @@
 				</div>
 				{{ end }}
 		</div>
-	</section>
+	</section>-->
 </main>
 
 

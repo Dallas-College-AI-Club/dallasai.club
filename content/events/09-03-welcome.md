@@ -1,6 +1,6 @@
 ---
 title: "Fall 2026 Welcome"
-date: 2026-09-02T17:00:00-06:00
+date: 2026-09-03T17:00:00-06:00
 location: "Richland TBD & Teams"
 draft: false
 summary: "Come learn about the club and tell us what you want to learn."

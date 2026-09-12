@@ -1,28 +1,58 @@
-name: Deploy Hugo site to GitHub Pages
+name: Build and publish website
 
 on:
-   push:
-      branches:
-         - main
-         - hugo
+  pull_request:
+  push:
+    branches: [main, hugo]
+  workflow_dispatch:
+  schedule:
+    # Rebuild to publish scheduled articles. GitHub may delay the start time.
+    - cron: '15 8 * * *'
 
 permissions:
-   contents: read # needed to read the repo
-   pages: write # needed to deploy to GitHub Pages
-   id-token: write # required for actions/deploy-pages
+  contents: read
+
+concurrency:
+  group: hugo-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-   build-deploy:
-      runs-on: ubuntu-latest
-      steps:
-         - uses: actions/checkout@v4
-         - name: Setup Hugo
-           uses: peaceiris/actions-hugo@v3
-           with:
-              hugo-version: "latest"
-              extended: true
-         - run: hugo --minify
-         - uses: actions/upload-pages-artifact@v3
-           with:
-              path: ./public
-         - uses: actions/deploy-pages@v4
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: peaceiris/actions-hugo@2752ce1d29631191ea3f27c23495fa06139a5b78 # v3
+        with:
+          hugo-version: '0.162.1'
+          extended: true
+      - run: hugo --cleanDestinationDir --panicOnWarning
+      - name: Save the reviewable static site
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: hugo-preview
+          path: public/
+          if-no-files-found: error
+          retention-days: 7
+      - name: Prepare Pages artifact
+        if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/hugo')
+        uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        with:
+          path: public/
+
+  deploy:
+    if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/hugo')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5

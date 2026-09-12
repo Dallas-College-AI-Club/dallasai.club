@@ -1,0 +1,36 @@
+{
+  "ADVISORS": [
+    {
+      "name": "David Bracewell, PhD",
+      "firstName": "David",
+      "role": "Faculty, Engineering, Computer Science & Information Systems",
+      "email": "dbracewell@dallascollege.edu",
+      "linkedin": "https://www.linkedin.com/in/davidbracewell/"
+    },
+    {
+      "name": "Russ Pearlman, JD",
+      "firstName": "Russ",
+      "role": "Chief Information Officer",
+      "email": "rpearlman@dallascollege.edu",
+      "linkedin": "https://www.linkedin.com/in/russpearlman/"
+    }
+  ],
+  "CONTACT_EMAIL": "dbracewell@dallascollege.edu",
+  "COPYRIGHT": "© 2026 Dallas College AI Club",
+  "EDITOR_EMAIL": "dbracewell@dallascollege.edu",
+  "JOIN_URL": "https://teams.microsoft.com/l/team/19%3AAeb1LfEOy4KBW0URKvOHS3kP_OMebVszQum-mc5xtrc1%40thread.tacv2/conversations?groupId=75d91295-0556-4fef-aa41-42299dd3cdef&tenantId=d67e5453-732f-4adc-94a4-4888f2d97d5d",
+  "PROJECT_URL": "https://major-demo-chi.vercel.app/",
+  "SITE_URL": "https://dallasai.club/",
+  "SOCIAL_LINKS": [
+    {
+      "label": "Instagram",
+      "href": "https://www.instagram.com/dallascollegeaiclub/?hl=en"
+    },
+    {
+      "label": "LinkedIn",
+      "href": "https://www.linkedin.com/in/dallas-college-ai-club-richland-based-742338400/"
+    }
+  ],
+  "WORKSHOP_REQUEST_URL": "",
+  "LEADERBOARD_API_URL": "https://dallasai-leaderboard.vercel.app/api/leaderboard"
+}

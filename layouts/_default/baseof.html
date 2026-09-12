@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>{{ .Title }} | {{ site.Title }}</title>
+    <link rel="canonical" href="{{ .Permalink }}" />
+    <link rel="stylesheet" href="{{ "styles/fonts.css" | relURL }}" />
+    <link rel="stylesheet" href="{{ "styles/legacy.css" | relURL }}" />
+    <link rel="alternate" type="application/rss+xml" title="The AI Review" href="{{ "review-feed.xml" | absURL }}" />
+  </head>
+  <body>
+    <header><a href="{{ "index.html" | relURL }}">Dallas College AI Club</a><nav aria-label="Club navigation"><a href="{{ "club.html?mode=journal" | relURL }}">The AI Review</a><a href="{{ "club.html?mode=events" | relURL }}">Events</a><a href="{{ "club.html?mode=projects" | relURL }}">Projects</a></nav></header>
+    <main id="content">{{ block "main" . }}{{ end }}</main>
+    <footer><a href="{{ "club.html?mode=about" | relURL }}">About the club</a> · {{ hugo.Data.club.COPYRIGHT }}</footer>
+  </body>
+</html>

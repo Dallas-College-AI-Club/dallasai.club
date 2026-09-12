@@ -1,0 +1,77 @@
+{{ partial "publish-data.html" . }}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>{{ site.Title }}</title>
+    <meta name="description" content="{{ site.Params.description }}" />
+    <link rel="alternate" type="application/rss+xml" title="The AI Review" href="{{ "review-feed.xml" | absURL }}" />
+    <link rel="canonical" href="{{ .Permalink }}" />
+    <link rel="stylesheet" href="styles/fonts.css" />
+    <link rel="stylesheet" href="styles/entrance.css" />
+    <link rel="stylesheet" href="styles/footer.css" />
+  </head>
+  <body>
+    <main class="entrance">
+      <img
+        class="scene"
+        src="assets/entrance.png"
+        alt="A student with a backpack walks toward the light between two glass gateways"
+      />
+      <div class="shade"></div>
+      <header class="club-header">
+        <a class="brand" href="index.html"
+          ><img src="assets/club-logo.png" alt="Dallas College AI Club" /><span
+            >DALLAS COLLEGE<br /><b>AI CLUB</b></span
+          ></a
+        ><span class="welcome">Different perspectives. Shared possibilities.</span>
+      </header>
+      <div class="hero-copy">
+        <p class="eyebrow">WELCOME TO A NEW WORLD OF IDEAS</p>
+        <h1>AI meets <em>your</em> world.</h1>
+        <p class="description">Choose how you want to enter.</p>
+      </div>
+      <nav class="entry-choices" aria-label="Choose your experience">
+        <a id="browse" href="club.html?mode=browse&entry=gateway"
+          ><svg viewBox="0 0 32 32" aria-hidden="true">
+            <path d="M16 8Q10 3 3 6v21q7-3 13 1 6-4 13-1V6q-7-3-13 2v20" /></svg
+          ><span>Browse the Club</span><small>Student articles, ideas & projects</small
+          ><b aria-hidden="true">→</b></a
+        ><a id="explore" href="club.html?mode=play&entry=gateway"
+          ><svg viewBox="0 0 32 32" aria-hidden="true">
+            <circle cx="16" cy="16" r="11" />
+            <path d="m22 10-4 10-8 2 3-9Z" /></svg
+          ><span>Explore & Play</span><small>Games, discoveries & club updates.</small
+          ><b aria-hidden="true">→</b></a
+        >
+      </nav>
+      <aside
+        class="discipline-panel disciplines-left"
+        aria-label="Arts, business, education and health"
+      >
+        <span>Arts</span><span>Business</span><span>Education</span><span>Health</span>
+      </aside>
+      <aside
+        class="discipline-panel disciplines-right"
+        aria-label="Science, technology, humanities and community"
+      >
+        <span>Science</span><span>Technology</span><span>Humanities</span><span>Community</span>
+      </aside>
+      <div class="disciplines-mobile" aria-label="An interdisciplinary club">
+        <span>Arts</span><span>Business</span><span>Education</span><span>Health</span
+        ><span>Science</span><span>Technology</span><span>Humanities</span><span>Community</span>
+      </div>
+      <footer class="entrance-footer">
+        <a href="club.html?mode=about">About the club</a><span>One community. Two ways in.</span
+        ><a id="skip" href="club.html?mode=browse&entry=gateway">Skip intro →</a>
+      </footer>
+    </main>
+    <footer class="site-footer">
+      <p>© 2026 Dallas College AI Club</p>
+      <nav aria-label="Follow the club"></nav>
+    </footer>
+    <script src="app/entrance.js"></script>
+    <script type="module" src="app/footer.js"></script>
+  </body>
+</html>

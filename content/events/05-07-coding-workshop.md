@@ -1,9 +1,18 @@
 ---
+publishDate: 2026-04-01T00:00:00Z
 title: "5/7/2026 AI Coding Workshop"
 date: 2026-05-07T16:30:00-06:00
 location: "Richland D-143"
 draft: true
 summary: Learn to code using AI in Antigravity
+id: "coding-may"
+eventDate: "2026-05-07T16:30:00-05:00"
+category: "Workshop"
+agenda: ["Explore AI-assisted coding and build with Antigravity.","Learn, code, and collaborate with other students."]
+preparation: []
+weight: 4
+end: "2026-05-07T18:00:00-05:00"
+aliases: ["/calendar/coding-may/"]
 ---
 
 Come join us as we look at how to use AI to help us code.

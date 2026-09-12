@@ -1,0 +1,88 @@
+{
+  "projects": [
+    {
+      "id": "major",
+      "label": "STUDENT PROJECT",
+      "title": "Meet Major, your Success Coach.",
+      "body": "Explore the club’s college-planning chatbot and its multilingual demo.",
+      "action": "See the project",
+      "mode": "projects"
+    },
+    {
+      "id": "career-resume",
+      "label": "PROJECTS · WORK IN PROGRESS",
+      "title": "Your experience. The right words.",
+      "body": "Career Resume Builder will help students tailor a resume to a job and prepare for interviews. Explore the concept.",
+      "action": "See the project",
+      "mode": "projects"
+    },
+    {
+      "id": "signal",
+      "label": "PROJECTS · CONCEPT STUDY",
+      "title": "Signal. Turn sound into light.",
+      "body": "Try an audiovisual instrument with three original soundscapes.",
+      "action": "Explore Signal",
+      "mode": "projects"
+    },
+    {
+      "id": "second-nature",
+      "label": "PROJECTS · CONCEPT STUDY",
+      "title": "Second Nature. Find a cooler route.",
+      "body": "Compare a direct walk with a shaded garden route in a campus design concept.",
+      "action": "Explore Second Nature",
+      "mode": "projects"
+    }
+  ],
+  "lab": [
+    {
+      "id": "lab-neural",
+      "label": "AI LAB",
+      "title": "Train a model. Test what it learns.",
+      "body": "Change the data and model size, then inspect the predictions.",
+      "action": "Try the experiment",
+      "mode": "lab"
+    },
+    {
+      "id": "lab-answers",
+      "label": "AI LAB",
+      "title": "Look beyond the average.",
+      "body": "Compare familiar and unfamiliar wording to see what one accuracy score can hide.",
+      "action": "Check its answers",
+      "mode": "ethics"
+    },
+    {
+      "id": "lab-compare",
+      "label": "AI LAB",
+      "title": "Which AI fits your task?",
+      "body": "Set your priorities and see how a weighted test changes the result.",
+      "action": "Compare AI tools",
+      "mode": "compare"
+    },
+    {
+      "id": "lab-instructions",
+      "label": "AI LAB",
+      "title": "Notice when an answer goes off track.",
+      "body": "Test an output against explicit instructions and spot what needs review.",
+      "action": "Spot AI going off track",
+      "mode": "drift"
+    }
+  ],
+  "community": [
+    {
+      "id": "community",
+      "label": "YOUR CLUB",
+      "title": "Every major has a place here.",
+      "body": "Arts, business, science, technology, and more. Meet the community and join us in Teams.",
+      "action": "Meet the club",
+      "mode": "about"
+    },
+    {
+      "id": "community-teams",
+      "label": "JOIN THE CONVERSATION",
+      "title": "Bring your questions to the club.",
+      "body": "Find the Teams community and ways to take part on the About page.",
+      "action": "Join the club",
+      "mode": "about"
+    }
+  ]
+}

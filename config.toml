@@ -1,34 +1,15 @@
-
-baseURL = "/"
-languageCode = "en-us"
+baseURL = "https://dallasai.club/"
+locale = "en-US"
 title = "Dallas College AI Club"
-relativeURLs = true
-canonifyURLs = true
-theme = "ai-theme"
-buildFuture = true
-
+timeZone = "America/Chicago"
+buildFuture = false
+buildDrafts = false
+disableKinds = ["taxonomy", "term"]
+enableRobotsTXT = true
 [params]
-description = "Student-led AI Club at Dallas College"
-
-[markup]
-  [markup.goldmark]
-    [markup.goldmark.renderer]
-      unsafe = true
-
-[menu]
-[[menu.main]]
-name = "Home"
-url = "/"
-weight = 1
-[[menu.main]]
-name = "Projects"
-url = "/projects/"
-weight = 2
-[[menu.main]]
-name = "News"
-url = "/news/"
-weight = 3
-[[menu.main]]
-name = "Events"
-url = "/events/"
-weight = 4
+  description = "Student-led AI Club at Dallas College: articles, projects, events, experiments and browser games."
+[markup.goldmark.renderer]
+  unsafe = true
+[outputs]
+  home = ["HTML"]
+  section = ["HTML"]

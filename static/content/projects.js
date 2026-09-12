@@ -1,0 +1,5 @@
+import { PUBLISHED } from './published.js';
+export const PROJECT_LINKS = PUBLISHED.projects.PROJECT_LINKS;
+export const PROPOSED_PROJECTS = PUBLISHED.projects.PROPOSED_PROJECTS;
+export const WORLD_MARKET_EVENTS = PUBLISHED.projects.WORLD_MARKET_EVENTS;
+export const WORLD_MARKET_SCOPE = PUBLISHED.projects.WORLD_MARKET_SCOPE;

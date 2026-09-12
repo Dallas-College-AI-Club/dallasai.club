@@ -1,0 +1,516 @@
+{
+  "LAB_AREAS": [
+    {
+      "id": "business",
+      "label": "Business, hospitality & trade",
+      "school": "Business, Hospitality and Global Trade",
+      "programs": [
+        "Accounting",
+        "Business and Management",
+        "Culinary and Pastry Arts",
+        "Hospitality Management",
+        "Marketing"
+      ],
+      "href": "https://www.dallascollege.edu/schools/business/",
+      "cases": ["business"]
+    },
+    {
+      "id": "arts",
+      "label": "Arts, media & languages",
+      "school": "Creative Arts, Entertainment and Design",
+      "programs": [
+        "Digital Art and Design",
+        "Communications",
+        "English",
+        "Foreign Language Courses",
+        "Commercial Music",
+        "Architecture"
+      ],
+      "href": "https://www.dallascollege.edu/schools/arts/caed-aos/",
+      "cases": ["arts", "humanities"]
+    },
+    {
+      "id": "education",
+      "label": "Education & teaching",
+      "school": "Education",
+      "programs": [
+        "Early Childhood Education and Teaching",
+        "Child Development Associate (CDA)",
+        "EC–3 and EC–6 teacher preparation",
+        "Teacher’s aide training"
+      ],
+      "href": "https://www.dallascollege.edu/schools/education/",
+      "cases": ["education"]
+    },
+    {
+      "id": "stem",
+      "label": "Engineering, computing & science",
+      "school": "Engineering, Technology, Mathematics and Sciences",
+      "programs": [
+        "Software Development (BAT)",
+        "Cyber Security",
+        "Programming",
+        "Mathematics",
+        "Biology",
+        "Engineering"
+      ],
+      "href": "https://www.dallascollege.edu/schools/stem/",
+      "cases": ["computing", "science"]
+    },
+    {
+      "id": "health",
+      "label": "Health sciences",
+      "school": "Health Sciences",
+      "programs": [
+        "Nursing",
+        "Medical Assisting",
+        "Dental Hygiene",
+        "Health Information Technology"
+      ],
+      "href": "https://www.dallascollege.edu/schools/health-sciences/",
+      "cases": ["health"]
+    },
+    {
+      "id": "public-service",
+      "label": "Law & public service",
+      "school": "Law and Public Service",
+      "programs": [
+        "Paralegal",
+        "Social Work",
+        "Criminal Justice",
+        "Government",
+        "Psychology",
+        "History"
+      ],
+      "href": "https://www.dallascollege.edu/schools/law-public-service/",
+      "cases": ["public-service"]
+    },
+    {
+      "id": "manufacturing",
+      "label": "Manufacturing & skilled trades",
+      "school": "Manufacturing and Industrial Technology",
+      "programs": [
+        "Computer Aided Design and Drafting (CADD)",
+        "Construction Management",
+        "HVAC",
+        "Automotive Technology",
+        "Electrical Technology"
+      ],
+      "href": "https://www.dallascollege.edu/schools/manufacturing-industrial-tech/",
+      "cases": ["trades"]
+    }
+  ],
+  "LAB_CASES": [
+    {
+      "id": "business",
+      "field": "Business, hospitality & trade",
+      "title": "How much should the café prepare?",
+      "brief": "AI proposes two food-prep plans for a campus café.",
+      "facts": [
+        {
+          "label": "Yesterday",
+          "value": "30 lunches sold. The café ran out at noon."
+        },
+        {
+          "label": "Tomorrow",
+          "value": "A campus event may bring more visitors."
+        }
+      ],
+      "task": "Which plan would you test first?",
+      "choices": [
+        {
+          "text": "Prepare 30 lunches and offer preorders.",
+          "benefit": "Keeps the food budget and possible leftovers lower.",
+          "tradeoff": "Walk-in visitors may still find lunch sold out.",
+          "check": "Count requests you could not serve, not just completed sales."
+        },
+        {
+          "text": "Prepare 40 lunches for the possible rush.",
+          "benefit": "Leaves room for visitors who did not preorder.",
+          "tradeoff": "More food may be left over if demand stays low.",
+          "check": "Track leftovers and agree on an acceptable waste limit."
+        }
+      ],
+      "project": "Café planning simulator",
+      "value": "See how an AI plan changes when you prioritize cost, food waste or availability.",
+      "contribution": "Set the priorities and test several days of fictional demand.",
+      "artifact": "A spreadsheet showing the plan, demand and outcome.",
+      "learn": "Set useful goals and measure what a sales total misses.",
+      "career": "AI can forecast demand. A business still has to decide what service and waste levels it will accept. Knowing the operation helps you explain those tradeoffs.",
+      "experiment": "compare",
+      "next": "Compare what matters"
+    },
+    {
+      "id": "arts",
+      "field": "Arts, media & design",
+      "title": "Which image tells the right story?",
+      "brief": "AI helps create two visual directions for a club campaign.",
+      "facts": [
+        {
+          "label": "One direction",
+          "value": "Photos from a real student event."
+        },
+        {
+          "label": "Another direction",
+          "value": "An original AI illustration of the idea."
+        }
+      ],
+      "task": "Which direction would you develop first?",
+      "choices": [
+        {
+          "text": "Use the event photos.",
+          "benefit": "Shows the people and experience behind the club.",
+          "tradeoff": "People may not want their image used in every campaign.",
+          "check": "Confirm permission for this use with the people pictured."
+        },
+        {
+          "text": "Use the AI illustration.",
+          "benefit": "Explores a visual idea without depicting actual students.",
+          "tradeoff": "Viewers could mistake an imagined scene for a real event.",
+          "check": "Ask viewers what they think it shows and label it clearly."
+        }
+      ],
+      "project": "Campaign concept studio",
+      "value": "Test whether people understand an AI-assisted campaign as intended.",
+      "contribution": "Set the creative direction and review audience feedback and image permissions.",
+      "artifact": "Two mockups, a short creative brief and audience feedback.",
+      "learn": "Guide AI visuals through audience research and editorial decisions.",
+      "career": "As visual production gets faster, designers decide what a campaign represents and whether it fits its audience. A polished image alone cannot settle those choices.",
+      "experiment": "compare",
+      "next": "Compare what matters"
+    },
+    {
+      "id": "education",
+      "field": "Education & teaching",
+      "title": "What would show that a child understands?",
+      "brief": "AI designs two activities for children learning to count.",
+      "facts": [
+        {
+          "label": "What you notice",
+          "value": "Some children get the answer but cannot explain it."
+        },
+        {
+          "label": "Your goal",
+          "value": "Find out whether they understand the idea."
+        }
+      ],
+      "task": "Which activity would you try first?",
+      "choices": [
+        {
+          "text": "Give each learner adaptive AI practice.",
+          "benefit": "Adjusts the pace and examples for each learner.",
+          "tradeoff": "Correct screen answers may not show how the learner is thinking.",
+          "check": "Ask the learner to explain a new example without the tool."
+        },
+        {
+          "text": "Try an AI-planned group activity with objects.",
+          "benefit": "Makes reasoning and different strategies visible.",
+          "tradeoff": "A confident child may do most of the talking.",
+          "check": "Give every learner a turn to show their own approach."
+        }
+      ],
+      "project": "Learning activity test kit",
+      "value": "Compare what learners understand afterward, not just how many answers they complete.",
+      "contribution": "Define a learning goal and review both activities with an educator.",
+      "artifact": "Two activity plans and an observation checklist. Begin with adult role-play.",
+      "learn": "Choose evidence that shows learning beyond task completion.",
+      "career": "AI can generate lessons and personalize practice. Educators need to decide what learning looks like and notice when a child needs another approach.",
+      "experiment": "ethics",
+      "next": "Look beyond one score"
+    },
+    {
+      "id": "health",
+      "field": "Health sciences",
+      "title": "Will people be able to use the information?",
+      "brief": "AI drafts appointment information in several languages.",
+      "facts": [
+        {
+          "label": "Audience",
+          "value": "Some people have limited data or share a phone."
+        },
+        {
+          "label": "Information",
+          "value": "A short reminder and detailed preparation instructions."
+        }
+      ],
+      "task": "Which approach would you test first?",
+      "choices": [
+        {
+          "text": "Send a short reminder with a number to call.",
+          "benefit": "Works without a portal login or a long download.",
+          "tradeoff": "People need another step to get the full instructions.",
+          "check": "Test whether people know what to do next and can reach support."
+        },
+        {
+          "text": "Link to a detailed, translated portal guide.",
+          "benefit": "Keeps the instructions together with room for explanation.",
+          "tradeoff": "Login or data access may prevent people from reading it.",
+          "check": "Test the login and guide with volunteers using different devices and languages."
+        }
+      ],
+      "project": "Appointment information prototype",
+      "value": "Test whether people can act on accurate information in the way it is delivered.",
+      "contribution": "Map the reader’s steps and test understanding with fictional notices.",
+      "artifact": "Two message prototypes and notes from a small usability test.",
+      "learn": "Evaluate access, privacy and understanding together.",
+      "career": "Even accurate AI writing has to work for the person receiving it. Health teams need people who can connect communication tools with actual patient workflows.",
+      "experiment": "ethics",
+      "next": "Look beyond one score"
+    },
+    {
+      "id": "science",
+      "field": "Science & engineering",
+      "title": "Where should the next measurement go?",
+      "brief": "AI turns a small temperature dataset into a campus heat map.",
+      "facts": [
+        {
+          "label": "Current data",
+          "value": "Measurements from one sunny afternoon."
+        },
+        {
+          "label": "Limited time",
+          "value": "You can collect one more set of measurements."
+        }
+      ],
+      "task": "Which evidence would you collect next?",
+      "choices": [
+        {
+          "text": "Measure more places across campus.",
+          "benefit": "Shows whether areas are missing from the map.",
+          "tradeoff": "One afternoon still cannot show how conditions change.",
+          "check": "Record shade, surface and measurement time consistently."
+        },
+        {
+          "text": "Measure the busiest route at several times.",
+          "benefit": "Shows how conditions change where many people walk.",
+          "tradeoff": "Other routes remain poorly measured.",
+          "check": "Compare the model’s predictions with the repeated readings."
+        }
+      ],
+      "project": "Campus heat-map study",
+      "value": "Test how sampling choices change an AI map and what people can use it for.",
+      "contribution": "Choose measurement locations, document conditions and check predictions.",
+      "artifact": "A small dataset, a map and a clear statement of its limits.",
+      "learn": "Plan data collection around the decision a model will support.",
+      "career": "AI can fit models and summarize results. Scientists and engineers need evidence from the setting where a result will be used, and a reason for collecting it.",
+      "experiment": "lab",
+      "next": "Explore model training"
+    },
+    {
+      "id": "humanities",
+      "field": "English, communications & languages",
+      "title": "What will help readers take the next step?",
+      "brief": "AI produces two accurate translations of a community notice.",
+      "facts": [
+        {
+          "label": "Original",
+          "value": "Formal wording with unfamiliar service names."
+        },
+        {
+          "label": "Audience",
+          "value": "Readers who need to find the right service quickly."
+        }
+      ],
+      "task": "Which version would you test with readers first?",
+      "choices": [
+        {
+          "text": "Keep the wording close to the original.",
+          "benefit": "Makes it easier to compare the translation with the source.",
+          "tradeoff": "Formal terms may still be difficult for new readers.",
+          "check": "Ask readers to identify the next action without help."
+        },
+        {
+          "text": "Use plain language with short explanations.",
+          "benefit": "Explains unfamiliar terms in the reader’s context.",
+          "tradeoff": "Editing can shift emphasis or hide useful distinctions.",
+          "check": "Ask bilingual reviewers to check meaning and readers to test the instructions."
+        }
+      ],
+      "project": "Community language guide",
+      "value": "Test whether an accurate translation helps its intended audience take action.",
+      "contribution": "Explain audience needs and review meaning, tone and understanding.",
+      "artifact": "Two versions of a public notice and a short reader-test summary.",
+      "learn": "Check both accuracy and practical understanding.",
+      "career": "As translation and drafting improve, language professionals can shape how information is understood in a specific community. Knowing the audience is part of the work.",
+      "experiment": "compare",
+      "next": "Compare what matters"
+    },
+    {
+      "id": "computing",
+      "field": "Computing & cybersecurity",
+      "title": "The agent can make the change. May it?",
+      "brief": "An AI coding agent prepares a fix that passes the project’s automated tests.",
+      "facts": [
+        {
+          "label": "Capability",
+          "value": "The agent can edit, test and deploy code."
+        },
+        {
+          "label": "Responsibility",
+          "value": "Your team sets its permissions and release rules."
+        }
+      ],
+      "task": "Which permission model would you pilot?",
+      "choices": [
+        {
+          "text": "Have it prepare changes for approval.",
+          "benefit": "A reviewer sees each change before it is released.",
+          "tradeoff": "Routine fixes wait when reviewers are busy.",
+          "check": "Give reviewers a clear change summary and evidence beyond “tests passed.”"
+        },
+        {
+          "text": "Allow a narrow set of reversible releases.",
+          "benefit": "Routine work can move without approval for every step.",
+          "tradeoff": "A mistake can reach users before someone reviews it.",
+          "check": "Define allowed changes, access limits, monitoring and when to roll back."
+        }
+      ],
+      "project": "Agent permission sandbox",
+      "value": "Explore how a capable agent works with different permissions and recovery rules.",
+      "contribution": "Define permitted actions and test what happens outside those limits.",
+      "artifact": "A small test repository, an action log and a rollback demonstration.",
+      "learn": "Design permissions and recovery as part of an AI system.",
+      "career": "As agents work more independently, software teams need people who can decide what they may change and how to recover. Working code is only one part of a reliable release.",
+      "experiment": "drift",
+      "next": "Explore instruction boundaries"
+    },
+    {
+      "id": "public-service",
+      "field": "Law & public service",
+      "title": "Who gets a place when seats are limited?",
+      "brief": "AI can schedule a free workshop using either admission plan.",
+      "facts": [
+        {
+          "label": "Capacity",
+          "value": "20 seats."
+        },
+        {
+          "label": "Access",
+          "value": "Some people book online; others rely on walk-ins."
+        }
+      ],
+      "task": "Which plan would you discuss with the service team?",
+      "choices": [
+        {
+          "text": "Reserve 15 seats. Keep 5 for walk-ins.",
+          "benefit": "More people know they have a place before traveling.",
+          "tradeoff": "People without online access have fewer places available.",
+          "check": "Track empty reservations and people turned away at the door."
+        },
+        {
+          "text": "Reserve 10 seats. Keep 10 for walk-ins.",
+          "benefit": "Leaves more room for people who cannot book online.",
+          "tradeoff": "More visitors travel without knowing whether a seat remains.",
+          "check": "Ask about booking barriers and make the admission plan clear."
+        }
+      ],
+      "project": "Community access simulator",
+      "value": "Show how a booking rule affects different ways people access a service.",
+      "contribution": "Identify who each rule helps or excludes and test fictional attendance patterns.",
+      "artifact": "Two booking rules, simulated outcomes and questions for a community partner.",
+      "learn": "Turn access goals into rules that can be reviewed and changed.",
+      "career": "AI can apply a policy consistently without deciding whether it serves the community well. Public-service teams need evidence, public input and a way to review the outcome.",
+      "experiment": "ethics",
+      "next": "Check whose results count"
+    },
+    {
+      "id": "trades",
+      "field": "Manufacturing & skilled trades",
+      "title": "What would prove the plan works on site?",
+      "brief": "AI proposes an HVAC schedule that uses less energy in a building simulation.",
+      "facts": [
+        {
+          "label": "Model",
+          "value": "Assumes a typical day and typical room occupancy."
+        },
+        {
+          "label": "Building",
+          "value": "Weather, equipment and room use change."
+        }
+      ],
+      "task": "Which test would you plan first?",
+      "choices": [
+        {
+          "text": "Test more conditions in the simulator.",
+          "benefit": "Explores hot days and busy rooms without changing a real system.",
+          "tradeoff": "The simulator may still miss a condition in the building.",
+          "check": "Compare its assumptions with equipment records and measured conditions."
+        },
+        {
+          "text": "Plan a supervised trial in one suitable space.",
+          "benefit": "Shows how the plan works with the actual equipment and room.",
+          "tradeoff": "A poor change can affect comfort or operation during the trial.",
+          "check": "Have the responsible professional set limits, monitoring and a stop condition."
+        }
+      ],
+      "project": "Building performance test plan",
+      "value": "Connect AI recommendations with the measurements and limits of a real building.",
+      "contribution": "Review a fictional system’s assumptions and plan what to measure before a change.",
+      "artifact": "An instructor-reviewed test plan using simulated data.",
+      "learn": "Connect model results with physical conditions and operating limits.",
+      "career": "As AI improves design and scheduling, trades professionals need to verify the installed system and its conditions. This helps turn a recommendation into an accountable site decision.",
+      "experiment": "compare",
+      "next": "Compare what matters"
+    }
+  ],
+  "LAB_SOURCES": [
+    {
+      "organization": "NIST",
+      "date": "Updated August 2026",
+      "title": "AI Agent Standards Initiative",
+      "href": "https://www.nist.gov/artificial-intelligence/ai-agent-standards-initiative",
+      "note": "Current work on agent identity, authorization and security evaluation. Informs the Lab’s focus on what an agent is allowed to do, beyond what it can do."
+    },
+    {
+      "organization": "OECD & European Commission",
+      "date": "June 2026",
+      "title": "Empowering Learners for the Age of AI",
+      "href": "https://www.oecd.org/en/publications/empowering-learners-for-the-age-of-ai_65cd27d4-en.html",
+      "note": "A school-education framework for understanding, evaluating and using AI. We adapt these broad learning goals to club activities."
+    },
+    {
+      "organization": "U.S. Department of Labor",
+      "date": "February 2026",
+      "title": "Artificial Intelligence Literacy Framework",
+      "href": "https://www.dol.gov/agencies/eta/advisories/ten-07-25",
+      "note": "Connects AI literacy with tasks in different fields, including hands-on practice and judgment about outputs in college and workforce learning."
+    },
+    {
+      "organization": "NIST",
+      "date": "2023 · foundational guidance",
+      "title": "AI Risk Management Framework 1.0",
+      "href": "https://airc.nist.gov/airmf-resources/airmf/5-sec-core/",
+      "note": "Informs our focus on context, evaluation and contributions from domain experts, users and affected communities."
+    }
+  ],
+  "LAB_WORK_SOURCES": [
+    {
+      "organization": "International Labour Organization",
+      "date": "May 2025",
+      "title": "Explore how occupations may change",
+      "href": "https://www.ilo.org/resource/article/how-might-generative-ai-impact-different-occupations",
+      "note": "Explore how AI could affect the mix of tasks within an occupation. These are estimates of potential exposure, not observed job losses or a forecast of your career."
+    },
+    {
+      "organization": "Stanford Digital Economy Lab & ADP",
+      "date": "Updated monthly",
+      "title": "Canaries Dashboard",
+      "href": "https://digitaleconomy.stanford.edu/project/indicators/canaries-dashboard/",
+      "note": "Explore employment trends by occupation, age and AI exposure using payroll data. A change in employment does not, by itself, establish that AI caused it."
+    },
+    {
+      "organization": "Anthropic",
+      "date": "June 2026",
+      "title": "Economic Index: work and AI use",
+      "href": "https://www.anthropic.com/research/economic-index-june-2026-report",
+      "note": "See the tasks people bring to Claude, from reports and marketing to code and translation. These are usage patterns and user experiences, not a count of jobs replaced."
+    },
+    {
+      "organization": "U.S. Bureau of Labor Statistics",
+      "date": "August 2026",
+      "title": "AI exposure and career outlook",
+      "href": "https://www.bls.gov/emp/publications/ai-exposure-categories.htm",
+      "note": "Look up an occupation’s AI exposure alongside the 2025–35 employment projections. Exposure describes how tasks relate to AI capabilities and use; it is not a prediction of job loss."
+    }
+  ]
+}

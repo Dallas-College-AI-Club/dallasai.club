@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" shape-rendering="crispEdges" role="img" aria-labelledby="title">
+  <title id="title">Explore the club website</title>
+  <path fill="#956815" d="M20 3h3V2h4V1h3v1h1v2h1v5h-1v3h-2V7h1V4h-2V3h-5v1h-3v2h-3V5h3zM1 23h1v-3h2v-3h2v-3h2v2H7v3H5v3H3v4H1z"/>
+  <path fill="#ffd653" d="M20 2h3V1h7v1h1v2h-2V3h-6v1h-3v2h-3V5h-3V4h6zM1 22h1v-3h2v-3h2v2H5v3H3v4H1z"/>
+  <path fill="#083e8a" fill-rule="evenodd" d="M13 5h8v1h4v2h2v3h2v4h1v5H11v2h1v2h3v1h6v-1h3v-2h5v3h-2v2h-3v2h-4v1h-8v-1H9v-2H6v-3H4v-4H3v-5h1v-4h2V9h3V7h4zM13 11v1h-2v3h12v-3h-2v-1z"/>
+  <path fill="#137dc9" fill-rule="evenodd" d="M13 5h8v1h3v2h2v3h2v4h1v4H10v3h1v2h3v2h7v-1h3v-2h4v2h-2v2h-3v1h-4v1h-7v-1H9v-2H6v-3H5v-4H4v-4h1v-4h2V9h3V7h3zM13 10v1h-2v2h-1v3h14v-3h-1v-2h-2v-1z"/>
+  <path fill="#2b9de0" d="M13 5h8v1h3v2h2v3h1v3h-3v-3h-2V9h-9v1h-3v2H8v4H6v5H5v-2H4v-4h1v-4h2V9h3V7h3zM10 17h18v1H10z"/>
+  <path fill="#6bc5ed" d="M13 5h7v1h-7zM10 7h3v1h-3zM7 9h3v1H8v2H7zM5 12h1v4H5zM11 17h16v1H11z"/>
+  <path fill="#075cb1" d="M26 11h2v4h1v4H10v-1h17v-5h-1zM5 21h1v3h2v2h3v1h9v-1h4v-1h2v-2h2v2h-2v2h-3v1h-4v1h-7v-1H9v-2H6v-3H5z"/>
+  <path fill="#a16f10" d="M30 5h2v5h-1v3h-2v3h-2v3h-3v3h-3v2h-3v2h-4v2h-4v2H5v1H2v-1H1v-2H0v-4h1v-3h2v5h1v1h4v-1h4v-2h4v-2h4v-3h3v-3h3v-3h2V9h2z"/>
+  <path fill="#f8c33e" d="M30 5h1v5h-1v3h-2v3h-2v3h-3v3h-3v2h-3v2h-4v2H9v1H4v1H2v-2H1v-4h1v-2h1v4h1v1h4v-1h4v-2h4v-2h4v-3h3v-3h3v-3h2V9h2z"/>
+  <path fill="#fff09a" d="M30 5h1v3h-1zM28 10h1v3h-1zM26 13h1v3h-1zM23 16h2v2h-1v1h-1zM20 19h2v2h-2zM16 22h3v1h-3zM12 24h3v1h-3zM8 26h3v1H8zM2 24h1v3h4v1H3v-1H2z"/>
+</svg>

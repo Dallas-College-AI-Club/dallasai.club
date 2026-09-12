@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"><channel><title>The AI Review · Dallas College AI Club</title><link>{{ .club.SITE_URL | htmlEscape }}</link><description>{{ .publication.note | htmlEscape }}</description><language>en-us</language>
+{{ range sort .articles "publishedAt" "desc" }}<item><title>{{ .title | htmlEscape }}</title><link>{{ printf "%sclub.html?mode=article&amp;article=%s" $.club.SITE_URL .slug | safeHTML }}</link><guid isPermaLink="false">ai-review:{{ .slug | htmlEscape }}</guid><description>{{ if .isSample }}Editorial sample. {{ end }}{{ .abstract | htmlEscape }}</description>{{ with .publishedAt }}<pubDate>{{ (time.AsTime .).UTC.Format "Mon, 02 Jan 2006 15:04:05 -0700" }}</pubDate>{{ end }}</item>{{ end }}
+</channel></rss>

@@ -1,0 +1,7 @@
+{{ define "main" }}
+<h1>{{ .Title }}</h1>
+{{ .Content }}
+{{ if eq .Section "events" }}<p><a href="{{ "club.html?mode=events" | relURL }}">Open the current club calendar</a>. Original event records remain available below.</p>{{ end }}
+{{ if eq .Section "projects" }}<p><a href="{{ "club.html?mode=projects" | relURL }}">Explore the current projects and demos</a>. Earlier project records remain available below.</p>{{ end }}
+{{ if .Pages }}<ul class="records">{{ range .Pages.ByDate.Reverse }}<li><a href="{{ .RelPermalink }}">{{ .Title }}</a>{{ with .Description }}<p>{{ . }}</p>{{ end }}</li>{{ end }}</ul>{{ else }}<p>No published entries here yet. <a href="{{ "club.html?mode=browse" | relURL }}">Browse the club</a>.</p>{{ end }}
+{{ end }}

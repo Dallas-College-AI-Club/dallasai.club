@@ -1,0 +1,12 @@
+{{ define "main" }}
+<article>
+  <h1>{{ .Title }}</h1>
+  {{ if eq .Section "events" }}<p class="record-note">Original meeting record. <a href="{{ "club.html?mode=events" | relURL }}">View the club calendar</a> for the current schedule.</p>{{ end }}
+  {{ with .Params.eventdate }}<p>{{ . }}</p>{{ else }}{{ if not .Date.IsZero }}<p>{{ .Date.Format "January 2, 2006" }}</p>{{ end }}{{ end }}
+  {{ with .Params.location }}<p>{{ . }}</p>{{ end }}
+  {{ .Content }}
+  {{ with .Params.agenda }}<h2>Agenda</h2><ul>{{ range . }}<li>{{ . }}</li>{{ end }}</ul>{{ end }}
+  {{ with .Params.preparation }}<h2>Preparation</h2><ul>{{ range . }}<li>{{ . }}</li>{{ end }}</ul>{{ end }}
+  {{ if eq .Type "review" }}<p><a href="{{ printf "club.html?mode=article&article=%s" .Slug | relURL }}">Read in The AI Review</a></p>{{ end }}
+</article>
+{{ end }}

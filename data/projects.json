@@ -1,0 +1,118 @@
+{
+  "PROJECT_LINKS": [
+    {
+      "id": "major",
+      "title": "Success Coach",
+      "label": "Major",
+      "icon": "computer",
+      "description": "Meet Major, the college planning chatbot. BAT degree and first-semester questions in nine languages.",
+      "anchor": "success-coach",
+      "href": "club.html?mode=projects#success-coach"
+    },
+    {
+      "id": "career",
+      "title": "Career Resume Builder",
+      "icon": "resume",
+      "description": "Career Studio: tailor a resume to a job description and prepare for an interview. Work in progress.",
+      "anchor": "career-title",
+      "label": "Career Resume Builder",
+      "href": "club.html?mode=projects#career-title"
+    },
+    {
+      "id": "signal",
+      "title": "Signal",
+      "icon": "sound",
+      "description": "An audiovisual instrument that turns sound into light and motion. Interactive concept.",
+      "anchor": "project-signal",
+      "label": "Signal",
+      "href": "club.html?mode=projects#project-signal"
+    },
+    {
+      "id": "nature",
+      "title": "Second Nature",
+      "icon": "tree",
+      "description": "A campus walking companion with direct and shaded routes. Interactive concept.",
+      "anchor": "project-nature",
+      "label": "Second Nature",
+      "href": "club.html?mode=projects#project-nature"
+    },
+    {
+      "id": "ai-trading",
+      "title": "AI Trading",
+      "label": "AI Trading",
+      "icon": "chart",
+      "description": "Explore how AI could identify market trends and how those patterns relate to trading. What would a model learn from historical prices, and would it hold up on new data?",
+      "anchor": "project-ai-trading",
+      "href": "club.html?mode=projects#project-ai-trading"
+    },
+    {
+      "id": "world-events-stocks",
+      "title": "Analyzing World Events for their Impact on Stock Prices",
+      "label": "World Signals",
+      "icon": "globe",
+      "description": "Explore how world events and the daily news cycle relate to changes in stock prices. Which news events coincide with a price change, and what else could explain it?",
+      "anchor": "project-world-events-stocks",
+      "href": "club.html?mode=projects#project-world-events-stocks"
+    }
+  ],
+  "PROPOSED_PROJECTS": [
+    {
+      "id": "ai-trading",
+      "title": "AI Trading",
+      "summary": "Explore how AI could identify market trends and how those patterns relate to trading.",
+      "question": "What would a model learn from historical prices, and would it hold up on new data?",
+      "source": "https://dallasai.club/index.html"
+    },
+    {
+      "id": "world-events-stocks",
+      "title": "Analyzing World Events for their Impact on Stock Prices",
+      "summary": "Explore how world events and the daily news cycle relate to changes in stock prices.",
+      "question": "Which news events coincide with a price change, and what else could explain it?",
+      "source": "https://dallasai.club/index.html"
+    }
+  ],
+  "WORLD_MARKET_EVENTS": [
+    {
+      "id": "deepseek",
+      "label": "DeepSeek",
+      "title": "DeepSeek tops the charts",
+      "summary": "News that DeepSeek topped U.S. app downloads rattled AI stocks. Nvidia closed nearly 17% lower on Jan. 27.",
+      "date": "2025-01-27",
+      "asset": "Nvidia · NVDA",
+      "change": -17,
+      "approximate": true,
+      "period": "Session close",
+      "region": "China",
+      "sourceName": "Reuters",
+      "source": "https://www.investing.com/news/stock-market-news/chinas-deepseek-sets-off-ai-market-rout-3831131"
+    },
+    {
+      "id": "tariff-pause",
+      "label": "Tariff pause",
+      "title": "Trump pauses tariffs",
+      "summary": "Trump announced a 90-day pause on many tariffs on Apr. 9. The S&P 500 rose 9.52% by that day’s close.",
+      "date": "2025-04-09",
+      "asset": "S&P 500",
+      "change": 9.52,
+      "period": "Session close",
+      "region": "Washington",
+      "sourceName": "Reuters",
+      "source": "https://www.marketscreener.com/quote/index/S-P-GSCI-BRENT-CRUDE-INDE-46869164/news/US-stocks-surge-dollar-gains-in-dramatic-relief-rally-as-Trump-pauses-tariffs-49567454/"
+    },
+    {
+      "id": "oracle-cloud",
+      "label": "Oracle report",
+      "title": "Oracle reveals AI deals",
+      "summary": "Oracle’s Sept. 9 earnings report revealed major AI contracts. Shares jumped about 36% in the next trading session.",
+      "date": "2025-09-10",
+      "asset": "Oracle · ORCL",
+      "change": 36,
+      "approximate": true,
+      "period": "Session close",
+      "region": "Texas",
+      "sourceName": "Reuters",
+      "source": "https://www.marketscreener.com/news/s-p-nasdaq-notch-record-high-closes-as-oracle-soars-on-ai-optimism-ce7d59dddc88f724"
+    }
+  ],
+  "WORLD_MARKET_SCOPE": "Close vs. previous close · 2024–26"
+}

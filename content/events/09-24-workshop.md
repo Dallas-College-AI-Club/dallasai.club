@@ -1,4 +1,5 @@
 ---
+publishDate: 2026-04-01T00:00:00Z
 title: "Being productive with AI Workshop"
 date: 2026-09-24T17:00:00-06:00
 location: "Richland TBD & Teams"

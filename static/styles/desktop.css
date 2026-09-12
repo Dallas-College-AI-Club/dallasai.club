@@ -1,0 +1,1404 @@
+/* Latest: a Windows 95 desktop, with a scrolling layout on small screens. */
+body[data-space='summary'] {
+  margin: 0;
+  padding: 0;
+  background: #008080;
+  overflow-x: clip;
+}
+body[data-space='summary']::before {
+  content: none;
+}
+body[data-space='summary'] #content.latest-desktop {
+  animation: none;
+  transform: none;
+}
+body[data-space='summary'] :is(.club-nav, .nav-toggle, .nav-backdrop) {
+  display: none;
+}
+#content.latest-desktop {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+body .latest-desktop :is(h1, h2, h3, p) {
+  color: inherit;
+  font-family: inherit;
+}
+.latest-desktop button:hover {
+  background: var(--silver);
+}
+.latest-desktop {
+  color-scheme: light;
+  font-family: 'Microsoft Sans Serif', Tahoma, Arial, sans-serif;
+  font-size: 13px;
+  color: #111;
+  --silver: #c0c0c0;
+  --navy: #000080;
+  --raised:
+    inset -1px -1px #000, inset 1px 1px #fff, inset -2px -2px #808080, inset 2px 2px #dfdfdf;
+  --sunken:
+    inset -1px -1px #fff, inset 1px 1px #808080, inset -2px -2px #dfdfdf, inset 2px 2px #000;
+  line-height: 1.4;
+  background: #008080;
+}
+.latest-desktop * {
+  box-sizing: border-box;
+}
+.latest-desktop button,
+.latest-desktop a {
+  -webkit-tap-highlight-color: transparent;
+}
+body .latest-desktop :is(button, a, input) {
+  font: inherit;
+}
+.latest-desktop button {
+  cursor: pointer;
+  min-height: 0;
+  color: #111;
+}
+.latest-desktop a {
+  color: inherit;
+}
+.latest-desktop button,
+.latest-desktop a,
+.latest-desktop section {
+  border-radius: 0;
+}
+.latest-desktop [hidden] {
+  display: none !important;
+}
+.latest-desktop :focus-visible {
+  outline: 1px dotted currentColor;
+  outline-offset: -4px;
+}
+.latest-desktop .sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+/* Desktop and app icons */
+.latest-desktop .r95-shell {
+  height: 100dvh;
+  min-height: 400px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) 38px;
+  overflow: hidden;
+}
+.latest-desktop .r95-desktop {
+  position: relative;
+  isolation: isolate;
+  min-width: 0;
+  overflow: hidden;
+}
+.latest-desktop .r95-desktop-heading {
+  position: absolute;
+  top: 17px;
+  left: 106px;
+  right: 25px;
+  display: flex;
+  justify-content: space-between;
+  margin: 0;
+  color: #e4ffff;
+  font-size: 11px;
+  font-weight: normal;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+.latest-desktop .r95-desktop-heading span {
+  color: #c2e6e6;
+  letter-spacing: 0.2px;
+  text-transform: none;
+}
+.latest-desktop .r95-wallpaper {
+  position: absolute;
+  display: grid;
+  gap: 10px;
+  pointer-events: none;
+  color: #b5dcdc;
+  left: var(--content-left, 100px);
+  right: auto;
+  width: 210px;
+  bottom: 34px;
+}
+.latest-desktop .r95-wallpaper img {
+  width: 100%;
+  height: auto;
+  opacity: 0.8;
+}
+.latest-desktop .r95-wallpaper > span {
+  font-size: 9px;
+  letter-spacing: 0.2px;
+  line-height: 1.5;
+  padding-left: 2px;
+}
+.latest-desktop .r95-club-footer {
+  pointer-events: auto;
+  color: #e0f4f4;
+  text-align: inherit;
+}
+.latest-desktop .r95-club-footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: inherit;
+  gap: 6px 18px;
+  margin-bottom: 4px;
+}
+.latest-desktop .r95-club-footer a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  font-size: 11px;
+  text-underline-offset: 3px;
+}
+.latest-desktop .r95-club-footer small {
+  font-size: 10px;
+}
+.latest-desktop .r95-desktop-icons {
+  position: absolute;
+  z-index: 1;
+  left: 7px;
+  top: 16px;
+  width: 78px;
+  display: grid;
+  gap: 11px;
+}
+.latest-desktop .r95-desktop-icon {
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 6px;
+  border: 0;
+  background: transparent;
+  padding: 3px 0;
+  min-height: 65px;
+  color: white;
+  font-size: 11px;
+  line-height: 1.25;
+  text-shadow: 1px 1px #004747;
+}
+.latest-desktop .r95-desktop-icon > span {
+  padding: 2px 3px;
+  border: 1px solid transparent;
+  max-width: 78px;
+}
+.latest-desktop .r95-desktop-icon[aria-pressed='true'] > span {
+  background: var(--navy);
+  border: 1px dotted #fff;
+}
+.latest-desktop .r95-desktop-icon:hover > span {
+  background: #006363;
+}
+.latest-desktop .r95-desktop-icon[aria-pressed='true']:hover > span {
+  background: var(--navy);
+}
+.latest-desktop .r95-desktop-icon:focus-visible {
+  outline-offset: 0;
+}
+.latest-desktop a.r95-about-shortcut {
+  color: #fff6bc;
+  text-decoration: none;
+  text-align: center;
+  text-shadow: none;
+}
+.latest-desktop .r95-about-shortcut > span {
+  color: inherit;
+}
+.latest-desktop .r95-about-shortcut:hover > span {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.latest-desktop .r95-about-shortcut .r95-icon {
+  padding: 2px;
+}
+.latest-desktop .r95-shell:not(.is-flowing) .r95-about-shortcut {
+  margin-bottom: clamp(8px, calc(100dvh - 670px), 65px);
+}
+.latest-desktop .r95-icon {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
+  image-rendering: pixelated;
+}
+.latest-desktop .r95-icon.small {
+  width: 16px;
+  height: 16px;
+}
+.latest-desktop .r95-workspace {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+/* Window frames and controls */
+.latest-desktop .r95-window {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  padding: 3px;
+  background: var(--silver);
+  box-shadow:
+    var(--raised),
+    1px 1px #000;
+  pointer-events: auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.latest-desktop .r95-window.is-maximized {
+  left: 0 !important;
+  top: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+.latest-desktop .r95-titlebar {
+  height: 25px;
+  min-height: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 3px;
+  background: #808080;
+  color: #eee;
+  user-select: none;
+  touch-action: none;
+  cursor: default;
+}
+.latest-desktop .r95-window.is-active .r95-titlebar {
+  background: var(--navy);
+  color: white;
+}
+.latest-desktop .r95-titlebar h2 {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  flex: 1;
+  font-size: 12px;
+  font-weight: bold;
+  line-height: 19px;
+  margin: 0;
+}
+.latest-desktop .r95-titlebar h2 > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.latest-desktop .r95-window-controls {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.latest-desktop .r95-window-controls button {
+  width: 20px;
+  height: 19px;
+  padding: 0;
+  border: 0;
+  box-shadow: var(--raised);
+  background: var(--silver);
+  display: grid;
+  place-items: center;
+}
+.latest-desktop .r95-window-controls button:last-child {
+  margin-left: 2px;
+}
+.latest-desktop .r95-window-controls button:active {
+  box-shadow: var(--sunken);
+  padding: 1px 0 0 1px;
+}
+.latest-desktop .r95-min-glyph {
+  width: 8px;
+  height: 2px;
+  background: #000;
+  margin-top: 7px;
+}
+.latest-desktop .r95-max-glyph {
+  width: 10px;
+  height: 9px;
+  border: 1px solid #000;
+  border-top-width: 2px;
+}
+.latest-desktop .is-maximized .r95-max-glyph {
+  width: 8px;
+  height: 7px;
+  box-shadow:
+    2px -2px 0 -1px var(--silver),
+    2px -2px #000;
+}
+.latest-desktop .r95-close-glyph {
+  width: 10px;
+  height: 10px;
+  background:
+    linear-gradient(45deg, transparent 41%, #000 42% 57%, transparent 58%),
+    linear-gradient(-45deg, transparent 41%, #000 42% 57%, transparent 58%);
+}
+.latest-desktop .r95-window-menu {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 3px;
+  min-height: 26px;
+  padding: 2px 4px;
+}
+.latest-desktop .r95-window-menu a {
+  font-size: 12px;
+  text-decoration: none;
+  padding: 3px 7px;
+}
+.latest-desktop .r95-window-menu a:hover {
+  box-shadow:
+    inset 1px 1px #fff,
+    inset -1px -1px #808080;
+}
+.latest-desktop .r95-window-body {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  overscroll-behavior: contain;
+  scrollbar-color: #c0c0c0 #dfdfdf;
+  scrollbar-width: auto;
+}
+.latest-desktop .r95-window-body::-webkit-scrollbar {
+  width: 16px;
+  height: 16px;
+}
+.latest-desktop .r95-window-body::-webkit-scrollbar-track {
+  background: repeating-conic-gradient(#ddd 0% 25%, #fff 0% 50%) 50% / 2px 2px;
+}
+.latest-desktop .r95-window-body::-webkit-scrollbar-thumb {
+  background: var(--silver);
+  box-shadow: var(--raised);
+}
+.latest-desktop .r95-window-body::-webkit-scrollbar-button {
+  background: var(--silver);
+  height: 16px;
+  box-shadow: var(--raised);
+}
+.latest-desktop .r95-statusbar {
+  min-height: 22px;
+  display: flex;
+  gap: 2px;
+  align-items: stretch;
+  margin-top: 3px;
+  color: #333;
+  font-size: 10px;
+}
+.latest-desktop .r95-statusbar > span {
+  padding: 4px 5px;
+  flex: 1;
+  box-shadow:
+    inset 1px 1px #808080,
+    inset -1px -1px #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.latest-desktop .r95-resize {
+  position: relative;
+  width: 22px;
+  border: 0;
+  padding: 0;
+  background: var(--silver);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+.latest-desktop .r95-resize::after {
+  content: '';
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  width: 13px;
+  height: 13px;
+  background: repeating-linear-gradient(135deg, transparent 0 2px, #808080 2px 3px, #fff 3px 4px);
+  clip-path: polygon(100% 0, 100% 100%, 0 100%);
+}
+.latest-desktop .is-maximized .r95-resize {
+  visibility: hidden;
+}
+.latest-desktop .r95-button {
+  min-height: 29px;
+  border: 0;
+  background: var(--silver);
+  box-shadow: var(--raised);
+  padding: 6px 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  font-size: 12px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.latest-desktop .r95-button:active {
+  box-shadow: var(--sunken);
+}
+.latest-desktop .r95-default {
+  outline: 1px solid #000;
+  outline-offset: 1px;
+}
+.latest-desktop .r95-default:focus-visible {
+  outline: 1px dotted #000;
+  outline-offset: -5px;
+}
+/* Project Explorer and recorded walkthrough */
+.latest-desktop .r95-address {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 6px 7px;
+  font-size: 11px;
+  background: var(--silver);
+}
+.latest-desktop .r95-address-field {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  padding: 5px 7px;
+  box-shadow: var(--sunken);
+  background: #fff;
+}
+.latest-desktop .r95-major-content {
+  background: #efefeb;
+  padding: 15px 17px 10px;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.latest-desktop .r95-major .r95-window-body {
+  display: flex;
+  flex-direction: column;
+}
+.latest-desktop .r95-major .r95-address {
+  flex-shrink: 0;
+}
+.latest-desktop .r95-major-heading,
+.latest-desktop .r95-major-content > p {
+  flex-shrink: 0;
+}
+.latest-desktop .r95-recording {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.latest-desktop .r95-major-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 15px;
+}
+.latest-desktop .r95-kicker {
+  font-size: 9px;
+  letter-spacing: 1.3px;
+  font-weight: bold;
+  color: #555;
+}
+.latest-desktop .r95-major-heading h3 {
+  margin: 4px 0 0;
+  font-size: 31px;
+  line-height: 1.1;
+  letter-spacing: -1.4px;
+  font-weight: normal;
+}
+.latest-desktop .r95-major-content > p {
+  margin: 9px 0 14px;
+  font-size: 12px;
+  line-height: 1.55;
+  color: #424242;
+}
+.latest-desktop .r95-recording-stage {
+  display: grid;
+  place-items: center;
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 140px;
+  max-height: var(--recording-natural-height, none);
+  overflow: hidden;
+}
+.latest-desktop .r95-recording-screen {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: #f8f7f2;
+  box-shadow: var(--sunken);
+  border: 2px solid #808080;
+  overflow: hidden;
+}
+.latest-desktop .r95-recording-video {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  inset: 0;
+  object-fit: contain;
+  background: #f8f7f2;
+}
+.latest-desktop .r95-recording-language {
+  position: static;
+  flex-shrink: 0;
+  padding: 3px 6px;
+  background: #ffffdf;
+  color: #333;
+  border: 1px solid #777;
+  font-size: 10px;
+}
+.latest-desktop .r95-recording-languages {
+  display: flex;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  gap: 4px;
+  padding: 10px 0 7px;
+}
+.latest-desktop .r95-recording-languages button {
+  min-height: 28px;
+  padding: 4px 9px;
+  border: 0;
+  box-shadow: var(--raised);
+  background: var(--silver);
+  font-size: 11px;
+}
+.latest-desktop .r95-recording-languages button[aria-pressed='true'] {
+  background: var(--navy);
+  box-shadow:
+    inset 1px 1px #000,
+    inset -1px -1px #fff;
+  color: #fff;
+}
+.latest-desktop .r95-recording-caption {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  justify-content: space-between;
+  min-height: 24px;
+  font-size: 10px;
+  color: #4c4c4c;
+}
+.latest-desktop .r95-playback {
+  font-size: 10px;
+  background: transparent;
+  border: 1px solid #808080;
+  min-height: 23px;
+  padding: 3px 8px;
+}
+/* Calendar, Notepad, experiments and folders */
+.latest-desktop .r95-event-content {
+  padding: 16px 17px;
+  background: #efefeb;
+  min-height: 100%;
+}
+.latest-desktop .r95-event-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.latest-desktop .r95-date {
+  width: 56px;
+  border: 1px solid #000;
+  text-align: center;
+  background: #fff;
+  box-shadow: 2px 2px #b4b4ad;
+}
+.latest-desktop .r95-date > span {
+  display: block;
+  padding: 4px;
+  background: var(--navy);
+  color: #fff;
+  font-size: 10px;
+  letter-spacing: 1px;
+}
+.latest-desktop .r95-date strong {
+  display: block;
+  font-size: 29px;
+  line-height: 1.2;
+  padding: 2px 0;
+  font-weight: normal;
+}
+.latest-desktop .r95-event-top p {
+  font-size: 11px;
+  max-width: 160px;
+  line-height: 1.45;
+  margin: 6px 0;
+}
+.latest-desktop .r95-event-content h3 {
+  font-size: 23px;
+  font-weight: normal;
+  line-height: 1.15;
+  letter-spacing: -0.6px;
+  margin: 17px 0 9px;
+}
+.latest-desktop .r95-event-content > p {
+  font-size: 12px;
+  line-height: 1.55;
+  margin: 0 0 19px;
+  color: #444;
+}
+.latest-desktop .r95-event-action {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.latest-desktop .r95-event-action > span {
+  font-size: 10px;
+  color: #555;
+}
+.latest-desktop .r95-notepad {
+  min-height: 100%;
+  padding: 18px;
+  background: #fff;
+  font-family: 'Courier New', monospace;
+}
+.latest-desktop .r95-note-meta {
+  display: flex;
+  justify-content: space-between;
+  font-size: 9px;
+  color: #686868;
+  margin-bottom: 14px;
+}
+.latest-desktop .r95-notepad a {
+  text-decoration: none;
+}
+.latest-desktop .r95-notepad a:hover h3,
+.latest-desktop .r95-read:hover {
+  text-decoration: underline;
+}
+.latest-desktop .r95-notepad h3 {
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -0.8px;
+  margin: 0 0 12px;
+  font-weight: bold;
+}
+.latest-desktop .r95-notepad p {
+  font-size: 11px;
+  line-height: 1.65;
+  margin: 0 0 16px;
+  color: #444;
+}
+.latest-desktop .r95-read {
+  font-size: 11px;
+  color: #000080;
+}
+.latest-desktop .r95-app-intro {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  gap: 12px;
+}
+.latest-desktop .r95-app-intro > .r95-icon {
+  width: 36px;
+  height: 36px;
+}
+.latest-desktop .r95-app-intro h3 {
+  font-weight: normal;
+  font-size: 21px;
+  line-height: 1.2;
+  margin: 4px 0 6px;
+}
+.latest-desktop .r95-app-intro p {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+}
+.latest-desktop .r95-lab-screen {
+  box-shadow: var(--sunken);
+  background: #000;
+  font:
+    12px/1.8 'Courier New',
+    monospace;
+  color: #b5f7b4;
+  margin: 0 16px;
+  padding: 10px 14px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.latest-desktop .r95-lab-screen > span:first-child {
+  color: #b6b6b6;
+}
+.latest-desktop .r95-experiment-links {
+  display: grid;
+  gap: 3px;
+  margin-top: 8px;
+}
+.latest-desktop .r95-experiment-links a {
+  text-decoration: none;
+}
+.latest-desktop .r95-experiment-links a:hover {
+  color: white;
+  text-decoration: underline;
+}
+.latest-desktop .r95-app-action {
+  display: flex;
+  justify-content: flex-end;
+  padding: 10px 17px;
+}
+.latest-desktop .r95-folder-heading {
+  padding: 14px 16px;
+  font-size: 12px;
+}
+.latest-desktop .r95-folder-list {
+  background: #fff;
+  margin: 0 8px 8px;
+  padding: 5px;
+  box-shadow: var(--sunken);
+}
+.latest-desktop .r95-folder-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 13px 9px;
+  text-decoration: none;
+}
+.latest-desktop .r95-folder-item > span:nth-child(2) {
+  flex: 1;
+}
+.latest-desktop .r95-folder-item strong {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+.latest-desktop .r95-folder-item small {
+  font-size: 11px;
+  line-height: 1.4;
+  display: block;
+  color: #555;
+}
+.latest-desktop .r95-folder-item:hover,
+.latest-desktop .r95-folder-item:focus-visible {
+  background: var(--navy);
+  color: #fff;
+}
+.latest-desktop .r95-folder-item:hover small,
+.latest-desktop .r95-folder-item:focus-visible small {
+  color: #fff;
+}
+.latest-desktop .r95-welcome {
+  padding: 25px;
+  text-align: center;
+}
+.latest-desktop .r95-welcome img {
+  max-width: 100%;
+  height: auto;
+  background: #008080;
+  padding: 7px;
+  box-sizing: content-box;
+}
+.latest-desktop .r95-welcome h3 {
+  font-size: 22px;
+  font-weight: normal;
+  margin: 22px 0 12px;
+}
+.latest-desktop .r95-welcome p {
+  font-size: 12px;
+  line-height: 1.7;
+}
+.latest-desktop .r95-welcome > div {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 20px;
+}
+/* Taskbar and Start menu */
+.latest-desktop .r95-taskbar {
+  position: relative;
+  z-index: 100000;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--silver);
+  box-shadow:
+    inset 0 1px #fff,
+    inset 0 2px #dfdfdf;
+  padding: 4px;
+  min-width: 0;
+}
+.latest-desktop .r95-taskbar .r95-button {
+  height: 29px;
+  min-height: 29px;
+  padding: 3px 8px;
+}
+.latest-desktop .r95-start {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.latest-desktop .r95-start[aria-expanded='true'] {
+  box-shadow: var(--sunken);
+}
+.latest-desktop .r95-taskbar-divider {
+  width: 2px;
+  height: 27px;
+  border-left: 1px solid #808080;
+  border-right: 1px solid #fff;
+  margin: 0 2px;
+}
+.latest-desktop .r95-taskbar .r95-show-desktop {
+  padding: 4px 6px;
+  min-width: 28px;
+}
+.latest-desktop .r95-tasks {
+  display: flex;
+  gap: 4px;
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.latest-desktop .r95-taskbar .r95-task {
+  justify-content: flex-start;
+  flex: 0 1 174px;
+  min-width: 72px;
+  font-size: 11px;
+}
+.latest-desktop .r95-task > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.latest-desktop .r95-task[aria-pressed='true'] {
+  font-weight: bold;
+  box-shadow: var(--sunken);
+  background: repeating-conic-gradient(#eee 0% 25%, #ddd 0% 50%) 50% / 2px 2px;
+}
+.latest-desktop .r95-taskbar .r95-arrange {
+  font-size: 10px;
+  margin-left: 4px;
+}
+.latest-desktop .r95-clock {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  height: 29px;
+  min-width: 97px;
+  box-shadow:
+    inset 1px 1px #808080,
+    inset -1px -1px #fff;
+  font-size: 11px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+.latest-desktop .r95-tray-dot {
+  width: 8px;
+  height: 8px;
+  border: 1px solid #000;
+  background: #36ab57;
+  box-shadow: inset 1px 1px #b7f7c9;
+}
+.latest-desktop .r95-tray-dot.is-stale {
+  background: #d89c20;
+  box-shadow: inset 1px 1px #ffdf94;
+}
+.latest-desktop .r95-start-menu {
+  position: absolute;
+  left: 3px;
+  bottom: 36px;
+  width: 280px;
+  max-height: calc(100dvh - 44px);
+  display: grid;
+  grid-template-columns: 30px 1fr;
+  padding: 3px;
+  background: var(--silver);
+  box-shadow:
+    var(--raised),
+    1px 1px #000;
+  overflow: visible;
+}
+.latest-desktop .r95-start-stripe {
+  background: #808080;
+  color: #c0c0c0;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font:
+    bold 23px/30px Arial,
+    sans-serif;
+  padding: 10px 0;
+}
+.latest-desktop .r95-start-stripe span {
+  color: white;
+  font-weight: normal;
+}
+.latest-desktop .r95-start-welcome {
+  padding: 13px 12px 9px;
+  font-size: 12px;
+  font-weight: bold;
+}
+.latest-desktop .r95-start-welcome small {
+  display: block;
+  font-size: 10px;
+  margin-top: 5px;
+  font-weight: normal;
+  color: #4c4c4c;
+}
+.latest-desktop .r95-start-menu :is(a, .r95-start-projects) {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  padding: 7px 10px;
+  min-height: 43px;
+}
+.latest-desktop .r95-start-menu :is(a, .r95-start-projects) > span:nth-child(2) {
+  flex: 1;
+}
+.latest-desktop .r95-start-menu :is(a, .r95-start-projects) > span:last-child:not(:nth-child(2)) {
+  font-size: 10px;
+}
+.latest-desktop .r95-start-menu :is(a, .r95-start-projects):hover,
+.latest-desktop .r95-start-menu :is(a, .r95-start-projects):focus-visible,
+.latest-desktop .r95-start-projects[aria-expanded='true'] {
+  background: var(--navy);
+  color: white;
+}
+.latest-desktop .r95-start-menu hr {
+  margin: 5px 3px;
+  border: 0;
+  height: 2px;
+  background: #808080;
+  border-bottom: 1px solid #fff;
+}
+.latest-desktop .r95-start-folder {
+  position: relative;
+}
+.latest-desktop .r95-start-projects {
+  width: 100%;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  text-align: left;
+}
+.latest-desktop .r95-project-menu {
+  position: absolute;
+  left: calc(100% + 2px);
+  top: var(--submenu-top, 0px);
+  z-index: 1;
+  width: 240px;
+  max-height: calc(100dvh - 56px);
+  overflow: auto;
+  padding: 3px;
+  background: var(--silver);
+  box-shadow:
+    var(--raised),
+    1px 1px #000;
+}
+.latest-desktop .r95-project-menu a {
+  min-height: 38px;
+  gap: 10px;
+  padding: 8px 10px;
+}
+.latest-desktop .r95-project-menu .r95-icon {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+}
+.latest-desktop .is-flowing .r95-start-menu {
+  overflow: auto;
+}
+.latest-desktop .is-flowing .r95-project-menu {
+  position: static;
+  width: auto;
+  max-height: none;
+  margin: 0 3px 5px 18px;
+}
+.latest-desktop .is-flowing .r95-start-projects[aria-expanded='true'] .r95-submenu-arrow {
+  transform: rotate(90deg);
+}
+@media (pointer: coarse) {
+  .latest-desktop .r95-start-menu {
+    overflow: auto;
+  }
+  .latest-desktop .r95-project-menu {
+    position: static;
+    width: auto;
+    max-height: none;
+    margin: 0 3px 5px 18px;
+  }
+  .latest-desktop .r95-start-projects[aria-expanded='true'] .r95-submenu-arrow {
+    transform: rotate(90deg);
+  }
+}
+.latest-desktop .r95-empty-note {
+  display: none;
+  position: absolute;
+  left: 50%;
+  top: 45%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  color: #e2f7f7;
+}
+.latest-desktop .r95-empty-note p {
+  font-size: 19px;
+  letter-spacing: -0.5px;
+}
+.latest-desktop .is-empty .r95-empty-note {
+  display: block;
+}
+
+/* A tiled desktop when all four primary windows fit; otherwise, a scrollable page. */
+.latest-desktop .r95-arrange-glyph {
+  width: 13px;
+  height: 12px;
+  background:
+    linear-gradient(90deg, transparent 5px, #c0c0c0 5px 8px, transparent 8px),
+    linear-gradient(0deg, transparent 5px, #c0c0c0 5px 7px, transparent 7px), #333;
+}
+.latest-desktop .is-flowing.r95-shell {
+  height: auto;
+  min-height: 100dvh;
+  display: block;
+  overflow: visible;
+  padding-bottom: calc(50px + env(safe-area-inset-bottom, 0px));
+}
+.latest-desktop .is-flowing .r95-desktop {
+  overflow: visible;
+  padding: 0 24px 26px 100px;
+}
+.latest-desktop .is-flowing .r95-desktop-heading {
+  position: relative;
+  left: auto;
+  right: auto;
+  top: auto;
+  padding: 19px 0;
+  margin: 0 auto;
+  max-width: 1380px;
+}
+.latest-desktop .is-flowing .r95-desktop-icons {
+  position: fixed;
+}
+.latest-desktop .is-flowing .r95-workspace {
+  position: relative;
+  inset: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  align-items: start;
+  gap: 20px;
+  max-width: 1380px;
+  margin: 0 auto;
+}
+.latest-desktop .is-flowing .r95-window {
+  position: relative;
+  width: 100% !important;
+  height: auto !important;
+  top: auto !important;
+  left: auto !important;
+  margin: 0;
+  scroll-margin-top: 14px;
+}
+.latest-desktop .is-flowing .r95-window-body {
+  overflow: visible;
+  overscroll-behavior: auto;
+}
+.latest-desktop .is-flowing .r95-titlebar {
+  touch-action: auto;
+}
+.latest-desktop .is-flowing .r95-window-controls [data-window-action='maximize'],
+.latest-desktop .is-flowing .r95-resize {
+  display: none;
+}
+.latest-desktop .is-flowing .r95-recording-stage {
+  flex: none;
+  min-height: 0;
+  aspect-ratio: 4 / 3;
+  max-height: min(440px, var(--recording-natural-height, 440px));
+}
+.latest-desktop .is-flowing .r95-major-content {
+  flex: none;
+  padding: 18px;
+}
+.latest-desktop .is-flowing .r95-major .r95-window-body {
+  flex: none;
+}
+.latest-desktop .is-flowing .r95-event-content,
+.latest-desktop .is-flowing .r95-notepad {
+  padding: 24px;
+}
+.latest-desktop .is-flowing .r95-event-top p {
+  max-width: none;
+}
+.latest-desktop .is-flowing .r95-event-content h3 {
+  font-size: 26px;
+  max-width: 26ch;
+}
+.latest-desktop .is-flowing .r95-event-content > p {
+  font-size: 13px;
+  line-height: 1.65;
+  max-width: 65ch;
+}
+.latest-desktop .is-flowing .r95-event-action {
+  margin-top: 24px;
+}
+.latest-desktop .is-flowing .r95-notepad h3 {
+  font-size: 25px;
+  max-width: 27ch;
+}
+.latest-desktop .is-flowing .r95-notepad p {
+  font-size: 12px;
+  line-height: 1.7;
+  max-width: 66ch;
+}
+.latest-desktop .is-flowing .r95-lab .r95-app-intro {
+  padding: 22px;
+}
+.latest-desktop .is-flowing .r95-lab .r95-app-intro h3 {
+  font-size: 24px;
+}
+.latest-desktop .is-flowing .r95-lab .r95-lab-screen {
+  margin: 0 22px;
+  padding: 20px;
+  font-size: 12px;
+}
+.latest-desktop .is-flowing .r95-lab .r95-app-action {
+  padding: 22px;
+}
+.latest-desktop .is-flowing .r95-wallpaper {
+  position: relative;
+  left: auto;
+  right: auto;
+  bottom: auto;
+  width: 210px;
+  margin: 32px auto 6px;
+}
+.latest-desktop .is-flowing .r95-wallpaper > span {
+  font-size: 9px;
+}
+.latest-desktop .is-flowing .r95-taskbar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: calc(39px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(4px + env(safe-area-inset-bottom, 0px));
+}
+.latest-desktop .is-flowing .r95-start-menu {
+  bottom: calc(36px + env(safe-area-inset-bottom, 0px));
+}
+.latest-desktop .is-flowing .r95-empty-note {
+  position: relative;
+  left: auto;
+  top: auto;
+  transform: none;
+  padding: 40px 0;
+}
+@media (min-width: 1000px) {
+  .latest-desktop .is-flowing .r95-events {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .latest-desktop .is-flowing .r95-major {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+  .latest-desktop .is-flowing .r95-journal {
+    grid-column: 1;
+    grid-row: 2;
+  }
+  .latest-desktop .is-flowing .r95-lab {
+    grid-column: 2;
+    grid-row: 3;
+  }
+  .latest-desktop .is-flowing .r95-projects {
+    grid-column: 1;
+    grid-row: 4;
+  }
+  .latest-desktop .is-flowing .r95-games {
+    grid-column: 2;
+    grid-row: 4;
+  }
+  .latest-desktop .is-flowing .r95-join {
+    grid-column: 1;
+    grid-row: 5;
+  }
+}
+@media (max-width: 999px) {
+  .latest-desktop .is-flowing .r95-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    max-width: 760px;
+  }
+  .latest-desktop .is-flowing .r95-desktop-heading {
+    max-width: 760px;
+  }
+  .latest-desktop .is-flowing .r95-desktop-heading span {
+    display: none;
+  }
+}
+@media (max-height: 760px) {
+  .latest-desktop .r95-shell:not(.is-flowing) .r95-desktop-icons {
+    top: 10px;
+    gap: 4px;
+  }
+  .latest-desktop .r95-shell:not(.is-flowing) .r95-desktop-icon {
+    min-height: 57px;
+  }
+}
+@media (max-width: 700px), (max-height: 640px) {
+  .latest-desktop .is-flowing .r95-desktop {
+    padding: 0 12px 20px;
+  }
+  .latest-desktop .is-flowing .r95-desktop-icons {
+    position: relative;
+    top: auto;
+    left: auto;
+    width: auto;
+    max-width: 760px;
+    margin: 0 auto;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 2px;
+    padding: 0 0 16px;
+  }
+  .latest-desktop .is-flowing .r95-desktop-icon {
+    min-height: 62px;
+    font-size: 10px;
+  }
+  .latest-desktop .is-flowing .r95-desktop-icon > span {
+    max-width: 100%;
+  }
+  .latest-desktop .is-flowing .r95-desktop-heading {
+    padding: 16px 0 12px;
+    font-size: 10px;
+  }
+  .latest-desktop .is-flowing .r95-desktop-heading span {
+    display: none;
+  }
+}
+@media (max-width: 700px) {
+  .latest-desktop .is-flowing .r95-window-controls button {
+    width: 30px;
+    height: 26px;
+  }
+  .latest-desktop .is-flowing .r95-titlebar {
+    min-height: 33px;
+  }
+  .latest-desktop .is-flowing .r95-recording-languages button {
+    min-height: 36px;
+    flex: 1 0 auto;
+    font-size: 12px;
+  }
+  .latest-desktop .is-flowing .r95-show-desktop,
+  .latest-desktop .is-flowing .r95-taskbar-divider {
+    display: none;
+  }
+  .latest-desktop .is-flowing .r95-clock {
+    min-width: 70px;
+    padding: 0 5px;
+    font-size: 10px;
+  }
+  .latest-desktop .is-flowing .r95-tray-dot {
+    display: none;
+  }
+  .latest-desktop .is-flowing .r95-taskbar .r95-task {
+    min-width: 36px;
+  }
+  .latest-desktop .is-flowing .r95-taskbar .r95-arrange {
+    margin: 0;
+    padding: 4px 8px;
+    min-width: 30px;
+  }
+  .latest-desktop .is-flowing .r95-arrange > span:last-child {
+    display: none;
+  }
+  .latest-desktop .is-flowing .r95-start-menu {
+    width: min(280px, calc(100vw - 8px));
+  }
+  .latest-desktop .is-flowing .r95-start-menu :is(a, .r95-start-projects) {
+    min-height: 45px;
+  }
+}
+@media (max-width: 480px) {
+  .latest-desktop .is-flowing .r95-desktop-icons {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 2px;
+  }
+  .latest-desktop .is-flowing .r95-desktop {
+    padding-inline: 8px;
+  }
+  .latest-desktop .is-flowing .r95-workspace {
+    gap: 18px;
+  }
+  .latest-desktop .is-flowing .r95-task > span {
+    display: none;
+  }
+  .latest-desktop .is-flowing .r95-taskbar .r95-task {
+    flex: 0 0 34px;
+    min-width: 34px;
+    padding: 5px 8px;
+  }
+  .latest-desktop .is-flowing .r95-major-content {
+    padding: 15px 12px 9px;
+  }
+  .latest-desktop .is-flowing .r95-major-heading {
+    gap: 9px;
+  }
+  .latest-desktop .is-flowing .r95-major-heading h3 {
+    font-size: 28px;
+  }
+  .latest-desktop .is-flowing .r95-kicker {
+    font-size: 8px;
+    letter-spacing: 0.8px;
+  }
+  .latest-desktop .is-flowing .r95-major-heading .r95-button {
+    padding-inline: 9px;
+    font-size: 11px;
+  }
+  .latest-desktop .is-flowing .r95-recording-caption {
+    gap: 7px;
+    font-size: 9px;
+  }
+  .latest-desktop .is-flowing .r95-recording-languages {
+    gap: 5px;
+  }
+  .latest-desktop .is-flowing .r95-event-content,
+  .latest-desktop .is-flowing .r95-notepad {
+    padding: 20px;
+  }
+  .latest-desktop .is-flowing .r95-event-content h3 {
+    font-size: 25px;
+  }
+  .latest-desktop .is-flowing .r95-notepad h3 {
+    font-size: 23px;
+  }
+  .latest-desktop .is-flowing .r95-welcome {
+    padding: 25px 13px;
+  }
+  .latest-desktop .is-flowing .r95-welcome img {
+    width: 220px;
+  }
+  .latest-desktop .is-flowing .r95-welcome > div {
+    flex-wrap: wrap;
+  }
+  .latest-desktop .is-flowing .r95-lab .r95-app-intro {
+    padding: 16px;
+  }
+  .latest-desktop .is-flowing .r95-lab .r95-app-intro h3 {
+    font-size: 22px;
+  }
+  .latest-desktop .is-flowing .r95-lab .r95-lab-screen {
+    margin: 0 16px;
+    padding: 16px;
+    font-size: 11px;
+  }
+}
+@media (pointer: coarse) {
+  .latest-desktop .is-flowing .r95-taskbar {
+    height: calc(46px + env(safe-area-inset-bottom, 0px));
+  }
+  .latest-desktop .is-flowing .r95-start-menu {
+    bottom: calc(43px + env(safe-area-inset-bottom, 0px));
+  }
+  .latest-desktop .is-flowing .r95-taskbar .r95-button {
+    min-height: 36px;
+  }
+  .latest-desktop .is-flowing .r95-window-controls button {
+    width: 34px;
+    height: 30px;
+  }
+  .latest-desktop .is-flowing .r95-titlebar {
+    min-height: 37px;
+  }
+}

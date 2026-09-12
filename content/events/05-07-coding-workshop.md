@@ -1,4 +1,5 @@
 ---
+publishDate: 2026-04-01T00:00:00Z
 title: "5/7/2026 AI Coding Workshop"
 date: 2026-05-07T16:30:00-06:00
 location: "Richland D-143"

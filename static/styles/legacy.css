@@ -1,0 +1,53 @@
+:root {
+  font-family: Arial, sans-serif;
+  color: #262721;
+  background: #f8f6ef;
+  line-height: 1.7;
+}
+body {
+  max-width: 860px;
+  margin: auto;
+  padding: 24px;
+}
+header,
+footer {
+  padding: 24px 0;
+  border-bottom: 1px solid #d2d3c7;
+}
+nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  margin-top: 12px;
+}
+a {
+  color: #3b593d;
+  text-underline-offset: 4px;
+}
+a:focus-visible {
+  outline: 3px solid #547f3f;
+  outline-offset: 4px;
+}
+main {
+  padding: 36px 0;
+  overflow-wrap: anywhere;
+}
+h1,
+h2 {
+  line-height: 1.2;
+}
+h1 {
+  font-family: 'Source Serif 4', Georgia, serif;
+  font-size: clamp(2rem, 6vw, 3.5rem);
+}
+.record-note {
+  background: #e9eddc;
+  padding: 16px;
+}
+.records li {
+  margin: 12px 0;
+}
+iframe,
+img {
+  max-width: 100%;
+}

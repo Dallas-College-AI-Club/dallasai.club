@@ -1,4 +1,5 @@
 ---
+publishDate: 2026-04-01T00:00:00Z
 title: "Fall 2026 Welcome"
 date: 2026-09-03T17:00:00-06:00
 location: "Richland Campus; Red River Hall; ROOM RR1246 & Teams"

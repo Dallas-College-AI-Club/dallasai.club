@@ -1,4 +1,5 @@
 ---
+publishDate: 2026-04-01T00:00:00Z
 title: "4/23/2026 Virtual Club Meeting"
 date: 2026-04-23T16:30:00-06:00
 location: "Discord"

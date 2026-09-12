@@ -1,0 +1,288 @@
+{{ partial "publish-data.html" . }}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>{{ site.Title }}</title>
+    <meta name="description" content="{{ site.Params.description }}" />
+    <link rel="alternate" type="application/rss+xml" title="The AI Review" href="{{ "review-feed.xml" | absURL }}" />
+    <link rel="canonical" href="{{ .Permalink }}" />
+    <link
+      rel="preload"
+      href="assets/source-serif-4.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link rel="stylesheet" href="styles/fonts.css" />
+    <link rel="stylesheet" href="styles/site.css" />
+    <link rel="stylesheet" href="styles/navigation.css" />
+    <link rel="stylesheet" href="styles/review.css" />
+    <link rel="stylesheet" href="styles/contribute.css" />
+    <link rel="stylesheet" href="styles/about.css" />
+    <link rel="stylesheet" href="styles/events.css" />
+    <link rel="stylesheet" href="styles/lab.css" />
+    <link rel="stylesheet" href="styles/projects.css" />
+    <link rel="stylesheet" href="styles/arcade.css" />
+    <link rel="stylesheet" href="styles/drive.css" />
+    <link rel="stylesheet" href="styles/concepts.css" />
+    <link rel="stylesheet" href="styles/desktop.css" />
+    <link rel="stylesheet" href="styles/footer.css" />
+    <script src="app/boot.js"></script>
+  </head>
+  <body>
+    <a class="skip" href="#content">Skip to content</a
+    ><button
+      class="nav-toggle"
+      id="nav-toggle"
+      aria-controls="club-navigation"
+      aria-expanded="false"
+    >
+      ☰ Menu</button
+    ><button
+      class="nav-backdrop"
+      id="nav-backdrop"
+      aria-label="Close navigation"
+      tabindex="-1"
+    ></button>
+    <header id="club-navigation" class="club-nav">
+      <div class="club-topbar">
+        <a class="club-brand" href="index.html" aria-label="Dallas College AI Club — welcome"
+          ><img src="assets/club-logo.png" alt="Dallas College AI Club" /><span
+            >DALLAS COLLEGE<br /><b>AI CLUB</b></span
+          ></a
+        >
+        <div class="club-utilities">
+          <a href="club.html?mode=explore" data-mode="explore" class="explore-entry"
+            ><span class="explore-entry-icon" aria-hidden="true">↗</span
+            ><span id="explore-entry-label">Explore & Play</span></a
+          ><a class="arcade-library-link" href="club.html?mode=play" data-mode="play">All games ↗</a
+          ><a
+            href="club.html?mode=subscribe"
+            data-mode="subscribe"
+            aria-label="Subscribe to The AI Review"
+            title="Subscribe to The AI Review"
+            >Subscribe</a
+          ><a href="club.html?mode=join" data-mode="join" class="join-link join-effect"
+            ><span class="join-effect-icon" aria-hidden="true">↗</span><span>Join the club</span></a
+          >
+        </div>
+      </div>
+      <nav class="primary-nav" aria-label="Main navigation">
+        <a href="club.html?mode=summary" data-mode="summary">Latest</a
+        ><a href="club.html?mode=journal" data-mode="journal">The AI Review</a
+        ><a href="club.html?mode=lab" data-mode="lab">AI Lab</a
+        ><a href="club.html?mode=projects" data-mode="projects">Projects</a
+        ><a href="club.html?mode=events" data-mode="events">Events</a
+        ><a href="club.html?mode=about" data-mode="about">About</a>
+      </nav>
+    </header>
+    <main id="world-view" hidden>
+      <header class="drive-heading">
+        <a class="drive-brand" href="index.html" aria-label="Dallas College AI Club — welcome"
+          ><img src="assets/club-logo.png" alt="" /><span>DALLAS COLLEGE<b>AI CLUB</b></span></a
+        ><a class="drive-all-games" href="club.html?mode=play" data-mode="play">← All games</a>
+        <h1>
+          <a
+            href="club.html?mode=play"
+            data-mode="play"
+            aria-label="Dallas Drive — back to all games"
+            >‹ Dallas Drive</a
+          >
+        </h1>
+        <a class="browse-club" href="club.html?mode=summary" data-mode="summary"
+          >Club hub <span aria-hidden="true">↗</span></a
+        ><a class="drive-rankings ranking-link" href="club.html?mode=rankings" data-mode="rankings"
+          >Rankings <span aria-hidden="true">↗</span></a
+        >
+      </header>
+      <div class="explore-toolbar" aria-label="Explore controls">
+        <label class="campus-control"
+          ><span>Campus</span
+          ><select id="campus-select" aria-label="Campus"></select
+        ></label>
+        <details class="drive-panel destinations-panel" name="drive-panel">
+          <summary>Destinations</summary>
+          <div class="drive-panel-body">
+            <h2>Where to?</h2>
+            <p>Choose a station for a guided drive.</p>
+            <nav id="journey-stops" aria-label="Drive to a club section"></nav>
+          </div>
+        </details>
+        <details class="drive-panel ride-panel" name="drive-panel">
+          <summary>Your ride</summary>
+          <div class="drive-panel-body">
+            <h2>Your next ride</h2>
+            <p>Get a new vehicle when you visit or choose a mascot.</p>
+            <label for="car-mascot">Campus mascot</label>
+            <div class="mascot-picker">
+              <canvas
+                id="mascot-preview"
+                width="144"
+                height="96"
+                role="img"
+                aria-label="AI Club mascot"
+              ></canvas
+              ><select id="car-mascot"></select>
+            </div>
+            <p id="ride-description">Your mascot sets your vehicle’s colors and details.</p>
+          </div>
+        </details>
+        <details class="drive-panel weather-panel" name="drive-panel">
+          <summary>Weather</summary>
+          <div class="drive-panel-body">
+            <h2>Out in Dallas</h2>
+            <div class="weather-tools">
+              <label
+                >Sky<select id="weather-select">
+                  <option value="clear">Clear sky</option>
+                  <option value="overcast">Cloudy</option>
+                  <option value="rain">Rain / snow</option>
+                  <option value="sunset">Golden hour</option>
+                </select></label
+              ><label
+                >Season<select id="season-select">
+                  <option value="spring">Spring</option>
+                  <option value="summer">Summer</option>
+                  <option value="autumn">Autumn</option>
+                  <option value="winter">Winter</option>
+                </select></label
+              >
+            </div>
+            <label class="auto-weather"
+              ><input id="auto-weather" type="checkbox" checked /> Automatic weather &
+              seasons</label
+            >
+            <p id="weather-status" role="status">Spring · Clear sky</p>
+            <button id="motion-toggle" aria-pressed="false">Motion on</button>
+          </div>
+        </details>
+      </div>
+      <section
+        id="journey-stage"
+        class="drive-stage"
+        aria-label="Drive around Dallas College AI Club"
+      >
+        <canvas
+          id="club-world"
+          tabindex="0"
+          aria-label="Drive with WASD or arrow keys. Drag to look. Enter opens a nearby club section. M changes camera. R restarts the drive."
+        ></canvas>
+        <div id="station-labels" aria-label="Nearby club stations"></div>
+        <div id="map-labels" aria-label="Campus locations"></div>
+        <div class="drive-context">
+          <small id="journey-status" role="status">Drive freely or choose a destination.</small>
+        </div>
+        <div class="drive-camera">
+          <button id="camera-mode" aria-pressed="false">Dallas map</button
+          ><button id="campus-view" aria-pressed="false">Campus view</button
+          ><button id="reset-rover">Restart drive ↺</button>
+        </div>
+        <button
+          type="button"
+          class="drive-scoreboard"
+          id="score-guide-toggle"
+          aria-label="Your drive — how to earn points"
+          aria-expanded="false"
+          aria-controls="score-guide"
+        >
+          <span>Your drive ⓘ</span><strong id="drive-score">0</strong
+          ><small id="track-status">Find a road</small
+          ><small id="campus-progress">1 / 7 campuses</small>
+        </button>
+        <aside id="score-guide" class="score-guide" aria-label="How to earn points" hidden>
+          <h2>Keep exploring.</h2>
+          <dl>
+            <div>
+              <dt>New road sections</dt>
+              <dd>3–9 pts</dd>
+            </div>
+            <div>
+              <dt>Gold route bonus</dt>
+              <dd>+50</dd>
+            </div>
+            <div>
+              <dt>View a new station update</dt>
+              <dd>+30</dd>
+            </div>
+            <div>
+              <dt>Preview a new page</dt>
+              <dd>+20</dd>
+            </div>
+            <div>
+              <dt>Visit a new page</dt>
+              <dd>+100</dd>
+            </div>
+            <div>
+              <dt>Return from a page</dt>
+              <dd>+50</dd>
+            </div>
+            <div>
+              <dt>Visit a new campus</dt>
+              <dd>+250</dd>
+            </div>
+          </dl>
+          <p>
+            Stay on the road to build a 3× streak. Road points count when you drive; campus visits
+            count on guided trips too.
+          </p>
+          <small
+            >Each discovery counts once per drive. Progress saves automatically on this
+            device.</small
+          >
+        </aside>
+        <div id="score-toast" role="status" hidden></div>
+        <div class="drive-arrival" id="walk-arrival" hidden>
+          <h2 id="arrival-title"></h2>
+          <p id="arrival-hint"></p>
+          <button id="enter-place" aria-controls="arrival-preview"></button
+          ><button
+            type="button"
+            id="preview-toggle"
+            aria-expanded="false"
+            aria-controls="arrival-preview"
+          >
+            Preview page ↗
+          </button>
+          <aside class="arrival-preview" id="arrival-preview" aria-label="Page preview" hidden>
+            <img
+              id="preview-image"
+              src="assets/page-previews/journal.png"
+              alt="The AI Review page preview"
+            />
+            <div><span id="preview-label">The AI Review</span><small>Page preview</small></div>
+          </aside>
+        </div>
+        <div class="drive-controls" aria-label="Driving controls">
+          <button data-drive="w" aria-label="Drive forward">↑</button
+          ><button data-drive="a" aria-label="Steer left">←</button
+          ><button data-drive="s" aria-label="Reverse">↓</button
+          ><button data-drive="d" aria-label="Steer right">→</button>
+        </div>
+        <a id="reset-walk" class="drive-welcome" href="index.html">← Back to the welcome area</a>
+        <div class="drive-route" id="drive-route" hidden>
+          <span id="route-caption"></span
+          ><progress id="route-progress" max="100" value="0" aria-label="Route progress"></progress
+          ><button id="cancel-route">Take the wheel</button>
+        </div>
+        <p id="renderer-error" hidden>
+          The interactive view could not start. Use Club hub to visit every section.
+        </p>
+      </section>
+      <footer class="drive-footer">
+        <a class="drive-maker-link" href="club.html?mode=about" target="_blank" rel="noreferrer"
+          >Want to improve or add a game? Join the club ↗</a
+        ><a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer"
+          >© OpenStreetMap</a
+        >
+      </footer>
+    </main>
+    <main id="content" class="content" tabindex="-1" hidden></main>
+    <footer class="site-footer">
+      <p>© 2026 Dallas College AI Club</p>
+      <nav aria-label="Follow the club"></nav>
+    </footer>
+    <script type="module" src="app/shell.js"></script>
+  </body>
+</html>

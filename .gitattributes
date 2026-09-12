@@ -1,0 +1,6 @@
+# Keep third-party source and license notices unchanged during whitespace reviews.
+static/vendor/** linguist-vendored -whitespace
+static/NOTICE.txt -whitespace
+# Generated geography is checked as an asset; collapse its large review diff.
+static/dallas-map.json linguist-generated
+static/road-network.json linguist-generated

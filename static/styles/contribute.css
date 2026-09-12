@@ -1,0 +1,158 @@
+/* Contribute components and their responsive states. */
+.contribution {
+  max-width: 900px;
+}
+.contribution input {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+  background: #111f2e;
+  color: #e9eef1;
+  border: 1px solid #73899a55;
+  border-radius: 5px;
+  padding: 11px;
+}
+.contribution textarea {
+  display: block;
+  width: 100%;
+  margin-top: 7px;
+  background: #111f2e;
+  color: #e9eef1;
+  border: 1px solid #73899a55;
+  border-radius: 5px;
+  padding: 11px;
+  min-height: 180px;
+  resize: vertical;
+}
+body .contribution label {
+  display: block;
+  margin: 22px 0 8px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+}
+body .contribution input,
+body .contribution textarea {
+  box-sizing: border-box;
+  background: var(--panel);
+  color: var(--ink);
+  border: 1px solid #879f9666;
+  border-radius: 8px;
+  padding: 13px 15px;
+  font:
+    16px/1.7 'DM Sans',
+    Arial,
+    sans-serif;
+  margin: 0;
+}
+body .contribution :is(input, textarea)::placeholder {
+  color: #64796f;
+  opacity: 1;
+}
+body .contribution h2 {
+  margin: 0 0 16px;
+  font:
+    500 clamp(25px, 3vw, 36px)/1.3 'Public Sans',
+    sans-serif;
+}
+.contribution .lead {
+  max-width: 68ch;
+}
+.draft-attachments {
+  padding: 0 18px 16px;
+  margin-top: 20px;
+  border: 1px dashed #879f9666;
+  border-radius: 10px;
+}
+.draft-attachments label span {
+  font-weight: 400;
+  color: var(--muted);
+}
+body .contribution input[type='file'] {
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  font-size: 13px;
+  max-width: 100%;
+}
+.contribution ::file-selector-button {
+  background: #e2eee7;
+  border: 1px solid #879f9670;
+  border-radius: 6px;
+  padding: 11px 14px;
+  margin-right: 12px;
+  font: inherit;
+  color: #244638;
+  cursor: pointer;
+}
+.content .draft-attachments p,
+.content .draft-note {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--muted);
+  margin: 14px 0 0;
+  overflow-wrap: anywhere;
+}
+.draft-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+  align-items: stretch;
+}
+.draft-actions :is(button, a) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 46px;
+  padding: 12px 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  text-align: center;
+  border: 1px solid #879f9666;
+  border-radius: 7px;
+  background: #f9fcfa;
+  color: #254638;
+  text-decoration: none;
+}
+.draft-actions #send-draft {
+  background: #285e4b;
+  color: #fff;
+  border-color: #285e4b;
+}
+.draft-actions button:hover {
+  background: #e2eee7;
+  border-color: #879f96;
+}
+.draft-back {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  margin-top: 20px;
+}
+.contribution :is(button, a, input, textarea):focus-visible {
+  outline: 2px solid #285e4b;
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  .draft-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .draft-actions #send-draft {
+    grid-column: 1 / -1;
+  }
+}
+.contribution label {
+  font-size: 15px;
+}
+.contribution input,
+.contribution textarea {
+  font-size: 16px;
+}
+.content .contribution h1 {
+  font-family: 'Source Serif 4', Georgia, serif;
+  line-height: 1.2;
+  letter-spacing: 0;
+}

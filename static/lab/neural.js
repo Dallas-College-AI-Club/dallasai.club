@@ -57,7 +57,7 @@ export class TinyNetwork {
     for (const { x, y, label } of data) {
       const p = this.forward(x, y).p;
       loss -= label * Math.log(Math.max(p, 1e-8)) + (1 - label) * Math.log(Math.max(1 - p, 1e-8));
-      correct += Number(p >= 0.5 === Boolean(label));
+      correct += Number((p >= 0.5) === Boolean(label));
     }
     return { loss: loss / data.length, accuracy: correct / data.length };
   }

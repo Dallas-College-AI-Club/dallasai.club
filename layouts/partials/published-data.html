@@ -1,26 +1,70 @@
 {{- $articles := slice -}}
-{{- range sort (where site.RegularPages "Type" "review") "Weight" -}}
-{{- if and (not .Draft) (not (.PublishDate.After now)) -}}
-{{- $headings := slice -}}{{- $headingIDs := slice -}}{{- $paragraphs := slice -}}
-{{- range findRE "<h2[^>]*>.*?</h2>" .Content -}}{{- $headings = $headings | append (. | plainify | htmlUnescape) -}}{{- end -}}
-{{- range findRESubmatch `<h2 id="([^"]+)"` .Content -}}{{- $headingIDs = $headingIDs | append (index . 1) -}}{{- end -}}
-{{- range findRE "(?s)<p>.*?</p>" .Content -}}{{- $paragraphs = $paragraphs | append (. | plainify | htmlUnescape) -}}{{- end -}}
-{{- $article := dict "slug" .Slug "headings" $headings "headingIds" $headingIDs "paragraphs" $paragraphs "bodyHtml" (string .Content) -}}
-{{- if isset .Params "legacyindex" -}}{{- $article = merge $article (dict "legacyIndex" .Params.legacyindex) -}}{{- end -}}
-{{- if not .PublishDate.IsZero -}}{{- $article = merge $article (dict "publishedAt" (.PublishDate.UTC.Format "2006-01-02T15:04:05Z")) -}}{{- end -}}
-{{- if isset .Params "author" -}}{{- $article = merge $article (dict "author" .Params.author) -}}{{- end -}}
-{{- if isset .Params "issample" -}}{{- $article = merge $article (dict "isSample" .Params.issample) -}}{{- end -}}
-{{- if isset .Params "category" -}}{{- $article = merge $article (dict "category" .Params.category) -}}{{- end -}}
-{{- if isset .Params "title" -}}{{- $article = merge $article (dict "title" .Params.title) -}}{{- end -}}
-{{- if isset .Params "abstract" -}}{{- $article = merge $article (dict "abstract" .Params.abstract) -}}{{- end -}}
-{{- if isset .Params "section" -}}{{- $article = merge $article (dict "section" .Params.section) -}}{{- end -}}
-{{- if isset .Params "takeaway" -}}{{- $article = merge $article (dict "takeaway" .Params.takeaway) -}}{{- end -}}
-{{- if isset .Params "references" -}}{{- $article = merge $article (dict "references" .Params.references) -}}{{- end -}}
-{{- if isset .Params "editor" -}}{{- $article = merge $article (dict "editor" .Params.editor) -}}{{- end -}}
-{{- $articles = $articles | append $article -}}{{- end -}}{{- end -}}
+{{- range sort (where site.RegularPages "Section" "blog") "Weight" -}}
+  {{- if and (not .Draft) (not (.PublishDate.After now)) -}}
+    {{- $headings := slice -}}
+    {{- $headingIDs := slice -}}
+    {{- $paragraphs := slice -}}
+    {{- range findRE "<h2[^>]*>.*?</h2>" .Content -}}
+      {{- $headings = $headings | append (. | plainify | htmlUnescape) -}}
+    {{- end -}}
+    {{- range findRESubmatch `<h2 id="([^"]+)"` .Content -}}
+      {{- $headingIDs = $headingIDs | append (index . 1) -}}
+    {{- end -}}
+    {{- range findRE "(?s)<p>.*?</p>" .Content -}}
+      {{- $paragraphs = $paragraphs | append (. | plainify | htmlUnescape) -}}
+    {{- end -}}
+    {{- $article := dict
+      "slug" (.Slug | default .File.ContentBaseName)
+      "title" .Title
+      "category" (.Params.category | default "Article")
+      "section" (.Params.section | default "Club")
+      "abstract" (.Params.abstract | default (.Summary | plainify | htmlUnescape))
+      "references" (.Params.references | default slice)
+      "headings" $headings
+      "headingIds" $headingIDs
+      "paragraphs" $paragraphs
+      "bodyHtml" (string .Content)
+    -}}
+    {{- if not .PublishDate.IsZero -}}
+      {{- $article = merge $article (dict "publishedAt" (.PublishDate.UTC.Format "2006-01-02T15:04:05Z")) -}}
+    {{- end -}}
+    {{- $params := .Params -}}
+    {{- range slice "legacyIndex" "author" "isSample" "takeaway" "editor" -}}
+      {{- if isset $params (lower .) -}}
+        {{- $article = merge $article (dict . (index $params (lower .))) -}}
+      {{- end -}}
+    {{- end -}}
+    {{- $articles = $articles | append $article -}}
+  {{- end -}}
+{{- end -}}
+
 {{- $events := slice -}}
-{{- range sort (where site.RegularPages "Type" "calendar") "Weight" -}}
-{{- $event := dict "id" .Params.id "title" .Title "date" .Params.eventdate "category" .Params.category "summary" (strings.TrimSpace .Plain) "location" (.Params.location | default "") "agenda" (.Params.agenda | default slice) "preparation" (.Params.preparation | default slice) "url" (printf "club.html?mode=events&event=%s" .Params.id) -}}
-{{- with .Params.end -}}{{- $event = merge $event (dict "end" .) -}}{{- end -}}
-{{- $events = $events | append $event -}}{{- end -}}
-{{- return (dict "articles" $articles "events" $events "publication" hugo.Data.publication "club" hugo.Data.club "projects" hugo.Data.projects "lab" hugo.Data.lab "recordings" hugo.Data.recordings "discovery" hugo.Data.discovery "generatedAt" (now.UTC.Format "2006-01-02T15:04:05Z")) -}}
+{{- range sort (where site.RegularPages "Section" "events") "Params.eventdate" -}}
+  {{- $event := dict
+    "id" .Params.id
+    "title" .Title
+    "date" .Params.eventdate
+    "category" .Params.category
+    "summary" (strings.TrimSpace (.Summary | plainify | htmlUnescape))
+    "location" (.Params.location | default "")
+    "agenda" (.Params.agenda | default slice)
+    "preparation" (.Params.preparation | default slice)
+    "url" (printf "club.html?mode=events&event=%s" .Params.id)
+  -}}
+  {{- with .Params.end -}}
+    {{- $event = merge $event (dict "end" .) -}}
+  {{- end -}}
+  {{- $events = $events | append $event -}}
+{{- end -}}
+
+{{- return (dict
+  "articles" $articles
+  "events" $events
+  "publication" hugo.Data.publication
+  "club" hugo.Data.club
+  "projects" hugo.Data.projects
+  "lab" hugo.Data.lab
+  "recordings" hugo.Data.recordings
+  "discovery" hugo.Data.discovery
+  "generatedAt" (now.UTC.Format "2006-01-02T15:04:05Z"))
+-}}

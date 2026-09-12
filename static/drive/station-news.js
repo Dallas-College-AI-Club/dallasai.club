@@ -138,7 +138,7 @@ export class StationNewsBubble {
     q('#arrival-preview').hidden = true;
     q('#preview-toggle').setAttribute('aria-expanded', 'false');
     q('#arrival-preview').dataset.page = mode;
-    q('#preview-image').src = 'assets/page-previews/' + mode + '.png';
+    q('#preview-image').src = 'assets/page-previews/' + mode + '.jpg';
     q('#preview-image').alt = mode + ' page preview';
     q('#preview-label').textContent = news.label;
     this.renderNext();

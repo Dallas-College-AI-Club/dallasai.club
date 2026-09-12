@@ -31,5 +31,6 @@
       "href": "https://www.linkedin.com/in/dallas-college-ai-club-richland-based-742338400/"
     }
   ],
-  "WORKSHOP_REQUEST_URL": ""
+  "WORKSHOP_REQUEST_URL": "",
+  "LEADERBOARD_API_URL": "https://dallasai-leaderboard.vercel.app/api/leaderboard"
 }

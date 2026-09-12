@@ -8,7 +8,7 @@ export const GAMES = [
     accent: '#afd0bb',
     type: 'drive',
     controls: 'Keyboard · Touch joystick',
-    cover: 'assets/dallas-drive-cover.png',
+    cover: 'assets/dallas-drive-cover.jpg',
     load: null,
   },
   {

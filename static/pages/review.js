@@ -33,6 +33,7 @@ const masthead = () =>
 
 export function renderPublication(root, id, reference, { open }) {
   const article = reference == null ? articles[0] : findArticle(articles, reference);
+  const filters = ['All articles', ...new Set(articles.map((article) => article.category))];
   document.body.classList.add('reading');
   root.classList.add('publication');
   root.classList.toggle('reader-page', id === 'article');
@@ -92,12 +93,9 @@ export function renderPublication(root, id, reference, { open }) {
             }
           </header>
           <div class="article-columns">
-            <aside class="article-toc">
+            <aside class="article-toc" ${a.headings.length || a.references.length ? '' : 'hidden'}>
               <span>IN THIS ARTICLE</span
-              >${a.headings.map((h, i) => /* HTML */ `<a href="#${attribute(a.headingIds?.[i] || 'section-' + i)}">${h}</a>`).join('')}<a
-                href="#article-references"
-                >References</a
-              >
+              >${a.headings.map((h, i) => /* HTML */ `<a href="#${attribute(a.headingIds?.[i] || 'section-' + i)}">${h}</a>`).join('')}${a.references.length ? '<a href="#article-references">References</a>' : ''}
             </aside>
             <div class="reader-body">
               ${a.bodyHtml || a.paragraphs.map((p, i) => (i % 2 === 0 ? /* HTML */ `<h2 id="section-${i / 2}">${a.headings[i / 2]}</h2>` : '') + /* HTML */ `<p>${p}</p>`).join('')}
@@ -110,7 +108,11 @@ export function renderPublication(root, id, reference, { open }) {
                     </aside>`
                   : ''
               }
-              <section class="article-references" id="article-references">
+              <section
+                class="article-references"
+                id="article-references"
+                ${a.references.length ? '' : 'hidden'}
+              >
                 <h2>References & further reading</h2>
                 <ol>
                   ${a.references.map(([author, title, href]) => /* HTML */ `<li><span>${author}</span><a href="${href}" target="_blank" rel="noreferrer">${title} ↗</a></li>`).join('')}
@@ -144,7 +146,7 @@ export function renderPublication(root, id, reference, { open }) {
     root.insertAdjacentHTML(
       'beforeend',
       /* HTML */ `<div class="publication-filter" aria-label="Filter articles">
-          ${['All articles', 'Essay', 'Reflection', 'Method note'].map((f, i) => /* HTML */ `<button data-filter="${f}" aria-pressed="${i === 0}">${f === 'Essay' ? 'Essays' : f === 'Reflection' ? 'Reflections' : f === 'Method note' ? 'Method notes' : f}</button>`).join('')}<span
+          ${filters.map((f, i) => /* HTML */ `<button data-filter="${attribute(f)}" aria-pressed="${i === 0}">${f === 'Essay' ? 'Essays' : f === 'Reflection' ? 'Reflections' : f === 'Method note' ? 'Method notes' : f}</button>`).join('')}<span
             >${String(articles.length).padStart(2, '0')}
             ${articles.length === 1 ? 'ARTICLE' : 'ARTICLES'}</span
           >

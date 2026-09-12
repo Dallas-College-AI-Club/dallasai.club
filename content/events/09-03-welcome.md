@@ -5,6 +5,13 @@ date: 2026-09-03T17:00:00-06:00
 location: "Richland Campus; Red River Hall; ROOM RR1246 & Teams"
 draft: false
 summary: "Come learn about the club and tell us what you want to learn."
+id: "welcome"
+eventDate: "2026-09-03T17:00:00-05:00"
+category: "Club meeting"
+agenda: ["Introduce the club and welcome new members.","Plan the September 24 AI productivity workshop.","Look back at the summer coding project.","Share what you want to learn and do this semester."]
+preparation: []
+weight: 22
+aliases: ["/calendar/welcome/"]
 ---
 
 We will hold our first meeting of the Fall 2026 semester on September 3rd.

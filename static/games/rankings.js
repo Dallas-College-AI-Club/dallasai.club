@@ -2,20 +2,23 @@ import { GAMES } from './registry.js';
 import { arcadeHeader } from './hub.js';
 import { readArcade } from '../storage/games.js';
 import { readRun } from '../storage/drive.js';
+import { PUBLISHED } from '../content/published.js';
 
 const scoreFor = (id) =>
   id === 'explore' ? readRun()?.score?.points || 0 : readArcade().games[id]?.state?.score || 0;
-// Shared rankings stay disabled until the separately reviewed Worker integration is ready.
-export function mountRankings(root, { open, apiBaseURL = '' }) {
+export function mountRankings(
+  root,
+  { open, apiBaseURL = PUBLISHED.club.LEADERBOARD_API_URL || '' },
+) {
   let disposed = false,
     request = 0,
     saving = false,
     identity = {};
   try {
-    const saved = JSON.parse(localStorage.getItem('dc-drive-player') || '{}');
+    const saved = JSON.parse(localStorage.getItem('dc-leaderboard-player') || '{}');
     if (saved && typeof saved === 'object' && !Array.isArray(saved)) {
       if (typeof saved.nickname === 'string') identity.nickname = saved.nickname;
-      if (typeof saved.id === 'string' && /^[a-f0-9-]{36}$/i.test(saved.id)) identity.id = saved.id;
+      if (typeof saved.token === 'string') identity.token = saved.token;
     }
   } catch {
     // Rankings remain usable without a saved player identity.
@@ -96,14 +99,14 @@ export function mountRankings(root, { open, apiBaseURL = '' }) {
     empty.hidden = false;
     if (!apiBaseURL) {
       empty.textContent =
-        'Shared rankings are coming later. Your game progress stays on this device.';
+        'Shared rankings are not connected yet. Your game progress stays on this device.';
       return;
     }
     empty.textContent = 'Loading rankings…';
     try {
-      const response = await fetch(
-        apiBaseURL + '/leaderboard?' + new URLSearchParams({ game: game.value }),
-      );
+      const response = await fetch(apiBaseURL + '?' + new URLSearchParams({ game: game.value }), {
+        signal: AbortSignal.timeout(12000),
+      });
       if (!response.ok) throw Error();
       const data = await response.json();
       if (disposed || ticket !== request) return;
@@ -145,16 +148,46 @@ export function mountRankings(root, { open, apiBaseURL = '' }) {
     saving = true;
     q('#rank-save').disabled = true;
     try {
-      identity.id ||= crypto.randomUUID();
-      const response = await fetch(apiBaseURL + '/scores', {
+      if (!identity.token) {
+        const session = await fetch(apiBaseURL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action: 'session' }),
+          signal: AbortSignal.timeout(12000),
+        });
+        const result = await session.json();
+        if (!session.ok) throw Error(result.error || 'Could not start your player session.');
+        if (!/^v1\.[a-f0-9-]{36}\.[a-f0-9]{64}$/.test(result.token || ''))
+          throw Error('Invalid player session.');
+        identity.token = result.token;
+      }
+      if (disposed) return;
+      try {
+        localStorage.setItem('dc-leaderboard-player', JSON.stringify(identity));
+      } catch {
+        throw Error('Allow browser storage to save scores under the same player.');
+      }
+      const response = await fetch(apiBaseURL, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ playerId: identity.id, nickname, game: selected, score }),
+        headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + identity.token },
+        body: JSON.stringify({ action: 'score', nickname, game: selected, score }),
+        signal: AbortSignal.timeout(12000),
       });
-      if (!response.ok) throw Error();
+      const result = await response.json();
+      if (!response.ok) {
+        if (response.status === 401) {
+          delete identity.token;
+          try {
+            localStorage.removeItem('dc-leaderboard-player');
+          } catch {
+            /* Retry in this page. */
+          }
+        }
+        throw Error(result.error || 'Could not save. Please try again.');
+      }
       identity.nickname = nickname;
       try {
-        localStorage.setItem('dc-drive-player', JSON.stringify(identity));
+        localStorage.setItem('dc-leaderboard-player', JSON.stringify(identity));
       } catch {
         // Rankings remain usable without a saved player identity.
       }
@@ -163,8 +196,12 @@ export function mountRankings(root, { open, apiBaseURL = '' }) {
       if (game.value === selected) {
         await refresh();
       }
-    } catch {
-      if (!disposed) q('#rank-status').textContent = 'Could not save. Please try again.';
+    } catch (error) {
+      if (!disposed)
+        q('#rank-status').textContent =
+          error.name === 'TimeoutError' || error instanceof TypeError
+            ? 'Could not connect. Your score remains on this device; please try again.'
+            : error.message;
     } finally {
       saving = false;
       if (!disposed) updateScore();

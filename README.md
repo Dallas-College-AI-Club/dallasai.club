@@ -12,47 +12,59 @@
   - Github: https://github.com/culukuru
   - LinkedIn: https://www.linkedin.com/in/mjkarukim/
 
+## Run the website
 
-## Run and edit the refreshed website
-
-The website keeps **Hugo and GitHub Pages**. Hugo builds the welcome page, interactive club interface, original content pages, shared browser data and RSS. Node.js runs development checks; no Node server or database connection is required to publish or browse the site.
-
-Install Hugo Extended **0.162.1** and Node.js **22.13 or newer**. From this repository:
+Install **Hugo Extended 0.162.1**. Start a local preview:
 
 ```sh
-npm ci
-npm run check
-npm start
+hugo server --bind 127.0.0.1 --port 4174 --disableFastRender
 ```
 
-Open <http://127.0.0.1:4174/>. Hugo rebuilds when you save a content file. Refresh the browser after editing. Run `npm run build` to generate the deployable `public/` folder; keep it out of Git.
+Open <http://127.0.0.1:4174/>. Hugo rebuilds when you save; refresh the browser to see your edits. No npm installation, server application or database connection is needed.
 
-| What to edit | Source |
+Build the website with:
+
+```sh
+hugo --cleanDestinationDir --panicOnWarning
+```
+
+The generated `public/` folder stays out of Git.
+
+## Edit the website
+
+| Content | Location |
 | --- | --- |
-| AI Review articles | `content/review/*.md`: metadata at the top, article body in Markdown |
-| Publication edition and sample notice | `data/publication.json` |
-| Calendar entries | `content/calendar/*.md`: `eventDate`, location and agenda above the Markdown summary |
-| Club contacts, advisors and social links | `data/club.json` |
-| Shared project links, concepts and dated market examples | `data/projects.json` |
-| AI Lab cases and sources | `data/lab.json` |
-| Game news cards | `data/discovery.json` |
-| Demo recordings and timing | `data/recordings.json` |
-| Page structure | `layouts/` |
-| Browser code, styles and media | `static/` |
-| Original posts and event records | Existing `content/events/`, `content/projects/`, `content/blog/` and `content/news/` paths |
+| Articles | `content/blog/` — metadata and Markdown body |
+| Calendar | `content/events/` — meeting details and Markdown summary |
+| Club details, projects, publication, experiments and recordings | `data/` |
+| Page templates | `layouts/` and `assets/` |
+| Browser features, styles and media | `static/` |
+| Existing project pages and news | Other folders in `content/` |
 
-Use an existing content file as a template. Keep article slugs, existing numeric article aliases, event IDs and project anchors stable. Article `publishDate` controls both publication and the displayed date; `draft: true` and future publication dates are excluded from the site, browser data and RSS. A scheduled article appears after a build following its publication time. The workflow attempts a daily rebuild at 08:15 UTC, and maintainers can run it manually. Event dates describe meetings; future events can be announced immediately.
+Use an existing file as a template. Keep published article slugs, numeric aliases, event IDs and project anchors unchanged. An article's `publishDate` controls publication; drafts and future articles stay out of the website and RSS until a qualifying build. An event's `eventDate` is its meeting date, so future meetings can be announced immediately. Give confirmed times their Central Time offset; leave unknown details explicit.
 
-Articles support normal Markdown headings and paragraphs. The browser's table of contents follows the generated heading IDs. Use the Markdown body for an event's summary and the metadata for its date, location, agenda and preparation. Keep dates with known meeting times in ISO format with the correct Central Time offset; a date alone means the time is unconfirmed.
+Preview the pages affected by your edit, check links and phone layouts, and request review before publishing.
 
-## Publishing and preserved material
+## Publish
 
-Pull requests run the build and checks and save a downloadable `hugo-preview` artifact. They do not deploy the live website. Passing changes on the existing `main` or `hugo` deployment branches publish through GitHub Pages. Pages must use GitHub Actions and the existing `dallasai.club` domain. The workflow uses fixed action revisions and Hugo's pinned version. Update those pins deliberately and rerun checks.
+GitHub Actions builds each pull request and saves a downloadable `hugo-preview` artifact. Passing changes on `main` or `hugo` publish to GitHub Pages at **dallasai.club**. Pages must use GitHub Actions. A daily rebuild at 08:15 UTC publishes scheduled articles; maintainers can also run the workflow manually.
 
-The original theme, configuration and workflow are organized in [the archive](archive/README.md). Existing content URLs still work, including the original events, projects, blog and news paths. The original README text above is retained; future README maintenance should append context without removing existing credits or history.
+## Leaderboard
 
-See [the maintenance guide](docs/maintenance.md) for ownership, review tasks and deferred integrations. Keep archive files, database tools and credentials outside `public/`. The former `server.mjs` remains a development regression harness for existing tests; `npm start` uses Hugo, and production does not run it.
+Shared rankings use the Vercel backend in `backend/` and the Neon `dallasai_club` database. The endpoint is set in `data/club.json`: `https://dallasai-leaderboard.vercel.app/api/leaderboard`. Games keep local progress if the service is unavailable.
 
-## Leaderboard status
+The browser requests an anonymous player token, saves it on the device, then sends it with score submissions. Vercel verifies the signature and calls restricted database functions. Input checks and request quotas apply; scores are reported by the browser and accepted without bot protection. Clearing browser storage creates a new player identity. The API accepts the club website and the local Hugo preview on port 4174.
 
-The separate Neon `dallasai_club` database is prepared. **Cloudflare Workers, Turnstile and public shared rankings remain deferred.** The rankings page explains their availability without making API requests; games and local progress continue to work. No credentials are needed for a website build or preview. Subscription, registration and upload services remain as described in the maintenance guide.
+`DATABASE_URL` and `SESSION_SECRET` are sensitive environment variables in Vercel. Never put either secret in browser code or Hugo data. Changing `SESSION_SECRET` invalidates existing player tokens; use a stable key across deployments. Set `LEADERBOARD_API_URL` to an empty string to disable shared rankings.
+
+The private local values are in `%LOCALAPPDATA%\dallasai-club-website\secrets.env.vercel`, outside Git and OneDrive. Neon Auth is unchanged. Database administration tools are in [leaderboard-setup.zip](archive/leaderboard-setup.zip); `backend/002_request_limits.sql` defines the API request limits.
+
+Use Vercel project **ai-c64d/dallasai-leaderboard**, Root Directory **backend**, Framework **Other**, Node.js **22**. Build settings are in `backend/vercel.json`; the lockfile pins the single runtime dependency. From `backend/`, `vercel --prod --scope ai-c64d` deploys an update after review. This project is deployed through the CLI; automatic Git deployments are not connected.
+
+## Future services
+
+Cloudflare Workers and Turnstile are optional future work; the Vercel backend does not require them.
+
+Email subscriptions, file uploads and event registration also need connected services. Local draft saving, event plans and calendar downloads do not submit or register anything. Confirm service owners and any unconfirmed meeting details before launch.
+
+The [original website source](archive/original-website.zip) is retained for reference. Both archives are excluded from the published website.

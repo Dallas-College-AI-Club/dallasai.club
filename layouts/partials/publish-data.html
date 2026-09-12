@@ -1,4 +1,7 @@
 {{- $data := partialCached "published-data.html" . -}}
-{{- $module := resources.Get "content/published.js.gotmpl" | resources.ExecuteAsTemplate "content/published.js" $data -}}{{- $module.Publish -}}
-{{- $json := resources.FromString "latest.json" ($data | jsonify) -}}{{- $json.Publish -}}
-{{- $feed := resources.Get "review-feed.xml.gotmpl" | resources.ExecuteAsTemplate "review-feed.xml" $data -}}{{- $feed.Publish -}}
+{{- $module := resources.Get "content/published.js.gotmpl" | resources.ExecuteAsTemplate "content/published.js" $data -}}
+{{- $module.Publish -}}
+{{- $json := resources.FromString "latest.json" ($data | jsonify) -}}
+{{- $json.Publish -}}
+{{- $feed := resources.Get "review-feed.xml.gotmpl" | resources.ExecuteAsTemplate "review-feed.xml" $data -}}
+{{- $feed.Publish -}}

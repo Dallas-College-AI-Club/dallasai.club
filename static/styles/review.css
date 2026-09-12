@@ -291,6 +291,10 @@ body.reading {
   max-width: 1060px;
   margin: auto;
 }
+.article-columns:has(.article-toc[hidden]) {
+  grid-template-columns: minmax(0, 720px);
+  justify-content: center;
+}
 .article-toc {
   align-self: start;
   position: sticky;

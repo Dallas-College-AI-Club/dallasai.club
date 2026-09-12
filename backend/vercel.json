@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci --ignore-scripts",
+  "buildCommand": "node -e \"const fs=require('node:fs');fs.mkdirSync('public',{recursive:true});fs.writeFileSync('public/index.html','<!doctype html><html lang=en><title>Dallas AI Club leaderboard</title><a href=https://dallasai.club>Club website</a></html>')\"",
+  "outputDirectory": "public",
+  "functions": { "api/leaderboard.mjs": { "maxDuration": 15 } }
+}

@@ -5,6 +5,7 @@ public
 # Local tools, generated Hugo output and private credentials.
 .npm-cache/
 .preview/
+.vercel/
 resources/_gen/
 data/*.tmp
 /data/leaderboard.json

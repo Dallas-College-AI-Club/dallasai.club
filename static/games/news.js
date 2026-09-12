@@ -14,6 +14,7 @@ export function clubBulletins() {
             body: event.summary,
             action: 'View events',
             mode: 'events',
+            event: event.id,
           },
         ]
       : []),

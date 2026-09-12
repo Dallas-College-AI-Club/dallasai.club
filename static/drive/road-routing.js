@@ -1,4 +1,6 @@
 // Only actual shared OSM nodes connect roads. Crossing lines are not junctions.
+const roadWeight = (type) =>
+  type === 'motorway' ? 0.7 : type.includes('link') ? 0.85 : type === 'trunk' ? 0.8 : 1.15;
 export class RoadRouter {
   constructor(data) {
     this.data = data;
@@ -9,15 +11,16 @@ export class RoadRouter {
       const [a, b, name, type] = e,
         p = this.nodes[a],
         q = this.nodes[b],
-        factor =
-          type === 'motorway' ? 0.7 : type.includes('link') ? 0.85 : type === 'trunk' ? 0.8 : 1.15;
-      this.adj[a].push({ to: b, cost: Math.hypot(p[0] - q[0], p[1] - q[1]) * factor, name });
+        cost = Math.hypot(p[0] - q[0], p[1] - q[1]) * roadWeight(type);
+      // The rendered road data has no one-way restrictions.
+      this.adj[a].push({ to: b, cost, name });
+      this.adj[b].push({ to: a, cost, name });
     }
   }
   route(position, campus) {
     const goal = campus.node ?? this.data.anchors[campus.id];
     let closest = null;
-    for (const [a, b] of this.edges) {
+    for (const [a, b, name, type] of this.edges) {
       const p = this.nodes[a],
         q = this.nodes[b],
         dx = q[0] - p[0],
@@ -32,13 +35,13 @@ export class RoadRouter {
         x = p[0] + t * dx,
         z = p[1] + t * dz,
         d = Math.hypot(x - position.x, z - position.z);
-      if (!closest || d < closest.d) closest = { d, x, z, a, b };
+      if (!closest || d < closest.d)
+        closest = { d, x, z, a, b, t, name, cost: Math.hypot(dx, dz) * roadWeight(type) };
     }
-    const start = closest.b,
-      costs = new Float64Array(this.nodes.length).fill(Infinity),
+    if (!closest) throw new Error('No connected road route. Return to a campus approach.');
+    const costs = new Float64Array(this.nodes.length).fill(Infinity),
       prev = new Int32Array(this.nodes.length).fill(-1),
       names = [];
-    costs[start] = 0;
     const heap = [];
     const push = (v) => {
       heap.push(v);
@@ -67,7 +70,15 @@ export class RoadRouter {
       }
       return first;
     };
-    push([0, start]);
+    // Join whichever end gives the shortest route from the actual road position.
+    for (const [node, fraction] of [
+      [closest.a, closest.t],
+      [closest.b, 1 - closest.t],
+    ]) {
+      costs[node] = closest.cost * fraction;
+      names[node] = closest.name;
+      push([costs[node], node]);
+    }
     while (heap.length) {
       const [cost, u] = pop();
       if (cost !== costs[u]) continue;
@@ -85,7 +96,7 @@ export class RoadRouter {
     if (!Number.isFinite(costs[goal]))
       throw new Error('No connected road route. Return to a campus approach.');
     const chain = [goal];
-    while (chain[0] !== start) chain.unshift(prev[chain[0]]);
+    while (prev[chain[0]] !== -1) chain.unshift(prev[chain[0]]);
     return [
       { x: position.x, z: position.z },
       { x: closest.x, z: closest.z, road: 'Joining the road' },

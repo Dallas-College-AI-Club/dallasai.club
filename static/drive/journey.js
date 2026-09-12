@@ -96,10 +96,10 @@ export class ClubJourney {
     this.world.travelTo(this.campus.id, id);
     $('#club-world').focus({ preventScroll: true });
   }
-  openPlace(id, article = 0) {
+  openPlace(id, article = null, route = {}) {
     if (this.world.nearest) this.world.experience.page(id);
     this.world.cancel();
-    this.onOpen(id, article);
+    this.onOpen(id, article, true, route);
   }
   arrive(place) {
     this.stop = place?.stop || null;
@@ -109,6 +109,7 @@ export class ClubJourney {
         b.setAttribute('aria-current', place?.stop.id === b.dataset.stop ? 'location' : 'false'),
       );
     if (place) {
+      this.world.experience.visit(place.campus.id, place.stop.id);
       this.campus = place.campus;
       $('#campus-select').value = this.campus.id;
       $('#journey-status').textContent = 'You’ve arrived. Discover what’s new or keep exploring.';

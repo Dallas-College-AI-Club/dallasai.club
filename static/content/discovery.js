@@ -34,6 +34,7 @@ export function stationUpdates(id, snapshot = PUBLISHED) {
       body: e.summary,
       action: 'View events',
       mode: 'events',
+      event: e.id,
     }));
   }
   if (id === 'lab') return snapshot.discovery.lab;

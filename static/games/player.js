@@ -217,7 +217,7 @@ export function mountGame(root, id, { open }) {
         }
         pause();
         save();
-        open(news.mode, news.article || 0);
+        open(news.mode, news.article ?? null, true, { event: news.event });
       };
       list.append(article);
     }

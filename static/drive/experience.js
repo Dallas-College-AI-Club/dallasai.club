@@ -147,6 +147,7 @@ export class DriveExperience {
     if (this.score?.visit(campus, id)) {
       this.toast('+100 · New club stop', performance.now());
       this.render();
+      this.persist();
     }
   }
   reset() {

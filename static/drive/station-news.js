@@ -106,13 +106,8 @@ export class StationNewsBubble {
         },
       ];
     this.index = (this.indices.get(key) || 0) % this.items.length;
+    this.reward();
     this.render();
-    const score = this.journey.world.experience.score;
-    if (score) {
-      score.collected.add(updateRewardKey(this.items[this.index]));
-      this.journey.world.experience.persist();
-    }
-    this.renderNext();
   }
   renderNext() {
     const next = this.items[(this.index + 1) % this.items.length],
@@ -147,6 +142,11 @@ export class StationNewsBubble {
     if (this.node.hidden || !this.journey.active) return;
     this.index = (this.index + 1) % this.items.length;
     this.indices.set(this.current, this.index);
+    this.reward();
+    this.render();
+    this.node.querySelector('.arrival-news-content').scrollTop = 0;
+  }
+  reward() {
     const experience = this.journey.world.experience,
       news = this.items[this.index];
     if (experience.score?.bonus(updateRewardKey(news), 30, 'New club update')) {
@@ -154,13 +154,11 @@ export class StationNewsBubble {
       experience.persist();
       experience.toast('+30 · New club update', performance.now());
     }
-    this.render();
-    this.node.querySelector('.arrival-news-content').scrollTop = 0;
   }
   open() {
     if (this.node.hidden || !this.items) return false;
     const news = this.items[this.index];
-    this.journey.openPlace(news.mode, news.article || 0);
+    this.journey.openPlace(news.mode, news.article ?? null, { event: news.event });
     return true;
   }
   dismiss() {

@@ -8,14 +8,10 @@
   - Github: https://github.com/MatthewHtang
   - LinkedIn: https://www.linkedin.com/in/matthew-htang/
 
-- Student Name 2
-  - Github:
-  - LinkedIn:
+- Minjoo Kim
+  - Github: https://github.com/culukuru
+  - LinkedIn: https://www.linkedin.com/in/mjkarukim/
 
-
-## Website team clarification
-
-Student Name 2 is **Minjoo Kim**. Matthew Htang's original credit and profile links above are preserved.
 
 ## Run and edit the refreshed website
 

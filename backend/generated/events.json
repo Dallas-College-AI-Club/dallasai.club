@@ -1,0 +1,23 @@
+[
+  {
+    "id": "git",
+    "title": "Introduction to git & Github",
+    "date": "2026-09-17T17:00:00-05:00",
+    "end": null,
+    "location": "Richland TBD & Teams"
+  },
+  {
+    "id": "productivity",
+    "title": "Being productive with AI Workshop",
+    "date": "2026-09-24T17:00:00-05:00",
+    "end": null,
+    "location": "Richland TBD & Teams"
+  },
+  {
+    "id": "welcome",
+    "title": "Fall 2026 Welcome",
+    "date": "2026-09-03T17:00:00-05:00",
+    "end": null,
+    "location": "Richland Campus; Red River Hall; ROOM RR1246 & Teams"
+  }
+]

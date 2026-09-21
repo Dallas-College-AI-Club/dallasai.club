@@ -59,12 +59,16 @@ The browser requests an anonymous player token, saves it on the device, then sen
 
 The private local values are in `%LOCALAPPDATA%\dallasai-club-website\secrets.env.vercel`, outside Git and OneDrive. Neon Auth is unchanged. Database administration tools are in [leaderboard-setup.zip](archive/leaderboard-setup.zip); `backend/002_request_limits.sql` defines the API request limits.
 
-Use Vercel project **ai-c64d/dallasai-leaderboard**, Root Directory **backend**, Framework **Other**, Node.js **22**. Build settings are in `backend/vercel.json`; the lockfile pins the single runtime dependency. From `backend/`, `vercel --prod --scope ai-c64d` deploys an update after review. This project is deployed through the CLI; automatic Git deployments are not connected.
+Use Vercel project **ai-c64d/dallasai-leaderboard**, Framework **Other**. Deploy from the `backend/` folder as the project root; the Vercel Root Directory setting is unset for this CLI workflow. `backend/package.json` declares Node.js **22**. Build settings are in `backend/vercel.json`; dependencies are pinned in the lockfile. From `backend/`, `vercel --prod --scope ai-c64d` deploys an update after review. This project is deployed through the CLI; automatic Git deployments are not connected.
 
-## Future services
+## Forms and club administration
 
-Cloudflare Workers and Turnstile are optional future work; the Vercel backend does not require them.
+The form implementation uses the existing Vercel backend and Neon with separate database roles. It supports club membership, newsletter confirmation and unsubscribe, event RSVPs and cancellation, workshop requests, and private article submissions. The protected club office lives at the backend's `/admin/` and uses one-time email codes for approved officers.
 
-Email subscriptions, file uploads and event registration also need connected services. Local draft saving, event plans and calendar downloads do not submit or register anything. Confirm service owners and any unconfirmed meeting details before launch.
+A database trigger queues an officer email for each new form record. The admin inbox shows New counts, review status, and pending delivery jobs. Email failures leave the saved record and retry queue intact.
+
+Read [forms and admin setup](docs/forms-admin.md) for configuration, provisioning, verification, newsletter publishing, and deployment. Resend, authorized officer addresses, and a private Vercel Blob store must be configured before launch. Local event plans and calendar downloads remain personal conveniences; registration uses the RSVP form.
+
+Cloudflare Turnstile can be added if the existing server-side quotas and honeypot need additional bot protection.
 
 The [original website source](archive/original-website.zip) is retained for reference. Both archives are excluded from the published website.

@@ -5,6 +5,7 @@ import { aboutMarkup, mountAbout } from './about.js';
 import { replayMarkup, mountReplay } from '../projects/chatbot.js';
 import { JOIN_URL, PROJECT_URL } from '../content/club.js';
 import { careerMarkup, mountCareer } from '../projects/career.js';
+import { formFooter, mountForm } from '../app/form-client.js';
 export const spaceHeader = (name, action = '') =>
   /* HTML */ `<header class="space-masthead">
     <div class="space-title-row">
@@ -69,39 +70,28 @@ export function renderSpace(root, id, { open }) {
       /* HTML */ `<div class="subscribe-layout">
         <section>
           <h2>The AI Review, by email.</h2>
-          <form id="subscribe-form">
+          <form id="subscribe-form" class="club-form">
             <label for="subscriber-email">Email address</label
             ><input
               id="subscriber-email"
+              name="email"
               type="email"
               autocomplete="email"
               required
               placeholder="you@example.com"
-            /><label class="subscribe-consent"
-              ><input type="checkbox" required /> I would like to receive new articles from The AI
-              Review.</label
-            ><button type="submit" class="solid-link">Preview subscription →</button>
-            <p class="subscription-note">
-              Email subscriptions are not available yet. You can preview the signup form; your
-              address will not be saved or sent.
-            </p>
-            <p id="subscribe-status" role="status"></p>
+            />${formFooter('Subscribe →','I would like to receive new articles from The AI Review. I can unsubscribe at any time.')}
           </form>
         </section>
         <aside class="subscribe-alternative">
           <h2>Follow the club in Teams</h2>
-          <p>Get club announcements while email subscriptions are being set up.</p>
+          <p>Join the conversation and get club announcements in Teams.</p>
           <a class="outline-link" href="${JOIN_URL}" target="_blank" rel="noreferrer"
             >Open Teams ↗</a
           >
-          <p><a href="review-feed.xml">Preview RSS feed ↗</a></p>
+          <p><a href="review-feed.xml">Follow the RSS feed ↗</a></p>
         </aside>
       </div>`;
-    root.querySelector('#subscribe-form').onsubmit = (e) => {
-      e.preventDefault();
-      root.querySelector('#subscribe-status').textContent =
-        'Preview complete. Your address was not saved, and you have not been subscribed.';
-    };
+    dispose = mountForm(root.querySelector('#subscribe-form'), { kind:'subscribe' });
   }
   root.querySelectorAll('[data-space]').forEach((b) => (b.onclick = () => open(b.dataset.space)));
   root

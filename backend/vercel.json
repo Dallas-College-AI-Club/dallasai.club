@@ -1,8 +1,32 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "installCommand": "npm ci --ignore-scripts",
-  "buildCommand": "node -e \"const fs=require('node:fs');fs.mkdirSync('public',{recursive:true});fs.writeFileSync('public/index.html','<!doctype html><html lang=en><title>Dallas AI Club leaderboard</title><a href=https://dallasai.club>Club website</a></html>')\"",
+  "installCommand": "npm ci --include=dev --ignore-scripts",
+  "buildCommand": "npm run build",
   "outputDirectory": "public",
-  "functions": { "api/leaderboard.mjs": { "maxDuration": 15 } }
+  "functions": {
+    "api/leaderboard.mjs": { "maxDuration": 15 },
+    "api/forms.mjs": {
+      "maxDuration": 60,
+      "includeFiles": "generated/events.json"
+    },
+    "api/admin.mjs": { "maxDuration": 60 },
+    "api/notifications.mjs": { "maxDuration": 60 },
+    "api/manage.mjs": { "maxDuration": 60 }
+  },
+  "crons": [{ "path": "/api/notifications", "schedule": "15 8 * * *" }],
+  "headers": [
+    {
+      "source": "/admin/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+        }
+      ]
+    }
+  ]
 }

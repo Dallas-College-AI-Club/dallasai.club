@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Club office · Dallas AI Club</title>
+    <link rel="stylesheet" href="/admin/style.css" />
+  </head>
+  <body>
+    <header>
+      <a href="https://dallasai.club">Dallas College AI Club</a
+      ><span>Club office</span><button id="signout" hidden>Sign out</button>
+    </header>
+    <main>
+      <section id="login">
+        <p class="eyebrow">FOR CLUB OFFICERS</p>
+        <h1>A small place to keep things moving.</h1>
+        <p>
+          Sign in with an authorized email address. We’ll send a six-digit code.
+        </p>
+        <form id="email-form">
+          <label
+            >Email address<input
+              name="email"
+              type="email"
+              autocomplete="email"
+              required /></label
+          ><button type="submit">Send sign-in code</button>
+        </form>
+        <form id="code-form" hidden>
+          <label
+            >Sign-in code<input
+              name="code"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              pattern="[0-9]{6}"
+              maxlength="6"
+              required /></label
+          ><button type="submit">Sign in</button
+          ><button type="button" id="back">Use another email</button>
+        </form>
+      </section>
+      <section id="office" hidden>
+        <div class="heading">
+          <div>
+            <p class="eyebrow">MEMBERS & MESSAGES</p>
+            <h1>Your club inbox</h1>
+          </div>
+          <button id="refresh">Refresh</button>
+        </div>
+        <p id="identity"></p>
+        <div id="counts" class="counts"></div>
+        <div id="queue" class="notice" hidden>
+          <p id="queue-text"></p>
+          <button id="retry">Retry pending deliveries</button>
+        </div>
+        <p id="configuration" class="notice" hidden></p>
+        <form id="filters" class="filters">
+          <label
+            >Type<select name="kind">
+              <option value="">All submissions</option>
+              <option value="join">Club signups</option>
+              <option value="subscribe">Newsletter</option>
+              <option value="rsvp">Event RSVPs</option>
+              <option value="contribution">Contributions</option>
+              <option value="workshop">Workshop requests</option>
+            </select></label
+          ><label
+            >Review status<select name="status">
+              <option value="">All statuses</option>
+              <option value="new">New</option>
+              <option value="reviewed">Reviewed</option>
+              <option value="closed">Closed</option>
+            </select></label
+          ><label
+            >Search<input
+              name="search"
+              type="search"
+              placeholder="Name or email" /></label
+          ><button type="submit">Apply</button>
+        </form>
+        <div class="toolbar">
+          <a id="export" href="/api/admin?export=csv">Export filtered CSV</a
+          ><a
+            href="https://resend.com/broadcasts"
+            target="_blank"
+            rel="noreferrer"
+            >Write a newsletter ↗</a
+          >
+        </div>
+        <p class="hint">
+          CSV exports include up to 10,000 matching records. Send newsletters to
+          the configured AI Review segment in Resend; it contains confirmed
+          subscribers only.
+        </p>
+        <div id="entries"></div>
+        <nav class="pagination" aria-label="Submission pages">
+          <button id="previous">Previous</button><span id="page"></span
+          ><button id="next">Next</button>
+        </nav>
+      </section>
+      <p id="status" role="status" aria-live="polite"></p>
+    </main>
+    <script type="module" src="/admin/index.js"></script>
+  </body>
+</html>

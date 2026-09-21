@@ -12,6 +12,7 @@ import { TinyNetwork, makeData } from '../lab/neural.js';
 import { renderPublication } from './review.js';
 import { weightedScore } from '../lab/weighted-score.js';
 import { renderContribution } from './contribute.js';
+import { renderMembership } from './membership.js';
 const labTabs = (active) =>
   /* HTML */ `<nav class="lab-tabs" aria-label="AI Lab experiments">
     ${[
@@ -39,6 +40,7 @@ const labHeader = (active) =>
     ${fieldGuideMarkup()} ${labTabs(active)}
   </div>`;
 export function renderActivity(root, id, { open, back }) {
+  if (id === 'join') return renderMembership(root);
   if (['summary', 'projects', 'events', 'subscribe', 'about'].includes(id))
     return renderSpace(root, id, { open, back });
   let stop = () => {};

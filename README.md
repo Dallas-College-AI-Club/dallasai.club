@@ -63,11 +63,11 @@ Use Vercel project **ai-c64d/dallasai-leaderboard**, Framework **Other**. Deploy
 
 ## Forms and club administration
 
-The form implementation uses the existing Vercel backend and Neon with separate database roles. It supports club membership, newsletter confirmation and unsubscribe, event RSVPs and cancellation, workshop requests, and private article submissions. The protected club office lives at the backend's `/admin/` and uses one-time email codes for approved officers.
+The form implementation uses the existing Vercel backend and Neon with separate database roles. It supports club membership, newsletter subscription requests, event RSVPs, workshop requests, and private article submissions. The protected club office lives at the backend's `/admin/` and uses individual passwords for approved officers, with public account creation disabled.
 
-A database trigger queues an officer email for each new form record. The admin inbox shows New counts, review status, and pending delivery jobs. Email failures leave the saved record and retry queue intact.
+All five forms confirm success on screen only after the record is saved. New records appear in the admin inbox with New counts and review status; the inbox refreshes every minute while open. Automated email delivery is not enabled.
 
-Read [forms and admin setup](docs/forms-admin.md) for configuration, provisioning, verification, newsletter publishing, and deployment. Resend, authorized officer addresses, and a private Vercel Blob store must be configured before launch. Local event plans and calendar downloads remain personal conveniences; registration uses the RSVP form.
+Read [forms and admin setup](docs/forms-admin.md) for configuration, provisioning, verification, and deployment. Approved officer accounts and a private Vercel Blob store are required; no email provider is needed. Local event plans and calendar downloads remain personal conveniences; registration uses the RSVP form.
 
 Cloudflare Turnstile can be added if the existing server-side quotas and honeypot need additional bot protection.
 

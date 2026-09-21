@@ -5,7 +5,6 @@ import { requireAdmin, adminOrigin } from '../lib/auth.mjs';
 import { send, fail, jsonBody } from '../lib/http.mjs';
 import { RequestError } from '../lib/errors.mjs';
 import { kinds, uuid } from '../lib/validation.mjs';
-import { drainOutbox } from '../lib/mail.mjs';
 export function csvCell(value) {
   const text = String(value ?? '');
   return (
@@ -109,8 +108,7 @@ export default async function handler(req, res) {
       }
       const result = await db.query(
         `SELECT e.*,
-        (SELECT COALESCE(json_agg(json_build_object('id',a.id,'name',a.name,'size',a.size)),'[]') FROM club_forms.attachments a WHERE a.entry_id=e.id) AS attachments,
-        (SELECT count(*)::int FROM club_forms.outbox o WHERE o.entry_id=e.id AND o.sent_at IS NULL) AS pending_emails
+        (SELECT COALESCE(json_agg(json_build_object('id',a.id,'name',a.name,'size',a.size)),'[]') FROM club_forms.attachments a WHERE a.entry_id=e.id) AS attachments
         FROM club_forms.entries e ${where} ORDER BY e.created_at DESC,e.id LIMIT 51 OFFSET $5`,
         [...filters, offset],
       );
@@ -119,23 +117,12 @@ export default async function handler(req, res) {
           `SELECT kind,count(*)::int AS total,count(*) FILTER (WHERE review_status='new')::int AS new FROM club_forms.entries GROUP BY kind`,
         )
       ).rows;
-      const queue = (
-        await db.query(
-          `SELECT count(*) FILTER(WHERE sent_at IS NULL)::int AS pending,count(*) FILTER(WHERE sent_at IS NULL AND last_error IS NOT NULL)::int AS failed FROM club_forms.outbox`,
-        )
-      ).rows[0];
       return send(res, 200, {
         user: user.email,
         entries: result.rows.slice(0, 50),
         hasMore: result.rows.length > 50,
         counts,
-        queue,
         configured: {
-          email: Boolean(process.env.RESEND_API_KEY && process.env.MAIL_FROM),
-          notifications: Boolean(process.env.NOTIFICATION_EMAILS),
-          newsletter: Boolean(
-            process.env.RESEND_SEGMENT_ID && process.env.RESEND_WEBHOOK_SECRET,
-          ),
           uploads: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
         },
       });
@@ -144,16 +131,6 @@ export default async function handler(req, res) {
       throw new RequestError(405, 'Method not allowed.');
     adminOrigin(req);
     const body = await jsonBody(req, 2048);
-    if (body.action === 'retry') {
-      await db.query(
-        'UPDATE club_forms.outbox SET available_at=now(),attempts=0 WHERE sent_at IS NULL AND (locked_until IS NULL OR locked_until<now())',
-      );
-      await db.query(
-        "INSERT INTO club_forms.audit(actor,action) VALUES($1,'retry-notifications')",
-        [user.email],
-      );
-      return send(res, 200, await drainOutbox(db));
-    }
     if (
       body.action !== 'review' ||
       !uuid.test(body.id || '') ||

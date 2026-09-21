@@ -42,8 +42,7 @@ for (const [key, role] of [
           [id],
         )
       ).rows;
-      if (rows.length !== 1 || rows[0].kind !== 'notify')
-        throw new Error('Notification trigger check failed.');
+      if (rows.length !== 0) throw new Error('Unexpected email job created.');
       await client.query('ROLLBACK');
       const access = (
         await client.query(
@@ -66,7 +65,7 @@ for (const [key, role] of [
       role +
         ': connection and permissions verified' +
         (role === 'forms'
-          ? '; notification trigger verified inside a rolled-back transaction.'
+          ? '; storage without email jobs verified inside a rolled-back transaction.'
           : '.'),
     );
   } finally {

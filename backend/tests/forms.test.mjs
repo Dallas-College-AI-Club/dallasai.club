@@ -5,9 +5,6 @@ import { randomUUID } from 'node:crypto';
 import { PGlite } from '@electric-sql/pglite';
 import { submit } from '../lib/submissions.mjs';
 import { validate, validateFiles } from '../lib/validation.mjs';
-import { signToken, verifyToken } from '../lib/tokens.mjs';
-import { manageEntry } from '../lib/manage.mjs';
-import { drainOutbox, receipt } from '../lib/mail.mjs';
 import { limit, cors, jsonBody } from '../lib/http.mjs';
 import { csvCell } from '../api/admin.mjs';
 let db;
@@ -26,6 +23,12 @@ before(async () => {
   await db.exec(
     await readFile(new URL('../003_club_forms.sql', import.meta.url), 'utf8'),
   );
+  await db.exec(
+    await readFile(
+      new URL('../005_screen_confirmations.sql', import.meta.url),
+      'utf8',
+    ),
+  );
 });
 beforeEach(async () => {
   await db.exec(
@@ -35,58 +38,74 @@ beforeEach(async () => {
 after(async () => {
   await db.close();
 });
-test('new signup and its alert are committed together; duplicate signup creates one member and alert', async () => {
-  const first = await submit(db, entry(), []),
-    second = await submit(db, entry(), []);
-  assert.equal(first.id, second.id);
-  assert.equal(first.email, 'student@example.com');
-  const jobs = (
-    await db.query('SELECT kind FROM club_forms.outbox ORDER BY kind')
-  ).rows;
-  assert.deepEqual(
-    jobs.map((x) => x.kind),
-    ['notify', 'receipt'],
-  );
-});
-test('database inserts also create an officer notification, and rollbacks leave neither record nor alert', async () => {
-  await assert.rejects(
-    db.transaction(async (tx) => {
-      await tx.query(
-        "INSERT INTO club_forms.entries(id,kind,email,dedupe_key) VALUES($1,'join','a@example.com','direct')",
-        [randomUUID()],
-      );
-      throw new Error('rollback');
-    }),
+test('all five forms save immediately without email configuration or email jobs', async (t) => {
+  let networkCalls = 0;
+  t.mock.method(globalThis, 'fetch', async () => {
+    networkCalls++;
+    throw new Error('Email must not be sent');
+  });
+  const events = [{ id: 'future', date: '2099-09-24', title: 'Workshop' }];
+  for (const [kind, extra] of [
+    ['join', {}],
+    ['subscribe', {}],
+    ['rsvp', { eventId: 'future' }],
+    ['contribution', { title: 'A draft', body: 'Draft text' }],
+    ['workshop', { topic: 'AI and art' }],
+  ]) {
+    const row = await submit(db, entry(kind, extra), events);
+    assert.equal(row.state, 'active');
+    assert.equal(row.review_status, 'new');
+    assert.equal(row.email_verified, false);
+  }
+  assert.equal(
+    (await db.query('SELECT count(*)::int AS n FROM club_forms.entries'))
+      .rows[0].n,
+    5,
   );
   assert.equal(
     (await db.query('SELECT count(*)::int AS n FROM club_forms.outbox')).rows[0]
       .n,
     0,
   );
+  assert.equal(networkCalls, 0);
+});
+test('duplicate signup saves one member; trusted database inserts appear as New without email jobs', async () => {
+  const first = await submit(db, entry(), []),
+    second = await submit(db, entry(), []);
+  assert.equal(first.id, second.id);
+  assert.equal(first.email, 'student@example.com');
   await db.query(
     "INSERT INTO club_forms.entries(id,kind,email,dedupe_key) VALUES($1,'join','a@example.com','direct')",
     [randomUUID()],
   );
   assert.equal(
+    (
+      await db.query(
+        "SELECT count(*)::int AS n FROM club_forms.entries WHERE review_status='new'",
+      )
+    ).rows[0].n,
+    2,
+  );
+  assert.equal(
     (await db.query('SELECT count(*)::int AS n FROM club_forms.outbox')).rows[0]
       .n,
-    1,
+    0,
   );
 });
-test('newsletter stays pending until confirmation; unsubscribe prevents an old confirmation from resubscribing', async () => {
-  const row = await submit(db, entry('subscribe'), []);
-  assert.equal(row.state, 'pending');
-  const signed = verifyToken(signToken(row.id, 'confirm'));
-  await manageEntry(db, signed);
-  assert.equal(
-    (await db.query('SELECT state FROM club_forms.entries')).rows[0].state,
-    'active',
+test('transaction failures leave no partial submission', async () => {
+  await assert.rejects(
+    db.transaction(async (tx) => {
+      await tx.query(
+        "INSERT INTO club_forms.entries(id,kind,email,dedupe_key) VALUES($1,'join','a@example.com','rollback')",
+        [randomUUID()],
+      );
+      throw new Error('rollback');
+    }),
   );
-  await manageEntry(db, { id: row.id, action: 'unsubscribe' });
-  await assert.rejects(manageEntry(db, { ...signed, iat: 1 }), /cancelled/);
   assert.equal(
-    (await db.query('SELECT state FROM club_forms.entries')).rows[0].state,
-    'unsubscribed',
+    (await db.query('SELECT count(*)::int AS n FROM club_forms.entries'))
+      .rows[0].n,
+    0,
   );
 });
 test('RSVP validates the server event registry and deduplicates per event and email', async () => {
@@ -107,37 +126,6 @@ test('RSVP validates the server event registry and deduplicates per event and em
     () => validate(body, [{ ...events[0], date: '2000-01-01' }]),
     /unavailable/,
   );
-  await manageEntry(db, { id: row.id, action: 'cancel' });
-  assert.equal(
-    (await db.query('SELECT state FROM club_forms.entries')).rows[0].state,
-    'cancelled',
-  );
-});
-test('an email outage leaves saved data and retryable alerts; retry does not resend completed jobs', async () => {
-  await submit(db, entry(), []);
-  const failed = await drainOutbox(db, async () => {
-    throw new Error('provider down');
-  });
-  assert.equal(failed.failed, 2);
-  assert.equal(
-    (await db.query('SELECT count(*)::int AS n FROM club_forms.entries'))
-      .rows[0].n,
-    1,
-  );
-  await db.query('UPDATE club_forms.outbox SET available_at=now()');
-  let calls = 0;
-  assert.equal(
-    (
-      await drainOutbox(db, async () => {
-        calls++;
-      })
-    ).sent,
-    2,
-  );
-  await drainOutbox(db, async () => {
-    calls++;
-  });
-  assert.equal(calls, 2);
 });
 test('consent, body types, email, attachment limits and file signatures are checked on the server', () => {
   assert.throws(() => validate(entry('join', { consent: false })), /consent/);
@@ -235,22 +223,6 @@ test('private attachments are linked to a submission and retrying a request does
     1,
   );
   delete process.env.BLOB_READ_WRITE_TOKEN;
-});
-test('tokens reject alteration, wrong actions and expiry; retrying an email generates identical content', () => {
-  const id = randomUUID(),
-    now = Date.now(),
-    token = signToken(id, 'confirm', 60, now);
-  assert.equal(verifyToken(token, now).id, id);
-  assert.throws(() => verifyToken(token + 'x', now), /invalid/);
-  assert.throws(() => verifyToken(token, now + 61000), /expired/);
-  const row = {
-    id,
-    kind: 'join',
-    name: 'A',
-    email: 'a@example.com',
-    state: 'pending',
-  };
-  assert.deepEqual(receipt(row, now), receipt(row, now));
 });
 test('persistent request quota applies across invocations and CSV cells cannot execute spreadsheet formulas', async () => {
   const req = { headers: {}, socket: { remoteAddress: '127.0.0.1' } };

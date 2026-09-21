@@ -1,6 +1,5 @@
 import { createAuthClient } from 'better-auth/client';
-import { emailOTPClient } from 'better-auth/client/plugins';
-const auth = createAuthClient({ plugins: [emailOTPClient()] }),
+const auth = createAuthClient(),
   q = (s) => document.querySelector(s);
 const labels = {
   join: 'Club signups',
@@ -10,9 +9,9 @@ const labels = {
   workshop: 'Workshop requests',
 };
 let offset = 0,
-  email = '',
   signedIn = false,
-  loading = false;
+  loading = false,
+  sessionGeneration = 0;
 function node(tag, text, className) {
   const element = document.createElement(tag);
   if (text !== undefined) element.textContent = text;
@@ -41,11 +40,14 @@ async function api(path = '/api/admin', body) {
   return data;
 }
 function showLogin() {
+  sessionGeneration++;
   signedIn = false;
   q('#login').hidden = false;
   q('#office').hidden = true;
   q('#signout').hidden = true;
   q('#entries').replaceChildren();
+  q('#password-form').reset();
+  q('#password-settings').open = false;
 }
 function filters() {
   const params = new URLSearchParams([
@@ -70,10 +72,7 @@ function renderEntry(entry) {
   address.href = 'mailto:' + entry.email;
   card.append(
     address,
-    node(
-      'p',
-      `${entry.state} · Email ${entry.email_verified ? 'confirmed' : 'unconfirmed'}${entry.pending_emails ? ' · ' + entry.pending_emails + ' pending deliveries' : ''}`,
-    ),
+    node('p', entry.state === 'active' ? 'Saved' : entry.state),
   );
   const details = node('details');
   details.append(node('summary', 'Submission details'));
@@ -122,9 +121,11 @@ function renderEntry(entry) {
 async function load() {
   if (loading) return;
   loading = true;
+  const generation = sessionGeneration;
   q('#refresh').disabled = true;
   try {
     const data = await api('/api/admin?' + filters());
+    if (generation !== sessionGeneration) return;
     signedIn = true;
     q('#login').hidden = true;
     q('#office').hidden = false;
@@ -145,9 +146,6 @@ async function load() {
         return box;
       }),
     );
-    q('#queue').hidden = !data.queue.pending;
-    q('#queue-text').textContent =
-      `${data.queue.pending} deliveries pending. ${data.queue.failed} encountered an error. Saved submissions remain available here.`;
     const missing = Object.entries(data.configured)
       .filter(([, value]) => !value)
       .map(([key]) => key);
@@ -179,39 +177,23 @@ async function load() {
     q('#refresh').disabled = false;
   }
 }
-q('#email-form').onsubmit = async (event) => {
+q('#login-form').onsubmit = async (event) => {
   event.preventDefault();
   const button = event.submitter;
   button.disabled = true;
   status();
-  email = new FormData(event.target).get('email').trim().toLowerCase();
+  const form = new FormData(event.target);
   try {
-    const result = await auth.emailOtp.sendVerificationOtp({
-      email,
-      type: 'sign-in',
+    const result = await auth.signIn.email({
+      email: form.get('email').trim().toLowerCase(),
+      password: form.get('password'),
+      rememberMe: false,
     });
-    if (result.error) throw new Error(result.error.message);
-    q('#email-form').hidden = true;
-    q('#code-form').hidden = false;
-    status('If this address is authorized, a sign-in code is on its way.');
-    q('[name="code"]').focus();
-  } catch (e) {
-    status(e.message);
-  } finally {
-    button.disabled = false;
-  }
-};
-q('#code-form').onsubmit = async (event) => {
-  event.preventDefault();
-  const button = event.submitter;
-  button.disabled = true;
-  try {
-    const result = await auth.signIn.emailOtp({
-      email,
-      otp: new FormData(event.target).get('code'),
-    });
-    if (result.error) throw new Error(result.error.message);
-    status();
+    if (result.error)
+      throw new Error(
+        'Could not sign in. Check your email and password, then try again.',
+      );
+    event.target.reset();
     await load();
   } catch (e) {
     status(e.message);
@@ -219,17 +201,42 @@ q('#code-form').onsubmit = async (event) => {
     button.disabled = false;
   }
 };
-q('#back').onclick = () => {
-  q('#email-form').hidden = false;
-  q('#code-form').hidden = true;
-  q('#code-form').reset();
+q('#password-form').onsubmit = async (event) => {
+  event.preventDefault();
+  const button = event.submitter;
+  button.disabled = true;
   status();
+  const form = new FormData(event.target);
+  try {
+    const result = await auth.changePassword({
+      currentPassword: form.get('currentPassword'),
+      newPassword: form.get('newPassword'),
+      revokeOtherSessions: true,
+    });
+    if (result.error)
+      throw new Error(
+        'Could not update your password. Check your current password and use at least 12 characters for the new one.',
+      );
+    event.target.reset();
+    q('#password-settings').open = false;
+    status('Password updated.');
+  } catch (e) {
+    status(e.message);
+  } finally {
+    button.disabled = false;
+  }
 };
 q('#signout').onclick = async () => {
-  await auth.signOut();
-  showLogin();
-  q('#back').click();
-  status('Signed out.');
+  sessionGeneration++;
+  try {
+    const result = await auth.signOut();
+    if (result.error) throw new Error('Could not sign out. Please try again.');
+    showLogin();
+    q('#login-form').reset();
+    status('Signed out.');
+  } catch (e) {
+    status(e.message);
+  }
 };
 q('#refresh').onclick = () => {
   status();
@@ -247,20 +254,6 @@ q('#previous').onclick = () => {
 q('#next').onclick = () => {
   offset += 50;
   load();
-};
-q('#retry').onclick = async () => {
-  q('#retry').disabled = true;
-  try {
-    const result = await api('/api/admin', { action: 'retry' });
-    status(
-      `${result.sent} deliveries sent; ${result.failed} need another attempt.`,
-    );
-    await load();
-  } catch (e) {
-    status(e.message);
-  } finally {
-    q('#retry').disabled = false;
-  }
 };
 setInterval(() => {
   if (signedIn && !document.hidden) load();

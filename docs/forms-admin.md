@@ -1,52 +1,48 @@
 # Forms and the club office
 
-The website remains Hugo on GitHub Pages. The existing Vercel project hosts the form APIs and `/admin/`; Neon stores the records. Admin authentication uses the pinned Better Auth email-code plugin with separate tables and a separate database role. Public membership does not create an admin account or subscribe someone to the newsletter.
+Hugo serves the public website on GitHub Pages. The existing Vercel backend stores club signups, newsletter subscription requests, RSVPs, contributions, and workshop requests in Neon. A successful form shows an on-screen confirmation only after the database transaction commits. The form preserves its content if saving fails. Duplicate membership/subscription requests and RSVPs do not create extra records.
 
 ## How officers learn about a signup
 
-Every new `club_forms.entries` record creates a notification in `club_forms.outbox` **inside the same database transaction**, through a PostgreSQL trigger. This also covers records inserted through another trusted database tool. Updates are not treated as new signups.
+Open the protected backend `/admin/` page. Every new record, including trusted database imports, appears with review status **New**. Counts and the inbox refresh every minute while the page is visible; Refresh updates immediately. Officers can filter, search, review or close submissions, download private attachments, and export up to 10,000 matching records. Administrative updates, downloads, and exports are logged.
 
-Normal website submissions attempt email delivery immediately. Alerts go to `NOTIFICATION_EMAILS` and link to the specific record in the protected club office. The inbox shows a New badge and per-form counts; it refreshes every minute while open. Officers can mark a record Reviewed or Closed, filter, search, and export a CSV (up to 10,000 matching records). Administrative updates, downloads, and exports are logged.
+There are no email alerts, emailed confirmation links, or newsletter broadcasts in this release. Newsletter requests record consent for future updates; email ownership is not verified and `email_verified` remains false. They must not be represented as verified subscribers or automatically enrolled in a future mailing service. The public page explains that newsletters are not currently being sent. People can contact the club to withdraw a request or cancel an RSVP.
 
-A provider outage does not roll back the saved signup. Delivery jobs have exclusive leases, bounded attempts, retry delays, and stable Resend idempotency keys. More submissions and the daily Vercel job retry eligible work. Officers can also select **Retry pending deliveries**. The daily schedule works on the entry-level Vercel schedule allowance; a shorter production cadence can be configured on a plan that supports it. A direct database insert waits for a worker invocation. “Sent” means accepted by the email provider, not proof that a person read it. Check Resend delivery logs for bounces or delivery problems. Retrying an old job after Resend's idempotency window can resend an alert.
+## Admin access
 
-## Required private configuration
+Approved officers sign in with individual email addresses and passwords using pinned Better Auth. Public account creation and email-code login are disabled. The server checks `ADMIN_EMAILS` on every admin request, uses secure HTTP-only cookies in production, and limits login attempts. Removing an address revokes its access even if its session is still valid. Password hashes and sessions have their own database role.
 
-Use `backend/.env.example` as the variable-name reference. Never add credentials to Hugo data, browser scripts, GitHub Pages, or commits.
+Run `node backend/scripts/provision-admins.mjs` once after setting the approved list. It creates accounts with independent random passwords and saves the initial credentials to `%LOCALAPPDATA%\dallasai-club-website\admin-access.json`, outside Git and OneDrive. It refuses to overwrite existing accounts or credentials. Share each initial password only with its officer. The **Change password** control requires the current password and revokes the officer's other sessions. Passwords must contain 12–128 characters. Forgotten passwords require the website administrator; there is no email recovery service.
 
-- `FORMS_DATABASE_URL`: role restricted to the `club_forms` schema.
-- `AUTH_DATABASE_URL`: role restricted to the `club_admin_*` authentication tables.
-- `FORM_TOKEN_SECRET`, `BETTER_AUTH_SECRET`, `CRON_SECRET`: independent random values, at least 32 characters each. Keep stable across deployments.
-- `AUTH_BASE_URL`: exact Vercel origin serving `/admin/`, including a preview's origin if testing a preview. Authentication cookies stay on this origin.
-- `PUBLIC_SITE_URL`: website origin used for email confirmation links.
-- `ADMIN_EMAILS`: comma-separated addresses allowed to sign in. Verified sessions are checked against this list on every admin API request. An empty list disables admin access.
-- `NOTIFICATION_EMAILS`: officer recipients for new records. Separate from the admin allowlist.
-- `RESEND_API_KEY`, `MAIL_FROM`: Resend key and a sender on a verified domain. The key needs email and contact/segment access.
-- `RESEND_SEGMENT_ID`: dedicated **AI Review** segment. Only confirmed newsletter subscriptions are synced here.
-- `RESEND_WEBHOOK_SECRET`: signing secret for `/api/email-webhook`. Subscribe the webhook to `contact.updated`, `contact.deleted`, `email.bounced`, `email.complained`, and `email.suppressed`.
-- `BLOB_READ_WRITE_TOKEN`: connected **private** Vercel Blob store. Public stores are not supported for contributions.
-- `FORMS_ALLOWED_ORIGINS`: optional additional, exact frontend origins for preview testing. Production club origins are built in.
+## Private settings
 
-Existing `DATABASE_URL` and `SESSION_SECRET` remain the leaderboard's credentials.
+Use `backend/.env.example` as the variable reference. Never put credentials in browser scripts, Hugo data, or commits.
 
-## Provisioning and launch
+- `FORMS_DATABASE_URL`: runtime role restricted to the forms schema.
+- `AUTH_DATABASE_URL`: runtime role restricted to the admin authentication tables.
+- `FORM_TOKEN_SECRET`, `BETTER_AUTH_SECRET`, `CRON_SECRET`: independent random secrets of at least 32 characters. Keep them stable. The form secret hashes request quota identifiers.
+- `AUTH_BASE_URL`: exact backend origin serving the admin page, including the preview origin when testing.
+- `ADMIN_EMAILS`: comma-separated approved officer addresses. An empty list disables admin access.
+- `BLOB_READ_WRITE_TOKEN`: connected private Blob store for contributions.
+- `FORMS_ALLOWED_ORIGINS`: optional exact frontend origins for preview testing.
 
-1. Review `003_club_forms.sql` and generated `004_admin_auth.sql`. `node backend/scripts/provision.mjs` applies only the new forms/admin schema and creates separate runtime roles using the existing private database-admin connection. It writes new settings to `%LOCALAPPDATA%\dallasai-club-website\secrets.env.forms`, outside Git and OneDrive. It deliberately refuses to overwrite existing credentials or roles. If interrupted, inspect the transaction and private file before retrying.
-2. Fill in the approved officer addresses and connect Resend and a private Blob store. Do not use a personal API key in browser code or paste credentials into a task message. Add the private variables to the appropriate Vercel environment.
-3. From `backend/`, run `npm ci --include=dev --ignore-scripts`, `npm test`, and `npm run build`. The build creates the admin bundle and a trusted event registry from the Hugo source. The generated registry is included in backend-only deployments. Rebuild and redeploy the backend when event registrations change.
-4. Deploy a Vercel preview; set its `AUTH_BASE_URL` and frontend origin accordingly. Test with a separate database or isolated test environment and a designated test mailbox. Verify actual email delivery, OTP login, private upload/download, confirmation, cancellation, and unsubscribe webhook handling.
-5. After review, deploy the Vercel backend and then publish the website. Backend deployments are CLI-managed; pushing the website alone does not deploy the APIs. The configured public form endpoint is in `data/club.json`.
+The leaderboard's existing `DATABASE_URL` and `SESSION_SECRET` remain unchanged. Resend credentials are not required or used.
 
-For local development, build the backend and run its `npm run dev` on `127.0.0.1:4175`. Use test settings with `AUTH_BASE_URL=http://127.0.0.1:4175` and `PUBLIC_SITE_URL=http://127.0.0.1:4174`. Set Hugo's `params.formsAPIURL` override to `http://127.0.0.1:4175/api/forms` when serving the frontend. Local origins are accepted only outside Vercel unless explicitly configured.
+## Provisioning, testing, and launch
 
-## Publishing The AI Review newsletter
+1. Review migrations `003_club_forms.sql`, `004_admin_auth.sql`, and `005_screen_confirmations.sql`. The provisioning script applies all three for a fresh setup and creates restricted roles. It refuses to overwrite existing credentials or roles.
+2. For an already provisioned database, apply migration 005 once before deploying this revision. It disables the old email-queue trigger and makes new records active by default. Existing data and unused email tables are retained; no email worker or webhook endpoint is deployed.
+3. Save private settings and provision officer accounts. Keep preview admin access limited to the designated tester. Use isolated test data and remove only the records created by a test.
+4. From `backend/`, run `npm ci --include=dev --ignore-scripts`, `npm test`, and `npm run build`. The build generates the admin bundle and trusted event registry. Rebuild/redeploy the backend when event registrations change.
+5. Deploy a Vercel preview with the correct admin origin. Check all five forms, real database saves, password login/change/signout, unauthorized access, and private uploads/downloads.
+6. After review, deploy the Vercel backend and then publish the website. The backend is deployed through the CLI; pushing the website alone does not update it. The public form endpoint is configured in `data/club.json`.
 
-Create a Broadcast in Resend, select the dedicated AI Review segment, preview/test the email, and then send it. Include Resend's unsubscribe link. There is no automatic send on a Hugo article publish. Resend manages delivery suppression; signed webhook events update subscription state in Neon. Membership and event receipts are separate transactional emails. An opt-out is never reversed by merely submitting a form again; a fresh email confirmation is needed.
+For local development, build the backend and run `npm run dev` at `127.0.0.1:4175`. Set `AUTH_BASE_URL=http://127.0.0.1:4175` and Hugo's `params.formsAPIURL=http://127.0.0.1:4175/api/forms`. Serve the frontend at `127.0.0.1:4174`. A daily authenticated maintenance task expires request-limit and obsolete webhook records; it sends no messages.
 
 ## Attachments and privacy
 
-Contributions accept up to three files and 2 MB total (PDF, DOCX, TXT, Markdown, PNG, JPG). The server checks size, file names, allowed extensions, and basic file signatures; files are stored privately and served as downloads after admin authorization. This is not antivirus scanning. Do not submit sensitive student records. The public `privacy.html` explains the data collected and the services used. Officers should handle correction/deletion requests through the club contact and review retention needs periodically.
+Contributions accept up to three files and 2 MB total: PDF, DOCX, TXT, Markdown, PNG, or JPG. The server checks names, sizes, extensions, and basic file signatures. Files stay private and require admin authorization to download. This is not antivirus scanning. The public privacy page explains the data stored and how to request changes or deletion.
 
 ## Verification
 
-`npm test` runs local PostgreSQL-compatible tests with PGlite, covering atomic notifications, deduplication, uploads and rollback, consent, confirmation/opt-out, request quotas, and real Better Auth OTP/session behavior. It sends no real emails. `node tests/browser.mjs` checks all five forms and admin workflows with synthetic API responses in a temporary Chrome session after a Hugo build to `.preview/forms-site`. `CHROME_PATH` can override the executable location. Live provider and deployment checks still require configured services and a designated test mailbox.
+`npm test` uses PGlite to test database transactions, deduplication, validation, upload cleanup, request quotas, and real password authentication/session behavior without sending email. `node tests/browser.mjs` checks all five forms, mobile layouts, failed submissions, password login/change, and safe admin rendering against synthetic API responses after a Hugo build to `.preview/forms-site`. `node scripts/verify-live-forms.mjs <approved-test-email>` (from `backend/`) starts a temporary local API against the configured Neon and Blob services. It checks actual saves, login/signout, New counts, review/export, and attachment access, then removes its own test records and files. It refuses to run if that mailbox already has submissions. Live tests must use the designated test account.

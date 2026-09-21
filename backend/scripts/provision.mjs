@@ -35,7 +35,11 @@ try {
     throw new Error(
       'A runtime role already exists. Stop and recover its existing credentials before proceeding.',
     );
-  for (const name of ['003_club_forms.sql', '004_admin_auth.sql']) {
+  for (const name of [
+    '003_club_forms.sql',
+    '004_admin_auth.sql',
+    '005_screen_confirmations.sql',
+  ]) {
     const sql = (
       await fs.readFile(new URL('../' + name, import.meta.url), 'utf8')
     )
@@ -77,13 +81,7 @@ try {
     BETTER_AUTH_SECRET: randomBytes(32).toString('base64url'),
     CRON_SECRET: randomBytes(32).toString('base64url'),
     AUTH_BASE_URL: 'https://dallasai-leaderboard.vercel.app',
-    PUBLIC_SITE_URL: 'https://dallasai.club',
     ADMIN_EMAILS: '',
-    NOTIFICATION_EMAILS: '',
-    RESEND_API_KEY: '',
-    MAIL_FROM: '',
-    RESEND_SEGMENT_ID: '',
-    RESEND_WEBHOOK_SECRET: '',
     BLOB_READ_WRITE_TOKEN: '',
   };
   // Exclusive creation prevents accidentally replacing existing credentials.

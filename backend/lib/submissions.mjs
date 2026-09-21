@@ -50,9 +50,7 @@ export async function submit(db, body, events, storage = { put, del }) {
           input.name,
           JSON.stringify(input.data),
           input.dedupeKey,
-          ['subscribe', 'join', 'rsvp'].includes(input.kind)
-            ? 'pending'
-            : 'active',
+          'active',
         ],
       );
       inserted = result.rows.length > 0;
@@ -78,15 +76,6 @@ export async function submit(db, body, events, storage = { put, del }) {
               file.bytes.length,
             ],
           );
-      // At most one receipt per hour, including deliberate requests to confirm again.
-      if (
-        row.email === input.email &&
-        (inserted || ['subscribe', 'join', 'rsvp'].includes(row.kind))
-      )
-        await tx.query(
-          `INSERT INTO club_forms.outbox(entry_id,kind,dedupe_key) VALUES($1,'receipt',$2) ON CONFLICT(dedupe_key) DO NOTHING`,
-          [row.id, `receipt:${row.id}:${Math.floor(Date.now() / 3600000)}`],
-        );
       return row;
     });
     if (!inserted && stored.length)

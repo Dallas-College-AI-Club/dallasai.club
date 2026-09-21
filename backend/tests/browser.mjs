@@ -70,7 +70,7 @@ try {
         headers: { 'Access-Control-Allow-Origin': origin },
         body: JSON.stringify({
           message:
-            'Request received. Check your email for a confirmation link.',
+            'Your club signup has been saved. Welcome to the Dallas College AI Club!',
         }),
       });
     },
@@ -91,9 +91,12 @@ try {
     .getByRole('button', { name: 'Join the club', exact: true })
     .click();
   await page
-    .getByText('Request received. Check your email for a confirmation link.', {
-      exact: true,
-    })
+    .getByText(
+      'Your club signup has been saved. Welcome to the Dallas College AI Club!',
+      {
+        exact: true,
+      },
+    )
     .waitFor();
   assert.equal(received.at(-1).kind, 'join');
   await page.evaluate(() => window.scrollTo(0, 0));
@@ -220,9 +223,6 @@ try {
     counts: [{ kind: 'join', new: 1, total: 1 }],
     queue: { pending: 0, failed: 0 },
     configured: {
-      email: true,
-      notifications: true,
-      newsletter: true,
       uploads: true,
     },
     hasMore: false,
@@ -242,10 +242,22 @@ try {
   await admin
     .getByLabel('Email address', { exact: true })
     .fill('officer@example.com');
-  await admin.getByRole('button', { name: 'Send sign-in code' }).click();
-  await admin.getByLabel('Sign-in code', { exact: true }).fill('123456');
+  await admin
+    .getByLabel('Password', { exact: true })
+    .fill('Test-password-987!');
   await admin.getByRole('button', { name: 'Sign in', exact: true }).click();
   await admin.getByRole('heading', { name: 'Your club inbox' }).waitFor();
+  await admin.getByText('Change password', { exact: true }).click();
+  await admin
+    .getByLabel('Current password', { exact: true })
+    .fill('Test-password-987!');
+  await admin
+    .getByLabel('New password', { exact: true })
+    .fill('Updated-password-987!');
+  await admin
+    .getByRole('button', { name: 'Update password', exact: true })
+    .click();
+  await admin.getByText('Password updated.', { exact: true }).waitFor();
   await admin.locator('#filters [name="kind"]').selectOption('join');
   await admin.getByRole('button', { name: 'Apply', exact: true }).click();
   await admin.getByText('Submission details', { exact: true }).click();

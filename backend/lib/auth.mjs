@@ -1,22 +1,27 @@
 import { betterAuth } from 'better-auth';
-import { emailOTP } from 'better-auth/plugins';
 import { APIError } from 'better-auth/api';
 import { fromNodeHeaders } from 'better-auth/node';
 import pg from 'pg';
-import { emailList, sendEmail } from './mail.mjs';
+import { emailList } from './admin-accounts.mjs';
 import { RequestError } from './errors.mjs';
 let auth;
 export const isAdmin = (email) =>
   emailList(process.env.ADMIN_EMAILS).includes(
     String(email || '').toLowerCase(),
   );
-export function authOptions(pool, send = sendEmail) {
+export function authOptions(pool) {
   return {
     database: pool,
     baseURL: process.env.AUTH_BASE_URL,
     secret: process.env.BETTER_AUTH_SECRET,
     trustedOrigins: [process.env.AUTH_BASE_URL],
-    emailAndPassword: { enabled: false },
+    emailAndPassword: {
+      enabled: true,
+      disableSignUp: true,
+      requireEmailVerification: false,
+      minPasswordLength: 12,
+      maxPasswordLength: 128,
+    },
     user: { modelName: 'club_admin_user', changeEmail: { enabled: false } },
     session: {
       modelName: 'club_admin_session',
@@ -33,8 +38,8 @@ export function authOptions(pool, send = sendEmail) {
       window: 60,
       max: 20,
       customRules: {
-        '/email-otp/send-verification-otp': { window: 60, max: 3 },
-        '/sign-in/email-otp': { window: 300, max: 5 },
+        '/sign-in/email': { window: 300, max: 5 },
+        '/change-password': { window: 300, max: 5 },
       },
     },
     advanced: {
@@ -60,23 +65,6 @@ export function authOptions(pool, send = sendEmail) {
         },
       },
     },
-    plugins: [
-      emailOTP({
-        otpLength: 6,
-        expiresIn: 600,
-        allowedAttempts: 3,
-        storeOTP: 'hashed',
-        async sendVerificationOTP({ email, otp, type }) {
-          // Silently decline unlisted addresses so this endpoint cannot send arbitrary email.
-          if (type !== 'sign-in' || !isAdmin(email)) return;
-          await send({
-            to: email,
-            subject: 'Your Dallas AI Club admin sign-in code',
-            text: `Your sign-in code is ${otp}.\n\nIt expires in 10 minutes. Do not share this code.\n\nIf you did not request it, ignore this message.`,
-          });
-        },
-      }),
-    ],
   };
 }
 export function getAuth() {
@@ -106,7 +94,7 @@ export async function requireAdmin(req, authInstance = getAuth()) {
   const session = await authInstance.api.getSession({
     headers: fromNodeHeaders(req.headers),
   });
-  if (!session?.user?.emailVerified || !isAdmin(session.user.email))
+  if (!session?.user || !isAdmin(session.user.email))
     throw new RequestError(
       401,
       'Sign in with an authorized club email address.',

@@ -17,30 +17,29 @@
       <section id="login">
         <p class="eyebrow">FOR CLUB OFFICERS</p>
         <h1>A small place to keep things moving.</h1>
-        <p>
-          Sign in with an authorized email address. We’ll send a six-digit code.
-        </p>
-        <form id="email-form">
+        <p>Sign in with your club officer email address and password.</p>
+        <form id="login-form">
           <label
             >Email address<input
               name="email"
               type="email"
-              autocomplete="email"
-              required /></label
-          ><button type="submit">Send sign-in code</button>
-        </form>
-        <form id="code-form" hidden>
+              autocomplete="username"
+              required
+          /></label>
           <label
-            >Sign-in code<input
-              name="code"
-              inputmode="numeric"
-              autocomplete="one-time-code"
-              pattern="[0-9]{6}"
-              maxlength="6"
-              required /></label
-          ><button type="submit">Sign in</button
-          ><button type="button" id="back">Use another email</button>
+            >Password<input
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              maxlength="128"
+              required
+          /></label>
+          <button type="submit">Sign in</button>
         </form>
+        <p class="hint">
+          Need access or a password reset? Contact the club website
+          administrator.
+        </p>
       </section>
       <section id="office" hidden>
         <div class="heading">
@@ -51,11 +50,33 @@
           <button id="refresh">Refresh</button>
         </div>
         <p id="identity"></p>
+        <details id="password-settings">
+          <summary>Change password</summary>
+          <form id="password-form">
+            <label
+              >Current password<input
+                name="currentPassword"
+                type="password"
+                autocomplete="current-password"
+                required
+            /></label>
+            <label
+              >New password<input
+                name="newPassword"
+                type="password"
+                autocomplete="new-password"
+                minlength="12"
+                maxlength="128"
+                required
+            /></label>
+            <button type="submit">Update password</button>
+            <p class="hint">
+              Use at least 12 characters. Your other sessions will be signed
+              out.
+            </p>
+          </form>
+        </details>
         <div id="counts" class="counts"></div>
-        <div id="queue" class="notice" hidden>
-          <p id="queue-text"></p>
-          <button id="retry">Retry pending deliveries</button>
-        </div>
         <p id="configuration" class="notice" hidden></p>
         <form id="filters" class="filters">
           <label
@@ -82,18 +103,11 @@
           ><button type="submit">Apply</button>
         </form>
         <div class="toolbar">
-          <a id="export" href="/api/admin?export=csv">Export filtered CSV</a
-          ><a
-            href="https://resend.com/broadcasts"
-            target="_blank"
-            rel="noreferrer"
-            >Write a newsletter ↗</a
-          >
+          <a id="export" href="/api/admin?export=csv">Export filtered CSV</a>
         </div>
         <p class="hint">
-          CSV exports include up to 10,000 matching records. Send newsletters to
-          the configured AI Review segment in Resend; it contains confirmed
-          subscribers only.
+          New submissions appear here. This inbox refreshes every minute while
+          open. CSV exports include up to 10,000 matching records.
         </p>
         <div id="entries"></div>
         <nav class="pagination" aria-label="Submission pages">

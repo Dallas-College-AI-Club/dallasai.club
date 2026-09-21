@@ -69,7 +69,7 @@ export function renderSpace(root, id, { open }) {
       spaceHeader('Subscribe') +
       /* HTML */ `<div class="subscribe-layout">
         <section>
-          <h2>The AI Review, by email.</h2>
+          <h2>Stay in the loop with The AI Review.</h2><p>Leave your email for future newsletter updates. For now, read new articles on the website or follow our RSS feed.</p>
           <form id="subscribe-form" class="club-form">
             <label for="subscriber-email">Email address</label
             ><input

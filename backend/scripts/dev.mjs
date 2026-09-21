@@ -4,17 +4,13 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import forms from '../api/forms.mjs';
 import admin from '../api/admin.mjs';
-import manage from '../api/manage.mjs';
-import webhook from '../api/email-webhook.mjs';
-import notifications from '../api/notifications.mjs';
+import maintenance from '../api/maintenance.mjs';
 import auth from '../api/auth/[...all].mjs';
 const root = fileURLToPath(new URL('../public', import.meta.url));
 const handlers = {
   '/api/forms': forms,
   '/api/admin': admin,
-  '/api/manage': manage,
-  '/api/email-webhook': webhook,
-  '/api/notifications': notifications,
+  '/api/maintenance': maintenance,
 };
 const server = http.createServer(async (req, res) => {
   try {

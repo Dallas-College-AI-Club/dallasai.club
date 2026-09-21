@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url';
 import forms from '../api/forms.mjs';
 import admin from '../api/admin.mjs';
 import maintenance from '../api/maintenance.mjs';
-import auth from '../api/auth/[...all].mjs';
+import auth from '../api/auth.mjs';
 const root = fileURLToPath(new URL('../public', import.meta.url));
 const handlers = {
   '/api/forms': forms,

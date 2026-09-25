@@ -32,5 +32,6 @@
     }
   ],
   "WORKSHOP_REQUEST_URL": "",
+  "FORMS_API_URL": "https://dallasai-leaderboard.vercel.app/api/forms",
   "LEADERBOARD_API_URL": "https://dallasai-leaderboard.vercel.app/api/leaderboard"
 }

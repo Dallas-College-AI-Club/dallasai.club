@@ -17,6 +17,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci --include=dev --ignore-scripts
+      - run: npm test
+      - run: npm run build
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -44,7 +62,7 @@ jobs:
 
   deploy:
     if: github.event_name != 'pull_request' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/hugo')
-    needs: build
+    needs: [build, backend]
     runs-on: ubuntu-latest
     permissions:
       pages: write

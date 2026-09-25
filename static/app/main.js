@@ -41,7 +41,7 @@ for (const game of GAMES) names[game.id] = game.title;
 const games = new Set(GAMES.map((g) => g.id)),
   retroGames = new Set(GAMES.filter((g) => g.load).map((g) => g.id));
 const normalize = (id) =>
-  ({ campuses: 'explore', join: 'about', home: 'summary', browse: 'summary', latest: 'summary' })[
+  ({ campuses: 'explore', home: 'summary', browse: 'summary', latest: 'summary' })[
     id
   ] || id;
 function urlFor(next, article = null, route = {}) {
@@ -186,11 +186,6 @@ function motion() {
   journey?.setMotion(reduced);
   document.dispatchEvent(new CustomEvent('club:motion', { detail: { reduced } }));
 }
-const joinLink = document.querySelector('.join-link');
-joinLink.href = JOIN_URL;
-joinLink.removeAttribute('data-mode');
-joinLink.target = '_blank';
-joinLink.rel = 'noreferrer';
 document.querySelector('.drive-maker-link').href = JOIN_URL;
 document.querySelectorAll('[data-mode]').forEach(
   (a) =>

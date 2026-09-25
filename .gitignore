@@ -18,3 +18,5 @@ data/*.tmp
 !.dev.vars.example
 secrets.env
 secrets.env.*
+admin-access*.json
+admin-acces.json

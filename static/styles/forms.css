@@ -1,0 +1,148 @@
+.club-form-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(220px, 1fr);
+  gap: clamp(24px, 5vw, 80px);
+  max-width: 1050px;
+  margin: 32px auto;
+}
+.club-form-layout aside {
+  border-left: 1px solid #d6d6cc;
+  padding-left: 28px;
+}
+.club-form {
+  display: grid;
+  gap: 18px;
+  max-width: 650px;
+}
+.club-form > label {
+  display: block;
+  font-weight: 600;
+}
+.club-form > label > input,
+.club-form > label > select,
+.club-form > label > textarea {
+  display: block;
+  margin-top: 7px;
+}
+.club-form input:not([type='checkbox']),
+.club-form select,
+.club-form textarea {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #77796e;
+  border-radius: 4px;
+  background: #fff;
+  color: #181b14;
+  font: inherit;
+}
+.club-form textarea {
+  resize: vertical;
+}
+.club-form input:focus-visible,
+.club-form select:focus-visible,
+.club-form textarea:focus-visible {
+  outline: 3px solid #8caa79;
+  outline-offset: 2px;
+}
+.club-form .form-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  font-weight: 400;
+}
+.form-consent input {
+  flex: none;
+  margin-top: 5px;
+  width: 18px;
+  height: 18px;
+}
+.form-note {
+  font-size: 14px;
+  color: #53584b;
+  line-height: 1.6;
+  margin: 0;
+}
+.form-honeypot {
+  position: absolute;
+  left: -10000px;
+  top: auto;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+}
+.form-status {
+  margin: 0;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+.form-success {
+  padding: 14px;
+  background: #e8f2e1;
+  border-left: 3px solid #466636;
+}
+.form-error {
+  color: #943426;
+}
+.club-form button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.club-form button {
+  justify-self: start;
+}
+.club-form span {
+  font-weight: 400;
+}
+.workshop-dialog .club-form {
+  margin-top: 18px;
+}
+.workshop-dialog {
+  max-height: 90dvh;
+  overflow: auto;
+}
+.rsvp-form {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid #d6d6cc;
+}
+.standalone-form-page {
+  font-family: system-ui, sans-serif;
+  color: #182014;
+  background: #fafaf6;
+  margin: 0;
+  padding: 40px 24px;
+  line-height: 1.65;
+}
+.standalone-form-page main {
+  max-width: 660px;
+  margin: 7vh auto;
+}
+.standalone-form-page a {
+  color: #35572d;
+}
+.standalone-form-page button {
+  padding: 12px 20px;
+  border: 0;
+  border-radius: 4px;
+  color: white;
+  background: #35572d;
+  font: inherit;
+  cursor: pointer;
+}
+.standalone-form-page button:disabled {
+  opacity: 0.6;
+}
+@media (max-width: 700px) {
+  .club-form-layout {
+    grid-template-columns: 1fr;
+  }
+  .club-form-layout aside {
+    border-left: 0;
+    border-top: 1px solid #d6d6cc;
+    padding: 24px 0 0;
+  }
+  .club-form {
+    max-width: 100%;
+  }
+}

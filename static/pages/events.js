@@ -1,4 +1,5 @@
 import { readEventPlans, saveEventPlan } from '../storage/event-plans.js';
+import { formFooter, identityFields, mountForm } from '../app/form-client.js';
 import {
   EVENTS,
   JOIN_URL,
@@ -58,16 +59,16 @@ export function eventsMarkup() {
       <button class="dialog-close" aria-label="Close workshop information">×</button
       ><span class="tag">SHAPE WHAT WE LEARN</span>
       <h2 id="workshop-heading">What would you like to try?</h2>
-      <p>
-        A form for workshop requests is coming soon. For now, share a topic or an idea with the club
-        in Teams.
-      </p>
-      <a class="solid-link" href="${JOIN_URL}" target="_blank" rel="noreferrer"
-        >Suggest a topic in Teams ↗</a
-      >
+      <form id="workshop-form" class="club-form">${identityFields()}
+        <label>Workshop topic<input name="topic" maxlength="160" required></label>
+        <label>Tell us more <span>(optional)</span><textarea name="details" maxlength="3000" rows="4"></textarea></label>
+        ${formFooter('Send workshop request')}
+      </form>
     </dialog>`;
 }
 export function mountEvents(root) {
+  const stopWorkshop = mountForm(root.querySelector('#workshop-form'), {kind:'workshop'});
+  let stopRSVP = () => {};
   const q = (s) => root.querySelector(s),
     requested = new URLSearchParams(location.search).get('event');
   const fallback = splitEvents().upcoming[0] || splitEvents().past[0] || EVENTS[0];
@@ -94,6 +95,7 @@ export function mountEvents(root) {
     detail();
   };
   function detail() {
+    stopRSVP();
     const panel = q('#event-detail');
     panel.scrollTop = 0;
     q('#calendar-read').hidden = !selected;
@@ -143,6 +145,10 @@ export function mountEvents(root) {
         >
       </div>
       ${past ? '' : /* HTML */ `<p id="event-plan-status" class="event-plan-status" role="status">${going ? 'Saved on this device. Select again to remove.' : 'Save to your plans on this device.'}</p>`}`;
+    if (!past) {
+      panel.insertAdjacentHTML('beforeend', `<form id="event-rsvp" class="club-form rsvp-form"><h3>RSVP for this event</h3>${identityFields()}${formFooter('Save my RSVP','I would like to register for this event and receive messages about my RSVP.')}</form>`);
+      stopRSVP = mountForm(q('#event-rsvp'), {kind:'rsvp',extra:{eventId:selected.id}});
+    }
     q('.event-calendar-back').onclick = () => {
       q('.event-calendar').scrollIntoView({ block: 'start' });
       q(`[data-event="${selected.id}"]`)?.focus({ preventScroll: true });
@@ -260,6 +266,8 @@ export function mountEvents(root) {
   };
   draw();
   return () => {
+    stopWorkshop();
+    stopRSVP();
     if (dialog.open) dialog.close();
   };
 }

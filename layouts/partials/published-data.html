@@ -57,11 +57,15 @@
   {{- $events = $events | append $event -}}
 {{- end -}}
 
+{{- $club := hugo.Data.club -}}
+{{- with site.Params.formsAPIURL -}}
+  {{- $club = merge $club (dict "FORMS_API_URL" .) -}}
+{{- end -}}
 {{- return (dict
   "articles" $articles
   "events" $events
   "publication" hugo.Data.publication
-  "club" hugo.Data.club
+  "club" $club
   "projects" hugo.Data.projects
   "lab" hugo.Data.lab
   "recordings" hugo.Data.recordings

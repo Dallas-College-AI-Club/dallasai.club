@@ -2,10 +2,10 @@
   "PROJECT_LINKS": [
     {
       "id": "major",
-      "title": "Success Coach",
+      "title": "Major · College Planning Assistant",
       "label": "Major",
       "icon": "computer",
-      "description": "Meet Major, the college planning chatbot. BAT degree and first-semester questions in nine languages.",
+      "description": "Explore degree requirements and first-semester questions before meeting with your Success Coach. Watch Major’s BAT degree demo in nine languages.",
       "anchor": "success-coach",
       "href": "club.html?mode=projects#success-coach"
     },

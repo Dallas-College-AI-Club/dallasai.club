@@ -18,7 +18,7 @@ export const STOPS = [
   {
     id: 'projects',
     title: 'Projects',
-    hint: 'Success Coach and two interface concepts.',
+    hint: 'Major, the college planning assistant, and two interface concepts.',
     action: 'See the projects',
     color: '#d8bfa0',
   },

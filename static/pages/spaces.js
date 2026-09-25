@@ -32,11 +32,12 @@ export function renderSpace(root, id, { open }) {
           ${replayMarkup()}
           <div class="project-feature-copy">
             <span class="tag">01 / WORKING DEMO</span>
-            <h2>Success Coach</h2>
+            <h2>Major</h2>
             <p>
-              Meet Major, the club’s college planning assistant. Ask about your degree and plan your
-              next semester.
+              Meet Major, the club’s college planning assistant. Explore degree requirements and
+              organize questions before meeting with your Success Coach.
             </p>
+            <p>Major helps you prepare. Your Success Coach helps finalize your plan.</p>
             <a class="solid-link" href="${PROJECT_URL}" target="_blank" rel="noreferrer"
               >Try the live demo ↗</a
             >

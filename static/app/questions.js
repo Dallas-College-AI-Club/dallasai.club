@@ -18,7 +18,7 @@ export function questionDialog() {
       const form = dialog.querySelector('form');
       form.reset();
       form.querySelector('[name="subject"]').value = event
-        ? 'About: ' + event.title
+        ? ('About: ' + event.title).slice(0, 160)
         : '';
       form.querySelector('.form-status').textContent = '';
       const button = form.querySelector('[type="submit"]');

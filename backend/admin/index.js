@@ -5,7 +5,7 @@ const auth = createAuthClient({ plugins: [emailOTPClient()] }),
   q = (s) => document.querySelector(s);
 const labels = {
   join: 'Club signups',
-  subscribe: 'The AI Review',
+  subscribe: 'The AI Review subscription',
   rsvp: 'Event RSVPs (upcoming only)',
   contribution: 'AI Review submissions',
   workshop: 'Workshop requests',
@@ -111,7 +111,10 @@ function renderEntry(entry) {
   address.href = 'mailto:' + entry.email;
   card.append(
     address,
-    node('p', entry.state === 'active' ? 'Saved' : entry.state),
+    node(
+      'p',
+      entry.state === 'active' ? 'Received in club inbox' : entry.state,
+    ),
   );
   const details = node('details');
   details.append(node('summary', 'Submission details'));
@@ -133,7 +136,7 @@ function renderEntry(entry) {
   const actions = node('div', undefined, 'entry-actions');
   for (const [value, label] of [
     ['reviewed', 'Mark reviewed'],
-    ['closed', 'Close'],
+    ['closed', 'Mark closed'],
     ['new', 'Mark new'],
   ])
     if (value !== entry.review_status) {

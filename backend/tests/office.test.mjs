@@ -409,3 +409,121 @@ test('upcoming boundaries use Central dates and retain an event until its end', 
     ['today', 'ongoing'],
   );
 });
+
+function parseCSV(text) {
+  // All exported cells are quoted. Decode records independently of the exporter.
+  const records = [],
+    record = [];
+  for (const match of text
+    .replace(/^\uFEFF/, '')
+    .matchAll(/"((?:[^"]|"")*)"(,|\r\n|$)/g)) {
+    record.push(match[1].replaceAll('""', '"'));
+    if (match[2] !== ',') records.push(record.splice(0));
+  }
+  const [headers, ...rows] = records;
+  return rows.map((row) =>
+    Object.fromEntries(headers.map((header, index) => [header, row[index]])),
+  );
+}
+test('CSV gives all six submission types readable columns, preserves multiline text and Unicode, and neutralizes formulas', async () => {
+  const message = 'First line, "quoted"\nSecond line: 안녕하세요 — café';
+  await submit(
+    db,
+    entry('question', { subject: 'Question title', message, eventId: 'next' }),
+    events,
+  );
+  await submit(
+    db,
+    entry('contribution', { title: 'Article title', body: message }),
+    events,
+  );
+  await submit(
+    db,
+    entry('workshop', { topic: 'Workshop topic', details: message }),
+    events,
+  );
+  await submit(db, entry('join', { interests: 'Learning, building' }), events);
+  await submit(db, entry('subscribe'), events);
+  await submit(db, entry('rsvp', { eventId: 'next' }), events);
+  const response = await request('/api/admin?export=csv');
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type'), /text\/csv/);
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+  const text = await response.text();
+  const rows = parseCSV(text);
+  assert.equal(rows.length, 6);
+  const byType = Object.fromEntries(rows.map((row) => [row.Type, row]));
+  for (const [kind, title] of [
+    ['Questions', 'Question title'],
+    ['AI Review submissions', 'Article title'],
+    ['Workshop requests', 'Workshop topic'],
+  ]) {
+    assert.equal(byType[kind]['Subject / title'], title);
+    assert.equal(byType[kind]['Message / body'], message);
+    assert.ok(!Object.hasOwn(byType[kind], 'Details'));
+    assert.equal(byType[kind]['Submission state'], 'Received in club inbox');
+    assert.ok(byType[kind].Reference);
+  }
+  assert.equal(byType['Club signups'].Campus, 'Richland');
+  assert.equal(byType['Club signups'].Interests, 'Learning, building');
+  assert.equal(byType['Event RSVPs']['Event title'], 'Next event');
+  assert.equal(byType['Questions']['Event title'], 'Next event');
+  assert.equal(byType['The AI Review subscription']['Message / body'], '');
+  assert.match(byType.Questions['Received (Central)'], /C[DS]T/);
+  assert.equal(
+    (await request('/api/admin?export=csv', null, false)).status,
+    401,
+  );
+  await db.query(
+    "UPDATE club_forms.entries SET data=$1,name=$2 WHERE kind='question'",
+    [
+      {
+        subject: '=1+1',
+        message: '  @unsafe',
+        customNote: { reason: 'Keep older fields' },
+      },
+      '+NAME',
+    ],
+  );
+  const question = parseCSV(
+    await (await request('/api/admin?kind=question&export=csv')).text(),
+  )[0];
+  assert.equal(question['Subject / title'], "'=1+1");
+  assert.equal(question['Message / body'], "'  @unsafe");
+  assert.equal(question.Name, "'+NAME");
+  assert.equal(
+    question['Other details'],
+    'custom Note: reason: Keep older fields',
+  );
+});
+test('reviewing, closing and reopening keep the submission and only change its review status', async () => {
+  const row = await submit(
+    db,
+    entry('question', { subject: 'Follow-up', message: 'Please reply' }),
+    events,
+  );
+  for (const status of ['reviewed', 'closed', 'new']) {
+    assert.equal(
+      (await request('/api/admin', { action: 'review', id: row.id, status }))
+        .status,
+      200,
+    );
+    const saved = (
+      await db.query('SELECT * FROM club_forms.entries WHERE id=$1', [row.id])
+    ).rows[0];
+    assert.equal(saved.review_status, status);
+    assert.deepEqual(saved.data, row.data);
+    assert.equal(saved.state, row.state);
+  }
+  assert.equal(
+    (await db.query('SELECT * FROM club_forms.outbox')).rows.length,
+    0,
+  );
+  const actions = (
+    await db.query(
+      "SELECT action FROM club_forms.audit WHERE entry_id=$1 AND action LIKE 'review:%' ORDER BY created_at",
+      [row.id],
+    )
+  ).rows.map((r) => r.action);
+  assert.deepEqual(actions, ['review:reviewed', 'review:closed', 'review:new']);
+});

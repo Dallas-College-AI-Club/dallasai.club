@@ -37,12 +37,18 @@ export async function request(endpoint, body, signal) {
       'We could not confirm receipt. Your information is still here; please try again.',
     );
   }
-  const result = await response
-    .json()
-    .catch(() => ({
-      error: 'This service is not available yet. Please try again later.',
-    }));
-  if (!response.ok) throw new Error(result.error || 'Please try again later.');
+  const result = await response.json().catch(() => ({
+    error: 'This service is not available yet. Please try again later.',
+  }));
+  if (
+    !response.ok ||
+    typeof result?.message !== 'string' ||
+    !result.message.trim()
+  )
+    throw new Error(
+      result?.error ||
+        'We could not confirm receipt. Your information is still here; please try again.',
+    );
   return result;
 }
 async function encodeFiles(files) {
@@ -70,8 +76,44 @@ async function encodeFiles(files) {
     ),
   );
 }
-export function mountForm(form, { kind, extra = {}, onSuccess = () => {} }) {
+const confirmationTitles = {
+  join: 'Welcome to the club!',
+  subscribe: 'Subscription request received',
+  rsvp: 'You’re on the RSVP list',
+  contribution: 'Contribution received',
+  workshop: 'Workshop request received',
+  question: 'Question received',
+};
+export function mountForm(
+  form,
+  { kind, extra = {}, onSuccess = () => {}, doneURL = 'club.html', onDone },
+) {
   const controller = new AbortController();
+  const dialog = form.closest('dialog');
+  let attempt,
+    originalContent,
+    confirmation,
+    completed = false;
+  const hiddenIntro = [];
+  const originalLabel = dialog?.getAttribute('aria-labelledby');
+  const restore = () => {
+    confirmation?.remove();
+    if (originalContent) {
+      form.replaceChildren(originalContent);
+      originalContent = null;
+      form.reset();
+    }
+    for (const [element, hidden] of hiddenIntro.splice(0))
+      element.hidden = hidden;
+    if (dialog && originalLabel)
+      dialog.setAttribute('aria-labelledby', originalLabel);
+    form.classList.remove('form-complete');
+    completed = false;
+    button.disabled = false;
+    button.textContent = label;
+    status.textContent = '';
+    status.classList.remove('form-error');
+  };
   let requestId = crypto.randomUUID(),
     busy = false,
     lastPayload = '';
@@ -80,12 +122,13 @@ export function mountForm(form, { kind, extra = {}, onSuccess = () => {} }) {
     label = button.textContent;
   const handler = async (event) => {
     event.preventDefault();
-    if (busy || !form.reportValidity()) return;
+    if (busy || completed || !form.reportValidity()) return;
     busy = true;
     button.disabled = true;
     button.textContent = 'Sending…';
     status.textContent = '';
     status.classList.remove('form-error');
+    const currentAttempt = (attempt = new AbortController());
     try {
       const data = new FormData(form),
         body = {
@@ -104,22 +147,55 @@ export function mountForm(form, { kind, extra = {}, onSuccess = () => {} }) {
         requestId = crypto.randomUUID();
       lastPayload = serialized;
       body.requestId = requestId;
-      const result = await request('forms', body, controller.signal);
-      if (controller.signal.aborted) return;
-      status.textContent = result.message;
-      status.classList.add('form-success');
+      if (controller.signal.aborted || currentAttempt.signal.aborted) return;
+      const result = await request('forms', body, currentAttempt.signal);
+      if (controller.signal.aborted || currentAttempt.signal.aborted) return;
+      completed = true;
+      originalContent = document.createDocumentFragment();
+      originalContent.append(...form.childNodes);
+      for (const element of form.parentElement.children) {
+        if (
+          element.matches('[data-form-intro]') ||
+          (dialog && element !== form && !element.matches('.dialog-toolbar'))
+        ) {
+          hiddenIntro.push([element, element.hidden]);
+          element.hidden = true;
+        }
+      }
+      confirmation = document.createElement('section');
+      confirmation.className = 'form-confirmation';
+      const heading = document.createElement('h2');
+      heading.id = 'confirmation-' + crypto.randomUUID();
+      heading.tabIndex = -1;
+      heading.textContent = confirmationTitles[kind];
+      const message = document.createElement('p');
+      message.className = 'form-success';
+      message.textContent = result.message;
+      const done = document.createElement('button');
+      done.type = 'button';
+      done.className = 'solid-link';
+      done.textContent = dialog ? 'Close' : 'Done';
+      done.onclick = () => {
+        if (dialog) dialog.close();
+        else if (onDone) onDone();
+        else
+          document.dispatchEvent(
+            new CustomEvent('club:navigate', { detail: { href: doneURL } }),
+          );
+      };
+      confirmation.append(heading, message, done);
+      form.append(confirmation);
+      form.classList.add('form-complete');
+      if (dialog) {
+        dialog.setAttribute('aria-labelledby', heading.id);
+        dialog.scrollTop = 0;
+      }
+      heading.focus({ preventScroll: true });
+      if (!dialog)
+        confirmation.scrollIntoView({ block: 'center', behavior: 'instant' });
+      requestId = crypto.randomUUID();
+      lastPayload = '';
       onSuccess(result);
-      button.textContent = 'Received';
-      // Keep the submitted details visible; edits enable another submission.
-      form.addEventListener(
-        'input',
-        () => {
-          button.disabled = false;
-          button.textContent = label;
-          status.classList.remove('form-success');
-        },
-        { once: true, signal: controller.signal },
-      );
     } catch (error) {
       if (error.name !== 'AbortError') {
         status.textContent = error.message;
@@ -131,9 +207,19 @@ export function mountForm(form, { kind, extra = {}, onSuccess = () => {} }) {
       busy = false;
     }
   };
+  dialog?.addEventListener(
+    'close',
+    () => {
+      attempt?.abort();
+      restore();
+    },
+    { signal: controller.signal },
+  );
   form.addEventListener('submit', handler);
   return () => {
     controller.abort();
+    attempt?.abort();
     form.removeEventListener('submit', handler);
+    restore();
   };
 }

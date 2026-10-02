@@ -730,6 +730,13 @@ input::file-selector-button {
   background: #080b1470;
   backdrop-filter: blur(6px);
 }
+#site-preview-dialog .heading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 12px 0;
+  background: var(--page);
+}
 #site-preview-dialog h2 {
   font-size: 22px;
 }

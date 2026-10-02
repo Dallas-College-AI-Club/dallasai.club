@@ -7,15 +7,8 @@ import { RequestError } from '../lib/errors.mjs';
 import { kinds, uuid } from '../lib/validation.mjs';
 import { liveEvents } from '../lib/events.mjs';
 import { upcomingEvents, inboxFilter } from '../lib/inbox.mjs';
-export function csvCell(value) {
-  const text = String(value ?? '');
-  return (
-    '"' +
-    (/^[\s]*[=+\-@\t\r]/.test(text) ? "'" : '') +
-    text.replaceAll('"', '""') +
-    '"'
-  );
-}
+import { submissionsCSV } from '../lib/submission-export.mjs';
+export { csvCell } from '../lib/submission-export.mjs';
 export function adminHandler({
   authorize = requireAdmin,
   getDatabase = database,
@@ -72,7 +65,7 @@ export function adminHandler({
         if (url.searchParams.get('export') === 'csv') {
           const rows = (
             await db.query(
-              `SELECT kind,email,name,state,review_status,created_at,data FROM club_forms.entries e ${where} ORDER BY created_at DESC LIMIT 10000`,
+              `SELECT id,kind,email,name,state,review_status,created_at,data FROM club_forms.entries e ${where} ORDER BY created_at DESC LIMIT 10000`,
               filters,
             )
           ).rows;
@@ -86,24 +79,7 @@ export function adminHandler({
             'Content-Disposition',
             'attachment; filename="club-submissions.csv"',
           );
-          res.end(
-            [
-              'Type,Email,Name,State,Review status,Received,Details',
-              ...rows.map((row) =>
-                [
-                  row.kind,
-                  row.email,
-                  row.name,
-                  row.state,
-                  row.review_status,
-                  new Date(row.created_at).toISOString(),
-                  JSON.stringify(row.data),
-                ]
-                  .map(csvCell)
-                  .join(','),
-              ),
-            ].join('\r\n'),
-          );
+          res.end(submissionsCSV(rows));
           return;
         }
         const result = await db.query(

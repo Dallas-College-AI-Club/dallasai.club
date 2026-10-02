@@ -146,3 +146,43 @@
     max-width: 100%;
   }
 }
+
+.form-confirmation {
+  display: grid;
+  gap: 18px;
+  padding: 20px 0;
+}
+.form-confirmation h2,
+.form-confirmation p {
+  margin: 0;
+}
+.form-confirmation button {
+  justify-self: start;
+  min-height: 44px;
+}
+.form-confirmation h2:focus-visible {
+  outline: 3px solid #8caa79;
+  outline-offset: 5px;
+}
+.workshop-dialog .form-complete {
+  margin-top: 0;
+}
+.workshop-dialog .form-confirmation {
+  padding: 8px 0;
+  gap: 14px;
+}
+.workshop-dialog .form-confirmation h2 {
+  font-size: 26px;
+}
+.workshop-dialog .form-confirmation p {
+  padding: 12px;
+  line-height: 1.5;
+}
+.workshop-dialog .form-confirmation > button {
+  position: sticky;
+  bottom: 0;
+}
+[data-form-intro][hidden],
+.workshop-dialog [hidden] {
+  display: none !important;
+}

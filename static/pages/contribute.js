@@ -3,7 +3,7 @@ import { formFooter, identityFields, mountForm } from '../app/form-client.js';
 export function renderContribution(root) {
   root.innerHTML =
     spaceHeader('Contribute to The AI Review') +
-    `<section class="contribution"><h2>What are you thinking about?</h2><p class="lead">Send a question, reflection, or project idea to the club editor. You can save a draft on this device before submitting.</p>
+    `<section class="contribution"><h2>What are you thinking about?</h2><p class="lead">Submit an article, reflection, or project story to The AI Review. Your submission goes to the club inbox for an editor to review. You can save a draft on this device before submitting.</p>
     <form id="draft-form" class="club-form">${identityFields()}
       <label>Title<input name="title" id="draft-title" required maxlength="140" placeholder="The question I keep coming back to…"></label>
       <label>Your draft or a note to the editor<textarea name="body" id="draft-body" rows="10" maxlength="40000"></textarea></label>

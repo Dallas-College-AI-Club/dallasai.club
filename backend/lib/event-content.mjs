@@ -1,4 +1,5 @@
 import { RequestError } from './errors.mjs';
+import { uuid } from './validation.mjs';
 export const eventIdPattern = /^[a-z0-9][a-z0-9-]{0,99}$/;
 function text(value, label, max, required = false) {
   if (value === undefined || value === null) value = '';
@@ -75,7 +76,25 @@ export function draftContent(input, publish = false) {
     preparation: lines(input.preparation, 'what to bring'),
     meetingUrl: text(input.meetingUrl, 'the meeting link', 2000),
     registrationOpen: input.registrationOpen !== false,
+    images: [],
   };
+  if (
+    input.images !== undefined &&
+    (!Array.isArray(input.images) || input.images.length > 3)
+  )
+    throw new RequestError(400, 'Use up to three event images.');
+  draft.images = (input.images || []).map((image) => {
+    if (!image || !uuid.test(image.id || ''))
+      throw new RequestError(400, 'Upload a valid event image.');
+    return {
+      id: image.id,
+      alt: text(image.alt, 'the image description', 300, publish),
+    };
+  });
+  if (
+    new Set(draft.images.map((image) => image.id)).size !== draft.images.length
+  )
+    throw new RequestError(400, 'Each image can appear only once.');
   if (draft.meetingUrl) {
     let url;
     try {
@@ -126,6 +145,7 @@ export function publicContent(id, input, preview = false) {
     preparation: draft.preparation,
     meetingUrl: draft.meetingUrl,
     registrationOpen: draft.registrationOpen,
+    images: draft.images,
     url: 'club.html?mode=events&event=' + encodeURIComponent(id),
   };
 }

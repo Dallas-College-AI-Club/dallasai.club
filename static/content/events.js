@@ -43,6 +43,12 @@ function cleanEvent(event) {
       : [],
     meetingUrl,
     registrationOpen: event.registrationOpen !== false,
+    images: Array.isArray(event.images)
+      ? event.images
+          .filter((image) => /^[0-9a-f-]{36}$/i.test(image?.id || ''))
+          .slice(0, 3)
+          .map((image) => ({ id: image.id, alt: String(image.alt || '') }))
+      : [],
     url: 'club.html?mode=events&event=' + encodeURIComponent(event.id),
   };
 }

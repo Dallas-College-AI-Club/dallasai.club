@@ -1,19 +1,49 @@
 import { createAuthClient } from 'better-auth/client';
 import { emailOTPClient } from 'better-auth/client/plugins';
 import { mountEventEditor } from './event-editor.js';
+import { mountPreferences } from './preferences.js';
+mountPreferences();
 const auth = createAuthClient({ plugins: [emailOTPClient()] }),
   q = (s) => document.querySelector(s);
 const labels = {
   join: 'Club signups',
-  subscribe: 'Newsletter',
-  rsvp: 'Event RSVPs',
-  contribution: 'Contributions',
+  subscribe: 'The AI Review',
+  rsvp: 'Event RSVPs (upcoming only)',
+  contribution: 'AI Review submissions',
   workshop: 'Workshop requests',
+  question: 'Questions',
 };
 let offset = 0,
   signedIn = false,
   loading = false,
   sessionGeneration = 0;
+let lastNewCount = null,
+  lastReceived = 0,
+  browserAlerts = false;
+q('#enable-alerts').onclick = async () => {
+  if (!('Notification' in window)) {
+    q('#notification-status').textContent =
+      'This browser does not support alerts. New counts and the inbox still refresh automatically.';
+    return;
+  }
+  try {
+    if (browserAlerts) {
+      browserAlerts = false;
+      q('#enable-alerts').textContent = 'Enable browser alerts';
+      return;
+    }
+    browserAlerts = (await Notification.requestPermission()) === 'granted';
+    q('#enable-alerts').textContent = browserAlerts
+      ? 'Turn off browser alerts'
+      : 'Enable browser alerts';
+    q('#notification-status').textContent = browserAlerts
+      ? 'Browser alerts are on while this office tab stays open. Email alerts are not connected.'
+      : 'Browser alerts were not enabled. New counts still appear here.';
+  } catch {
+    q('#notification-status').textContent =
+      'Browser alerts are unavailable here. New counts still appear in the inbox.';
+  }
+};
 function node(tag, text, className) {
   const element = document.createElement(tag);
   if (text !== undefined) element.textContent = text;
@@ -42,8 +72,13 @@ async function api(path = '/api/admin', body) {
   return data;
 }
 function showLogin() {
+  q('#session-loading').hidden = true;
   sessionGeneration++;
   signedIn = false;
+  lastNewCount = null;
+  lastReceived = 0;
+  q('#inbox-alert').textContent = '';
+  document.title = 'Club office · Dallas AI Club';
   q('#login').hidden = false;
   q('#office').hidden = true;
   q('#signout').hidden = true;
@@ -131,10 +166,47 @@ async function load() {
     const data = await api('/api/admin?' + filters());
     if (generation !== sessionGeneration) return;
     signedIn = true;
+    q('#session-loading').hidden = true;
     q('#login').hidden = true;
     q('#office').hidden = false;
     q('#signout').hidden = false;
     q('#identity').textContent = 'Signed in as ' + data.user;
+    const newCount = data.counts.reduce((sum, row) => sum + row.new, 0);
+    document.title =
+      (newCount ? '(' + newCount + ') ' : '') + 'Club office · Dallas AI Club';
+    const latest = Math.max(
+      0,
+      ...data.counts.map((row) => Date.parse(row.latest) || 0),
+    );
+    if (
+      lastNewCount !== null &&
+      (newCount > lastNewCount || latest > lastReceived)
+    ) {
+      q('#inbox-alert').textContent =
+        'New submissions arrived. Review the inbox below.';
+      if (browserAlerts && Notification.permission === 'granted') {
+        try {
+          new Notification('Dallas AI Club', {
+            body: 'New submissions are waiting in the club inbox.',
+            tag: 'club-inbox',
+          });
+        } catch {}
+      }
+    }
+    lastNewCount = newCount;
+    lastReceived = latest;
+    const eventSelect = q('#filters [name="eventId"]'),
+      selectedEvent = eventSelect.value;
+    eventSelect.replaceChildren(
+      new Option('All upcoming events', ''),
+      ...(data.events || []).map(
+        (e) => new Option(e.title + ' · ' + e.date.slice(0, 10), e.id),
+      ),
+    );
+    if (
+      [...eventSelect.options].some((option) => option.value === selectedEvent)
+    )
+      eventSelect.value = selectedEvent;
     if (location.hash === '#events' && q('#events-pane').hidden)
       showPane('events');
     q('#counts').replaceChildren(
@@ -177,6 +249,7 @@ async function load() {
       }
     }
   } catch (error) {
+    if (!signedIn) showLogin();
     status(error.message);
   } finally {
     loading = false;
@@ -321,6 +394,13 @@ q('#filters').onsubmit = (event) => {
   offset = 0;
   load();
 };
+q('#filters [name="kind"]').onchange = () => {
+  const rsvp = q('#filters [name="kind"]').value === 'rsvp';
+  q('#event-filter-label').hidden = !rsvp;
+  if (!rsvp) q('#filters [name="eventId"]').value = '';
+  offset = 0;
+  load();
+};
 q('#previous').onclick = () => {
   offset = Math.max(0, offset - 50);
   load();
@@ -330,13 +410,18 @@ q('#next').onclick = () => {
   load();
 };
 setInterval(() => {
-  if (signedIn && !document.hidden) load();
+  if (signedIn && (!document.hidden || browserAlerts)) load();
 }, 60000);
 auth
   .getSession()
   .then(({ data, error }) => {
     if (data?.user) load();
-    else if (error)
-      status('Admin sign-in is being connected. Please try again later.');
+    else {
+      showLogin();
+      if (error) status('Could not verify your sign-in. Please try again.');
+    }
   })
-  .catch(() => status('Could not connect. Please try again.'));
+  .catch(() => {
+    showLogin();
+    status('Could not connect. Please try again.');
+  });

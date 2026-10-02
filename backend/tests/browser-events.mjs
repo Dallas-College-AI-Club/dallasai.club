@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { PGlite } from '@electric-sql/pglite';
 import { eventHandler } from '../api/events.mjs';
 import { RequestError } from '../lib/errors.mjs';
+import sharp from 'sharp';
 const backend = fileURLToPath(new URL('../', import.meta.url));
 const site = path.resolve(backend, '../public');
 const screens = path.resolve(backend, '../.preview/event-checks');
@@ -16,6 +17,12 @@ const workshop = JSON.parse(
 await mkdir(screens, { recursive: true });
 const db = new PGlite();
 await db.exec('CREATE SCHEMA club_forms');
+for (const file of [
+  '003_club_forms.sql',
+  '005_screen_confirmations.sql',
+  '007_office_tools.sql',
+])
+  await db.exec(await readFile(new URL('../' + file, import.meta.url), 'utf8'));
 await db.exec(
   await readFile(new URL('../006_event_editor.sql', import.meta.url), 'utf8'),
 );
@@ -28,7 +35,21 @@ const events = eventHandler({
   getDatabase: () => db,
   authorize: authorized,
   originals: [],
+  storage: {
+    put: async (path, bytes) => {
+      imageFiles.set(path, bytes);
+      return { pathname: path };
+    },
+    del: async (path) => imageFiles.delete(path),
+    get: async (path) => ({
+      statusCode: 200,
+      stream: new Blob([imageFiles.get(path)]).stream(),
+    }),
+  },
+  rateLimit: async () => {},
 });
+const imageFiles = new Map();
+process.env.BLOB_READ_WRITE_TOKEN = 'test-only';
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/api/events') return events(req, res);
@@ -101,7 +122,19 @@ const server = http.createServer(async (req, res) => {
               ? 'text/html'
               : 'application/octet-stream',
     );
-    res.end(await readFile(file));
+    const data = await readFile(file);
+    res.end(
+      file.endsWith('admin' + path.sep + 'index.html')
+        ? data
+            .toString()
+            .replace(
+              'data-site-origin="https://dallasai.club"',
+              'data-site-origin="http://127.0.0.1:' +
+                server.address().port +
+                '"',
+            )
+        : data,
+    );
   } catch {
     res.statusCode = 404;
     res.end('Not found');
@@ -140,12 +173,49 @@ try {
     .waitFor();
   await page.getByLabel('Sign-in code', { exact: true }).fill('123456');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page.getByText('Appearance', { exact: true }).click();
+  await page.locator('#office-theme').selectOption('blue');
+  await page.locator('#office-font').selectOption('serif');
+  await page.locator('#office-layout').selectOption('wide');
   await page.getByRole('button', { name: 'New event', exact: true }).click();
   for (const [key, value] of Object.entries(workshop)) {
     const input = page.locator('#event-form [name="' + key + '"]');
-    if (typeof value === 'boolean') await input.setChecked(value);
+    if (key === 'category') await input.selectOption(value);
+    else if (typeof value === 'boolean') await input.setChecked(value);
     else await input.fill(Array.isArray(value) ? value.join('\n') : value);
   }
+  await page.getByText('Manage event types', { exact: true }).click();
+  await page.locator('#new-type-name').fill('Study group');
+  await page.getByRole('button', { name: 'Add type', exact: true }).click();
+  await page
+    .getByText('Type is available to all admins.', { exact: true })
+    .waitFor();
+  assert.equal(
+    await page.locator('[name="category"]').inputValue(),
+    'Study group',
+  );
+  await page.locator('[name="category"]').selectOption(workshop.category);
+  const image = await sharp({
+    create: { width: 400, height: 200, channels: 3, background: '#447799' },
+  })
+    .png()
+    .toBuffer();
+  await page
+    .locator('#event-image-upload')
+    .setInputFiles({
+      name: 'workshop.png',
+      mimeType: 'image/png',
+      buffer: image,
+    });
+  await page
+    .getByText(
+      'Uploaded. Add a description for each image, then save your draft.',
+      { exact: true },
+    )
+    .waitFor();
+  await page
+    .getByLabel('Image 1 description', { exact: true })
+    .fill('Workshop illustration');
   await page.getByRole('button', { name: 'Save draft', exact: true }).click();
   await page
     .getByText('Draft saved. The website has not changed.', { exact: true })
@@ -157,20 +227,43 @@ try {
   assert.equal(records[0].draft.learningOutcomes.length, 10);
   assert.equal(records[0].draft.agenda.length, 10);
   assert.equal(records[0].published, null);
+  assert.equal(records[0].draft.images.length, 1);
+  assert.ok(
+    (await page.locator('.event-list-group').first().textContent()).includes(
+      'Drafts',
+    ),
+  );
   assert.equal(
     (await (await fetch(origin + '/api/events')).json()).events.length,
     0,
   );
   await page.getByRole('button', { name: 'Preview', exact: true }).click();
   await page
-    .locator('#event-preview')
-    .getByRole('heading', { name: workshop.title })
+    .frameLocator('#site-preview-frame')
+    .locator('#event-detail h2')
+    .filter({ hasText: workshop.title })
     .waitFor();
-  await page.screenshot({
+  assert.equal(
+    await page
+      .frameLocator('#site-preview-frame')
+      .locator('#event-rsvp')
+      .count(),
+    0,
+  );
+  await page.getByRole('button', { name: 'Mobile', exact: true }).click();
+  await page
+    .frameLocator('#site-preview-frame')
+    .locator('#event-detail h2')
+    .filter({ hasText: workshop.title })
+    .waitFor();
+  await page.locator('#site-preview-dialog').screenshot({
     path: path.join(screens, 'workshop-preview.png'),
-    fullPage: true,
   });
+  await page
+    .getByRole('button', { name: 'Close preview', exact: true })
+    .click();
   await page.reload();
+  assert.equal(await page.locator('html').getAttribute('data-theme'), 'blue');
   await page
     .getByRole('button', {
       name: new RegExp(workshop.title.replace(/[+]/g, '\\+')),
@@ -203,9 +296,17 @@ try {
   const publicPage = await context.newPage();
   publicPage.on('pageerror', (e) => errors.push(e.message));
   await publicPage.route(
-    'https://dallasai-leaderboard.vercel.app/api/events',
+    'https://dallasai-leaderboard.vercel.app/api/events*',
     async (route) => {
-      const result = await fetch(origin + '/api/events');
+      const result = await fetch(
+        origin + '/api/events' + new URL(route.request().url()).search,
+      );
+      if (new URL(route.request().url()).searchParams.has('image'))
+        return route.fulfill({
+          status: result.status,
+          contentType: 'image/webp',
+          body: Buffer.from(await result.arrayBuffer()),
+        });
       return route.fulfill({
         contentType: 'application/json',
         headers: { 'Access-Control-Allow-Origin': '*' },
@@ -221,6 +322,9 @@ try {
   await publicPage
     .getByText(workshop.learningOutcomes[9], { exact: true })
     .waitFor();
+  await publicPage.waitForFunction(
+    () => document.querySelector('.event-gallery img')?.naturalWidth > 0,
+  );
   await publicPage.locator('#event-rsvp [name="name"]').fill('Keep my details');
   await page.locator('[name="title"]').fill('Private draft title');
   await page.getByRole('button', { name: 'Save draft', exact: true }).click();
@@ -259,7 +363,11 @@ try {
     .locator('#event-detail h2')
     .filter({ hasText: 'Safe workshop' })
     .waitFor();
-  assert.equal(await publicPage.locator('#event-detail img').count(), 0);
+  assert.equal(await publicPage.locator('#event-detail img').count(), 1);
+  assert.equal(
+    await publicPage.locator('#event-detail img[onerror]').count(),
+    0,
+  );
   assert.equal(
     await publicPage.locator('#event-rsvp [name="name"]').inputValue(),
     'Keep my details',

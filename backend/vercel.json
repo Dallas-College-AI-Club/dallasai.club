@@ -13,7 +13,8 @@
       "includeFiles": "generated/events.json"
     },
     "api/admin.mjs": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "generated/events.json"
     },
     "api/events.mjs": {
       "maxDuration": 30,
@@ -50,7 +51,7 @@
         },
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
+          "value": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self'; frame-src https://dallasai.club; frame-ancestors 'none'; base-uri 'none'; form-action 'self'"
         }
       ]
     }

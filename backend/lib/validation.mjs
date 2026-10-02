@@ -1,5 +1,12 @@
 import { RequestError } from './errors.mjs';
-export const kinds = ['subscribe', 'join', 'rsvp', 'contribution', 'workshop'];
+export const kinds = [
+  'subscribe',
+  'join',
+  'rsvp',
+  'contribution',
+  'workshop',
+  'question',
+];
 export const campuses = [
   'Brookhaven',
   'Cedar Valley',
@@ -94,6 +101,22 @@ export function validate(body, events = [], now = new Date()) {
       throw new RequestError(400, 'Write a draft or attach a file.');
   } else if (body.files?.length)
     throw new RequestError(400, 'This form does not accept attachments.');
+  if (body.kind === 'question') {
+    result.data = {
+      subject: text(body.subject, 'the subject', 160),
+      message: text(body.message, 'your question', 5000),
+    };
+    if (body.eventId) {
+      const event = events.find((e) => e.id === body.eventId);
+      if (!event)
+        throw new RequestError(
+          400,
+          'That event is no longer available. Send a general question instead.',
+        );
+      result.data.eventId = event.id;
+      result.data.eventTitle = event.title;
+    }
+  }
   result.dedupeKey = ['subscribe', 'join'].includes(body.kind)
     ? `${body.kind}:${result.email}`
     : body.kind === 'rsvp'

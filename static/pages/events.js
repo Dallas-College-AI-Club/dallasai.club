@@ -5,7 +5,13 @@ import {
   mountForm,
   escapeHTML,
 } from '../app/form-client.js';
-import { ADMIN_URL, eventsFresh, refreshEvents } from '../content/events.js';
+import {
+  ADMIN_URL,
+  EVENTS_API_URL,
+  eventsFresh,
+  refreshEvents,
+} from '../content/events.js';
+import { questionDialog } from '../app/questions.js';
 import {
   EVENTS,
   JOIN_URL,
@@ -98,6 +104,20 @@ export function eventsMarkup() {
     </dialog>`;
 }
 export function mountEvents(root) {
+  const privatePreview =
+    new URLSearchParams(location.search).get('preview') === '1' &&
+    window.parent !== window;
+  const preventPreviewActions = (event) => {
+    if (event.target.closest('button,a,form')) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+    }
+  };
+  if (privatePreview) {
+    document.addEventListener('click', preventPreviewActions, true);
+    document.addEventListener('submit', preventPreviewActions, true);
+  }
+  const questions = questionDialog();
   const stopWorkshop = mountForm(root.querySelector('#workshop-form'), {
     kind: 'workshop',
   });
@@ -115,6 +135,7 @@ export function mountEvents(root) {
       return p[0] === year && p[1] === month + 1;
     }).sort((a, b) => a.date.localeCompare(b.date));
   const syncUrl = () => {
+    if (privatePreview) return;
     const url = new URL(location.href);
     if (selected) url.searchParams.set('event', selected.id);
     else url.searchParams.delete('event');
@@ -147,20 +168,25 @@ export function mountEvents(root) {
         '<p>Select an event from the calendar to see the details.</p>';
       return;
     }
-    const past = eventIsPast(selected);
+    const past = selected.date ? eventIsPast(selected) : false;
     let going = readEventPlans().includes(selected.id);
     panel.innerHTML = /* HTML */ `<button class="event-calendar-back">
         ← Back to calendar
       </button>
       <div class="event-detail-meta">
         <span class="tag">${escapeHTML(selected.category)}</span
-        ><span>${past ? 'Past event' : 'Coming up'}</span>
+        ><span
+          >${privatePreview ? 'PRIVATE DRAFT PREVIEW' : past ? 'Past event' : 'Coming up'}</span
+        >
       </div>
       <div class="event-detail-date">
-        ${eventDate(selected)}
-        <span>${parts(selected)[0]} · ${eventTime(selected)}</span>
+        ${selected.date ? eventDate(selected) : 'Date to be decided'}
+        <span
+          >${selected.date ? parts(selected)[0] + ' · ' + eventTime(selected) : 'Time and location can be added later.'}</span
+        >
       </div>
       <h2>${escapeHTML(selected.title)}</h2>
+      ${selected.images?.length ? '<div class="event-gallery">' + selected.images.map((image) => '<figure><img loading="lazy" src="' + escapeHTML(privatePreview && /^data:image\/webp;base64,[A-Za-z0-9+/=]+$/.test(image.previewSrc || '') ? image.previewSrc : EVENTS_API_URL + '?image=' + encodeURIComponent(image.id)) + '" alt="' + escapeHTML(image.alt) + '"></figure>').join('') + '</div>' : ''}
       ${selected.targetAudience ? '<h3>Who is this for?</h3><p>' + escapeHTML(selected.targetAudience) + '</p>' : ''}
       ${selected.learningOutcomes?.length ? '<h3>Learning outcomes</h3><ul>' + selected.learningOutcomes.map((x) => '<li>' + escapeHTML(x) + '</li>').join('') + '</ul>' : ''}
       ${selected.summary ? /* HTML */ `<p class="event-description">${escapeHTML(selected.summary)}</p>` : ''}${
@@ -189,14 +215,13 @@ export function mountEvents(root) {
       }
       <div class="event-detail-actions">
         ${selected.meetingUrl ? '<a class="outline-link" target="_blank" rel="noopener" href="' + escapeHTML(selected.meetingUrl) + '">Open meeting link ↗</a>' : ''}
-        ${past ? '' : /* HTML */ `<button id="event-going" class="solid-link" aria-pressed="${going}">${going ? '✓ In my plans' : 'Save to my plans'}</button><button id="save-event" class="outline-link">Add to calendar ↓</button>`}<a
-          href="mailto:${CONTACT_EMAIL}"
-          >Ask about this event ↗</a
-        >
+        ${past || privatePreview ? '' : /* HTML */ `<button id="event-going" class="solid-link" aria-pressed="${going}">${going ? '✓ In my plans' : 'Save to my plans'}</button><button id="save-event" class="outline-link">Add to calendar ↓</button>`}${privatePreview ? '' : '<button id="ask-event-question" class="outline-link">Ask about this event</button>'}
       </div>
-      ${past ? '' : /* HTML */ `<p id="event-plan-status" class="event-plan-status" role="status">${going ? 'Saved on this device. Select again to remove.' : 'Save to your plans on this device.'}</p>`}`;
+      ${past || privatePreview ? '' : /* HTML */ `<p id="event-plan-status" class="event-plan-status" role="status">${going ? 'Saved on this device. Select again to remove.' : 'Save to your plans on this device.'}</p>`}`;
+    if (q('#ask-event-question'))
+      q('#ask-event-question').onclick = () => questions.open(selected);
     if (keepRSVP) panel.append(existingRSVP);
-    else if (!past && selected.registrationOpen !== false) {
+    else if (!privatePreview && !past && selected.registrationOpen !== false) {
       panel.insertAdjacentHTML(
         'beforeend',
         `<form id="event-rsvp" class="club-form rsvp-form"><h3>RSVP for this event</h3>${identityFields()}${formFooter('Save my RSVP', 'I would like to register for this event and receive messages about my RSVP.')}</form>`,
@@ -206,7 +231,7 @@ export function mountEvents(root) {
         extra: { eventId: selected.id },
       });
       q('#event-rsvp').dataset.eventId = selected.id;
-    } else if (!past) {
+    } else if (!privatePreview && !past) {
       panel.insertAdjacentHTML(
         'beforeend',
         '<p>RSVPs are closed for this event.</p>',
@@ -352,6 +377,11 @@ export function mountEvents(root) {
     }
   };
   const freshness = () => {
+    if (privatePreview) {
+      q('#event-freshness').textContent =
+        'Private preview · Nothing is published. Registration and question forms are disabled.';
+      return;
+    }
     q('#event-freshness').textContent = eventsFresh
       ? requested && !EVENTS.some((e) => e.id === requested)
         ? 'That event is no longer listed. Browse the calendar for current events.'
@@ -359,6 +389,7 @@ export function mountEvents(root) {
       : 'Checking the current calendar… If it stays unavailable, please try again shortly.';
   };
   const updated = () => {
+    if (privatePreview) return;
     fallback = splitEvents().upcoming[0] || splitEvents().past[0] || EVENTS[0];
     const previous = selected;
     selected =
@@ -381,11 +412,58 @@ export function mountEvents(root) {
   draw();
   freshness();
   refreshEvents();
+  const previewMessage = (event) => {
+    const allowed = new Set([
+      'https://dallasai-leaderboard.vercel.app',
+      'https://dallasai-forms-preview.vercel.app',
+    ]);
+    if (['localhost', '127.0.0.1'].includes(location.hostname))
+      allowed.add(location.origin);
+    if (
+      !privatePreview ||
+      event.source !== parent ||
+      !allowed.has(event.origin) ||
+      event.data?.type !== 'club:event-preview'
+    )
+      return;
+    const content = event.data.event;
+    if (
+      !content ||
+      typeof content.title !== 'string' ||
+      typeof content.date !== 'string' ||
+      (content.date && !Number.isFinite(Date.parse(content.date))) ||
+      !Array.isArray(content.agenda) ||
+      !Array.isArray(content.preparation)
+    )
+      return;
+    selected = content;
+    q('.event-calendar').hidden = true;
+    q('.events-layout').classList.add('private-event-preview');
+    q('#workshop-request').hidden = true;
+    detail();
+    q('.event-calendar-back').hidden = true;
+    q('#event-detail').scrollIntoView({ block: 'start' });
+  };
+  if (privatePreview) {
+    window.addEventListener('message', previewMessage);
+    const allowed = [
+      'https://dallasai-leaderboard.vercel.app',
+      'https://dallasai-forms-preview.vercel.app',
+    ];
+    if (['localhost', '127.0.0.1'].includes(location.hostname))
+      allowed.push(location.origin);
+    for (const origin of allowed)
+      parent.postMessage({ type: 'club:preview-ready' }, origin);
+  }
   return () => {
     document.removeEventListener('club:events-updated', updated);
     document.removeEventListener('club:events-status', freshness);
     stopWorkshop();
     stopRSVP();
+    questions.destroy();
+    window.removeEventListener('message', previewMessage);
+    document.removeEventListener('click', preventPreviewActions, true);
+    document.removeEventListener('submit', preventPreviewActions, true);
     if (dialog.open) dialog.close();
   };
 }

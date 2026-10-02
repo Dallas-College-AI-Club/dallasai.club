@@ -477,3 +477,21 @@
     font-size: 12px;
   }
 }
+.event-gallery {
+  display: grid;
+  gap: 16px;
+  margin: 20px 0;
+}
+.event-gallery figure {
+  margin: 0;
+}
+.event-gallery img {
+  display: block;
+  width: 100%;
+  max-height: 600px;
+  object-fit: contain;
+  border-radius: 12px;
+}
+.events-layout.private-event-preview {
+  grid-template-columns: minmax(0, 1fr);
+}

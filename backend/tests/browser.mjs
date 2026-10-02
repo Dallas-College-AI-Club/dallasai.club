@@ -157,6 +157,38 @@ try {
   await page.getByRole('button', { name: 'Submit for review' }).click();
   await page.locator('.form-success').waitFor();
   assert.equal(received.at(-1).files[0].name, 'draft.txt');
+  await page.goto(origin + '/club.html?mode=events&event=productivity');
+  await page
+    .getByRole('button', { name: 'Ask about this event', exact: true })
+    .click();
+  const question = page.locator('dialog[open] form');
+  await question.locator('[name="name"]').fill('Test Student');
+  await question.locator('[name="email"]').fill('student@example.com');
+  await question
+    .locator('[name="message"]')
+    .fill('Where can I find the materials?');
+  await question.locator('[name="consent"]').check();
+  await question
+    .getByRole('button', { name: 'Send question', exact: true })
+    .click();
+  await question.locator('.form-success').waitFor();
+  assert.equal(received.at(-1).kind, 'question');
+  assert.equal(received.at(-1).eventId, 'productivity');
+  await page.screenshot({
+    path: path.join(screens, 'question-confirmation.png'),
+    fullPage: true,
+  });
+  await page
+    .getByRole('button', { name: 'Close question form', exact: true })
+    .click();
+  await page.getByRole('button', { name: 'Ask the club', exact: true }).click();
+  assert.equal(
+    await page.locator('dialog[open] [name="subject"]').inputValue(),
+    '',
+  );
+  await page
+    .getByRole('button', { name: 'Close question form', exact: true })
+    .click();
   await page.goto(origin + '/club.html?mode=join');
   await page.setViewportSize({ width: 390, height: 844 });
   await page
@@ -241,6 +273,7 @@ try {
       uploads: true,
     },
     hasMore: false,
+    events: [{ id: 'future', title: 'Upcoming workshop', date: '2099-01-01' }],
   };
   await admin.route('**/api/admin*', async (route) => {
     if (route.request().method() === 'POST') {
@@ -264,12 +297,29 @@ try {
   await admin.getByRole('button', { name: 'Sign in', exact: true }).click();
   await admin.getByRole('heading', { name: 'Your club inbox' }).waitFor();
   assert.equal(await admin.locator('input[type="password"]').count(), 0);
+  assert.equal(await admin.locator('#filters [name="search"]').count(), 0);
+  await admin.locator('#filters [name="kind"]').selectOption('rsvp');
+  await admin.getByLabel('Event', { exact: true }).selectOption('future');
+  await admin.getByRole('button', { name: 'Apply', exact: true }).click();
+  await admin.waitForFunction(() =>
+    document.querySelector('#export').href.includes('eventId=future'),
+  );
   await admin.locator('#filters [name="kind"]').selectOption('join');
   await admin.getByRole('button', { name: 'Apply', exact: true }).click();
   await admin.getByText('Submission details', { exact: true }).click();
   assert.equal(await admin.locator('.entry img').count(), 0);
   await admin.getByRole('button', { name: 'Mark reviewed' }).click();
   await admin.locator('.badge').filter({ hasText: 'reviewed' }).waitFor();
+  await admin.getByText('Appearance', { exact: true }).click();
+  for (const theme of ['garden', 'blue', 'ink']) {
+    await admin.locator('#office-theme').selectOption(theme);
+    await admin.screenshot({
+      path: path.join(screens, 'office-' + theme + '.png'),
+      fullPage: true,
+    });
+  }
+  await admin.locator('#office-font').selectOption('mono');
+  await admin.locator('#office-layout').selectOption('compact');
   await admin.screenshot({
     path: path.join(screens, 'admin-desktop.png'),
     fullPage: true,
@@ -286,7 +336,7 @@ try {
   });
   assert.deepEqual(errors, []);
   console.log(
-    'Browser checks passed: five forms, private attachment payload, mobile layouts, recoverable errors, admin sign-in/review, and safe rendering.',
+    'Browser checks passed: six forms, question dialogs, attachments, RSVP event filtering/export, office themes, mobile layouts, recoverable errors, admin sign-in/review, and safe rendering.',
   );
 } finally {
   await browser.close();

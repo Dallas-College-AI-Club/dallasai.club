@@ -10,9 +10,19 @@ There are no email alerts, emailed confirmation links, or newsletter broadcasts 
 
 ## Admin access
 
-Approved officers sign in with individual email addresses and passwords using pinned Better Auth. Public account creation and email-code login are disabled. The server checks `ADMIN_EMAILS` on every admin request, uses secure HTTP-only cookies in production, and limits login attempts. Removing an address revokes its access even if its session is still valid. Password hashes and sessions have their own database role.
+Approved officers sign in with a code emailed by Neon Auth. No password is needed.
+The server checks both `ADMIN_EMAILS` and the current Neon admin role on every
+admin request, uses secure HTTP-only cookies, and limits code requests and
+verification attempts. Public account creation and password login are not
+exposed through the club backend. Removing an email or Neon admin role revokes
+access on the next request. See [Event editor](event-editor.md) for the current
+login and deployment instructions.
 
-Run `node backend/scripts/provision-admins.mjs` once after setting the approved list. It creates accounts with independent random passwords and saves the initial credentials to `%LOCALAPPDATA%\dallasai-club-website\admin-access.json`, outside Git and OneDrive. It refuses to overwrite existing accounts or credentials. Share each initial password only with its officer. The **Change password** control requires the current password and revokes the officer's other sessions. Passwords must contain 12–128 characters. Forgotten passwords require the website administrator; there is no email recovery service.
+The older self-hosted account tables and `provision-admins.mjs` script are retained
+only for rollback. Do not run that script to create current Neon administrators.
+Provision approved accounts with the admin role in the Neon Console instead.
+Login codes are authentication emails; signup alerts, form confirmations, and
+newsletter delivery remain disabled.
 
 ## Private settings
 

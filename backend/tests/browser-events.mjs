@@ -34,7 +34,16 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname === '/api/events') return events(req, res);
   if (url.pathname.startsWith('/api/auth/')) {
     res.setHeader('Content-Type', 'application/json');
-    if (url.pathname.endsWith('sign-in/email')) {
+    if (url.pathname.endsWith('email-otp/send-verification-otp'))
+      return res.end('{"success":true}');
+    if (url.pathname.endsWith('sign-in/email-otp')) {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const body = JSON.parse(Buffer.concat(chunks).toString());
+      if (body.otp !== '123456') {
+        res.statusCode = 400;
+        return res.end('{"message":"Invalid code","code":"INVALID_OTP"}');
+      }
       res.setHeader(
         'Set-Cookie',
         'test-officer=signed-in; HttpOnly; Path=/; SameSite=Lax',
@@ -117,9 +126,19 @@ try {
   await page
     .getByLabel('Email address', { exact: true })
     .fill('officer@example.com');
+  assert.equal(await page.locator('input[type="password"]').count(), 0);
   await page
-    .getByLabel('Password', { exact: true })
-    .fill('local-test-password');
+    .getByRole('button', { name: 'Send sign-in code', exact: true })
+    .click();
+  await page.getByLabel('Sign-in code', { exact: true }).fill('000000');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await page
+    .getByText(
+      'That code could not be verified. Check the latest email, or request a new code.',
+      { exact: true },
+    )
+    .waitFor();
+  await page.getByLabel('Sign-in code', { exact: true }).fill('123456');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.getByRole('button', { name: 'New event', exact: true }).click();
   for (const [key, value] of Object.entries(workshop)) {
@@ -335,14 +354,17 @@ try {
   );
   assert.equal(await publicPage.locator('#event-rsvp').count(), 0);
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
-  await page.getByRole('button', { name: 'Sign in', exact: true }).waitFor();
+  await page
+    .getByRole('button', { name: 'Send sign-in code', exact: true })
+    .waitFor();
   assert.equal(await page.locator('#event-list').textContent(), '');
   await page
     .getByLabel('Email address', { exact: true })
     .fill('officer@example.com');
   await page
-    .getByLabel('Password', { exact: true })
-    .fill('local-test-password');
+    .getByRole('button', { name: 'Send sign-in code', exact: true })
+    .click();
+  await page.getByLabel('Sign-in code', { exact: true }).fill('123456');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.locator('.event-choice').waitFor();
   assert.deepEqual(errors, []);

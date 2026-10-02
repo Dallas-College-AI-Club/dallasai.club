@@ -2,7 +2,10 @@
 
 Open the Events page and choose **Admin sign in**, or open
 https://dallasai-leaderboard.vercel.app/admin/#events.
-Use the email and password for your Neon Auth account. Access requires both a
+Enter your approved officer email and choose **Send sign-in code**. Enter the
+six-digit code from your inbox, then choose **Sign in**. No password is needed.
+Use the latest code; request another after a minute if necessary.
+Access requires both a
 current Neon admin role and membership in the server's approved email list.
 Removing either revokes access on the next request.
 
@@ -45,23 +48,26 @@ and leaderboard are in the existing Vercel project
    `dallasai_club`. Keep all database connections and cookie secrets outside Git.
 3. Set `AUTH_BASE_URL` to the exact admin origin and `ADMIN_EMAILS` to the
    approved officers. Provision those accounts with the **admin** role in Neon.
-   The old locally provisioned officer passwords do not automatically transfer
-   to Neon Auth. Do not change everyone's password to perform deployment tests.
+   Neon delivers sign-in codes through its configured email provider. The club
+   proxy permits sign-in codes only for approved emails, always uses the
+   sign-in purpose, and limits code requests and verification attempts.
+   It does not expose password login, signup, or password reset endpoints.
    Register `https://dallasai-leaderboard.vercel.app` and
    `https://dallasai-forms-preview.vercel.app` as trusted domains in the branch's
    Auth configuration before testing.
 4. Deploy a protected Vercel preview and verify sign-in with an approved account.
-   The same-origin proxy exposes only session lookup, email/password sign-in,
-   sign-out, and password changes. Every admin data request checks the upstream
+   The same-origin proxy exposes only session lookup, email sign-in codes,
+   code verification, and sign-out. Every admin data request checks the upstream
    session without cookie caching and checks the current allowlist and role.
 5. Deploy Vercel production, verify `/api/events` and `/admin/`, then publish
    the public site. `EVENTS_API_URL` and `ADMIN_URL` in `data/club.json` point
    to that production deployment. Hugo params `eventsAPIURL` and `adminURL`
    can override them for previews.
 
-When managed auth is disabled by removing `NEON_AUTH_URL`, the existing
-self-hosted officer authentication remains available for rollback. Do not
-delete its accounts or tables as part of this release.
+Old self-hosted accounts and the authentication implementation remain available
+for a deliberate rollback to the previous deployment; removing `NEON_AUTH_URL`
+alone does not give the new email-code interface a password screen. Do not delete
+old accounts or tables as part of this release.
 
 The event API overlays the original JSON/YAML event registry with database
 records. Unsaved original events remain public; a saved null public version is

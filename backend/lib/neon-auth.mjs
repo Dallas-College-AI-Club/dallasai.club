@@ -5,7 +5,9 @@ import {
   validateCookieConfig,
 } from '@neondatabase/auth/server';
 import { RequestError } from './errors.mjs';
-import { jsonBody } from './http.mjs';
+import { jsonBody, limit, send } from './http.mjs';
+import { database } from './db.mjs';
+import { emailList } from './admin-accounts.mjs';
 
 export function neonConfig() {
   const baseUrl = process.env.NEON_AUTH_URL;
@@ -47,15 +49,28 @@ export async function neonSession(req) {
   return result.data;
 }
 
-export async function proxyNeonAuth(req, res) {
+export async function proxyNeonAuth(
+  req,
+  res,
+  {
+    rateLimit = (request, path) =>
+      limit(
+        database(),
+        request,
+        'admin-' + path,
+        path.startsWith('sign-in') ? 10 : 5,
+        300,
+      ),
+  } = {},
+) {
   const config = neonConfig();
   const url = new URL(req.url, process.env.AUTH_BASE_URL);
   const path = url.pathname.replace(/^\/api\/auth\//, '');
   const allowed = {
     'get-session': 'GET',
-    'sign-in/email': 'POST',
+    'email-otp/send-verification-otp': 'POST',
+    'sign-in/email-otp': 'POST',
     'sign-out': 'POST',
-    'change-password': 'POST',
   };
   if (allowed[path] !== req.method)
     throw new RequestError(404, 'This sign-in action is not available.');
@@ -69,7 +84,28 @@ export async function proxyNeonAuth(req, res) {
   let body;
   if (req.method === 'POST') {
     headers.set('Content-Type', 'application/json');
-    body = JSON.stringify(await jsonBody(req, 10000));
+    const input = await jsonBody(req, 10000);
+    if (path !== 'sign-out') {
+      const email =
+        typeof input.email === 'string' ? input.email.trim().toLowerCase() : '';
+      if (!emailList(process.env.ADMIN_EMAILS).includes(email)) {
+        if (path.startsWith('email-otp/'))
+          return send(res, 200, { success: true });
+        throw new RequestError(
+          401,
+          'Use the latest code sent to your approved club email address.',
+        );
+      }
+      await rateLimit(req, path);
+      if (path.startsWith('email-otp/'))
+        body = JSON.stringify({ email, type: 'sign-in' });
+      else {
+        const otp = typeof input.otp === 'string' ? input.otp.trim() : '';
+        if (!/^\d{6}$/.test(otp))
+          throw new RequestError(400, 'Enter the six-digit sign-in code.');
+        body = JSON.stringify({ email, otp });
+      }
+    } else body = '{}';
   } else {
     url.searchParams.set('disableCookieCache', 'true');
   }

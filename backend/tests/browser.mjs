@@ -258,21 +258,12 @@ try {
     .getByLabel('Email address', { exact: true })
     .fill('officer@example.com');
   await admin
-    .getByLabel('Password', { exact: true })
-    .fill('Test-password-987!');
+    .getByRole('button', { name: 'Send sign-in code', exact: true })
+    .click();
+  await admin.getByLabel('Sign-in code', { exact: true }).fill('123456');
   await admin.getByRole('button', { name: 'Sign in', exact: true }).click();
   await admin.getByRole('heading', { name: 'Your club inbox' }).waitFor();
-  await admin.getByText('Change password', { exact: true }).click();
-  await admin
-    .getByLabel('Current password', { exact: true })
-    .fill('Test-password-987!');
-  await admin
-    .getByLabel('New password', { exact: true })
-    .fill('Updated-password-987!');
-  await admin
-    .getByRole('button', { name: 'Update password', exact: true })
-    .click();
-  await admin.getByText('Password updated.', { exact: true }).waitFor();
+  assert.equal(await admin.locator('input[type="password"]').count(), 0);
   await admin.locator('#filters [name="kind"]').selectOption('join');
   await admin.getByRole('button', { name: 'Apply', exact: true }).click();
   await admin.getByText('Submission details', { exact: true }).click();

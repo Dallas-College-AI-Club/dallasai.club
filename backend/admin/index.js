@@ -1,6 +1,7 @@
 import { createAuthClient } from 'better-auth/client';
+import { emailOTPClient } from 'better-auth/client/plugins';
 import { mountEventEditor } from './event-editor.js';
-const auth = createAuthClient(),
+const auth = createAuthClient({ plugins: [emailOTPClient()] }),
   q = (s) => document.querySelector(s);
 const labels = {
   join: 'Club signups',
@@ -47,8 +48,7 @@ function showLogin() {
   q('#office').hidden = true;
   q('#signout').hidden = true;
   q('#entries').replaceChildren();
-  q('#password-form').reset();
-  q('#password-settings').open = false;
+  emailStep();
   q('#events-pane').hidden = true;
   q('#inbox-pane').hidden = false;
   editor.clear();
@@ -183,54 +183,105 @@ async function load() {
     q('#refresh').disabled = false;
   }
 }
+let pendingEmail = '',
+  resendAt = 0,
+  resendTimer = null;
+function emailStep() {
+  pendingEmail = '';
+  resendAt = 0;
+  clearTimeout(resendTimer);
+  q('#login-form').hidden = false;
+  q('#code-form').hidden = true;
+  q('#code-form').reset();
+  q('#code-instructions').textContent = '';
+}
+function loginBusy(busy) {
+  q('#login')
+    .querySelectorAll('button')
+    .forEach((button) => {
+      button.disabled = busy;
+    });
+  if (Date.now() < resendAt) q('#resend-code').disabled = true;
+}
+async function sendCode(email) {
+  const result = await auth.emailOtp.sendVerificationOtp({
+    email,
+    type: 'sign-in',
+  });
+  if (result.error)
+    throw new Error(
+      result.error.status === 429
+        ? 'Please wait a few minutes before requesting another code.'
+        : 'The sign-in code could not be sent. Please try again shortly.',
+    );
+  pendingEmail = email;
+  q('#login-form').hidden = true;
+  q('#code-form').hidden = false;
+  q('#code-form').reset();
+  q('#code-instructions').textContent =
+    'If this is an approved admin address, a code will arrive at ' +
+    email +
+    '.';
+  resendAt = Date.now() + 60000;
+  q('#resend-code').textContent = 'Send a new code (wait 1 minute)';
+  clearTimeout(resendTimer);
+  resendTimer = setTimeout(() => {
+    q('#resend-code').disabled = false;
+    q('#resend-code').textContent = 'Send a new code';
+  }, 60000);
+  q('#code-form [name="otp"]').focus();
+}
 q('#login-form').onsubmit = async (event) => {
   event.preventDefault();
-  const button = event.submitter;
-  button.disabled = true;
+  const email = new FormData(event.target).get('email').trim().toLowerCase();
+  loginBusy(true);
   status();
-  const form = new FormData(event.target);
   try {
-    const result = await auth.signIn.email({
-      email: form.get('email').trim().toLowerCase(),
-      password: form.get('password'),
-      rememberMe: false,
-    });
-    if (result.error)
-      throw new Error(
-        'Could not sign in. Check your email and password, then try again.',
-      );
-    event.target.reset();
-    await load();
-  } catch (e) {
-    status(e.message);
+    await sendCode(email);
+  } catch (error) {
+    status(error.message);
   } finally {
-    button.disabled = false;
+    loginBusy(false);
   }
 };
-q('#password-form').onsubmit = async (event) => {
+q('#code-form').onsubmit = async (event) => {
   event.preventDefault();
-  const button = event.submitter;
-  button.disabled = true;
+  loginBusy(true);
   status();
-  const form = new FormData(event.target);
   try {
-    const result = await auth.changePassword({
-      currentPassword: form.get('currentPassword'),
-      newPassword: form.get('newPassword'),
-      revokeOtherSessions: true,
+    const result = await auth.signIn.emailOtp({
+      email: pendingEmail,
+      otp: new FormData(event.target).get('otp').trim(),
     });
     if (result.error)
       throw new Error(
-        'Could not update your password. Check your current password and use at least 12 characters for the new one.',
+        'That code could not be verified. Check the latest email, or request a new code.',
       );
-    event.target.reset();
-    q('#password-settings').open = false;
-    status('Password updated.');
-  } catch (e) {
-    status(e.message);
+    await load();
+    if (signedIn) emailStep();
+  } catch (error) {
+    status(error.message);
   } finally {
-    button.disabled = false;
+    loginBusy(false);
   }
+};
+q('#resend-code').onclick = async () => {
+  if (Date.now() < resendAt) return;
+  loginBusy(true);
+  status();
+  try {
+    await sendCode(pendingEmail);
+    status('A new sign-in code was requested. Use the latest email.');
+  } catch (error) {
+    status(error.message);
+  } finally {
+    loginBusy(false);
+  }
+};
+q('#change-email').onclick = () => {
+  emailStep();
+  status();
+  q('#login-form [name="email"]').focus();
 };
 q('#signout').onclick = async () => {
   if (!editor.canLeave()) return;

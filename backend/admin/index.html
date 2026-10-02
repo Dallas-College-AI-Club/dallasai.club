@@ -17,8 +17,7 @@
       <section id="login">
         <p class="eyebrow">FOR CLUB OFFICERS</p>
         <h1>A small place to keep things moving.</h1>
-        <p>Sign in with your club officer email address and password.</p>
-        <p class="hint">Use the password for your Neon Auth account.</p>
+        <p>Enter your club officer email. We will send you a sign-in code.</p>
         <form id="login-form">
           <label
             >Email address<input
@@ -27,19 +26,35 @@
               autocomplete="username"
               required
           /></label>
+          <button type="submit">Send sign-in code</button>
+        </form>
+        <form id="code-form" hidden>
+          <p id="code-instructions"></p>
           <label
-            >Password<input
-              name="password"
-              type="password"
-              autocomplete="current-password"
-              maxlength="128"
+            >Sign-in code<input
+              name="otp"
+              type="text"
+              inputmode="numeric"
+              autocomplete="one-time-code"
+              pattern="[0-9]{6}"
+              minlength="6"
+              maxlength="6"
               required
           /></label>
           <button type="submit">Sign in</button>
+          <button type="button" id="resend-code" class="secondary">
+            Send a new code
+          </button>
+          <button type="button" id="change-email" class="secondary">
+            Use another email
+          </button>
+          <p class="hint">
+            Check your inbox and junk folder. Use the latest code; older codes
+            may expire.
+          </p>
         </form>
         <p class="hint">
-          Need access or a password reset? Contact the club website
-          administrator.
+          Access is limited to approved club officers. No password is needed.
         </p>
       </section>
       <section id="office" hidden>
@@ -50,32 +65,6 @@
           </div>
         </div>
         <p id="identity"></p>
-        <details id="password-settings">
-          <summary>Change password</summary>
-          <form id="password-form">
-            <label
-              >Current password<input
-                name="currentPassword"
-                type="password"
-                autocomplete="current-password"
-                required
-            /></label>
-            <label
-              >New password<input
-                name="newPassword"
-                type="password"
-                autocomplete="new-password"
-                minlength="12"
-                maxlength="128"
-                required
-            /></label>
-            <button type="submit">Update password</button>
-            <p class="hint">
-              Use at least 12 characters. Your other sessions will be signed
-              out.
-            </p>
-          </form>
-        </details>
         <nav class="office-tabs" aria-label="Club office">
           <button id="inbox-tab" aria-pressed="true">
             Members &amp; messages

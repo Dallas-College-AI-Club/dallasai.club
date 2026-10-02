@@ -4,6 +4,7 @@ import { fromNodeHeaders } from 'better-auth/node';
 import pg from 'pg';
 import { emailList } from './admin-accounts.mjs';
 import { RequestError } from './errors.mjs';
+import { neonSession } from './neon-auth.mjs';
 let auth;
 export const isAdmin = (email) =>
   emailList(process.env.ADMIN_EMAILS).includes(
@@ -90,11 +91,22 @@ export function getAuth() {
     );
   return auth;
 }
-export async function requireAdmin(req, authInstance = getAuth()) {
-  const session = await authInstance.api.getSession({
-    headers: fromNodeHeaders(req.headers),
-  });
-  if (!session?.user || !isAdmin(session.user.email))
+export async function requireAdmin(req, authInstance) {
+  const managed = !authInstance && Boolean(process.env.NEON_AUTH_URL);
+  const session = managed
+    ? await neonSession(req)
+    : await (authInstance || getAuth()).api.getSession({
+        headers: fromNodeHeaders(req.headers),
+      });
+  if (
+    !session?.user ||
+    !isAdmin(session.user.email) ||
+    (managed &&
+      !String(session.user.role || '')
+        .split(',')
+        .map((r) => r.trim())
+        .includes('admin'))
+  )
     throw new RequestError(
       401,
       'Sign in with an authorized club email address.',

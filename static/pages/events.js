@@ -1,5 +1,11 @@
 import { readEventPlans, saveEventPlan } from '../storage/event-plans.js';
-import { formFooter, identityFields, mountForm } from '../app/form-client.js';
+import {
+  formFooter,
+  identityFields,
+  mountForm,
+  escapeHTML,
+} from '../app/form-client.js';
+import { ADMIN_URL, eventsFresh, refreshEvents } from '../content/events.js';
 import {
   EVENTS,
   JOIN_URL,
@@ -32,12 +38,17 @@ export function eventsMarkup() {
     <div class="events-intro">
       <div>
         <h2>
-          <span>Learn something.</span> <span>Meet someone.</span> <span>Share your thoughts.</span>
+          <span>Learn something.</span> <span>Meet someone.</span>
+          <span>Share your thoughts.</span>
         </h2>
         <p>Workshops, conversations, and time to build together.</p>
       </div>
-      <button class="solid-link" id="workshop-request">Request a workshop ↗</button>
+      <button class="solid-link" id="workshop-request">
+        Request a workshop ↗
+      </button>
     </div>
+    <p id="event-freshness" role="status"></p>
+    ${ADMIN_URL ? '<p><a class="outline-link" href="' + escapeHTML(ADMIN_URL) + '">Admin sign in ↗</a></p>' : ''}
     <div class="events-layout">
       <section class="event-calendar" aria-label="Club event calendar">
         <div class="calendar-heading">
@@ -49,29 +60,52 @@ export function eventsMarkup() {
           ${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d) => /* HTML */ `<span>${d}</span>`).join('')}
         </div>
         <div id="calendar-days" class="calendar-days"></div>
-        <p class="calendar-key"><i></i> Club event <span>All times Central</span></p>
+        <p class="calendar-key">
+          <i></i> Club event <span>All times Central</span>
+        </p>
         <div id="calendar-agenda" class="calendar-agenda"></div>
-        <button class="calendar-read" id="calendar-read">View event details ↓</button>
+        <button class="calendar-read" id="calendar-read">
+          View event details ↓
+        </button>
       </section>
-      <article id="event-detail" class="event-detail" aria-live="polite" tabindex="-1"></article>
+      <article
+        id="event-detail"
+        class="event-detail"
+        aria-live="polite"
+        tabindex="-1"
+      ></article>
     </div>
-    <dialog class="workshop-dialog" id="workshop-dialog" aria-labelledby="workshop-heading">
-      <button class="dialog-close" aria-label="Close workshop information">×</button
+    <dialog
+      class="workshop-dialog"
+      id="workshop-dialog"
+      aria-labelledby="workshop-heading"
+    >
+      <button class="dialog-close" aria-label="Close workshop information">
+        ×</button
       ><span class="tag">SHAPE WHAT WE LEARN</span>
       <h2 id="workshop-heading">What would you like to try?</h2>
-      <form id="workshop-form" class="club-form">${identityFields()}
-        <label>Workshop topic<input name="topic" maxlength="160" required></label>
-        <label>Tell us more <span>(optional)</span><textarea name="details" maxlength="3000" rows="4"></textarea></label>
+      <form id="workshop-form" class="club-form">
+        ${identityFields()}
+        <label
+          >Workshop topic<input name="topic" maxlength="160" required
+        /></label>
+        <label
+          >Tell us more <span>(optional)</span
+          ><textarea name="details" maxlength="3000" rows="4"></textarea>
+        </label>
         ${formFooter('Send workshop request')}
       </form>
     </dialog>`;
 }
 export function mountEvents(root) {
-  const stopWorkshop = mountForm(root.querySelector('#workshop-form'), {kind:'workshop'});
+  const stopWorkshop = mountForm(root.querySelector('#workshop-form'), {
+    kind: 'workshop',
+  });
   let stopRSVP = () => {};
   const q = (s) => root.querySelector(s),
     requested = new URLSearchParams(location.search).get('event');
-  const fallback = splitEvents().upcoming[0] || splitEvents().past[0] || EVENTS[0];
+  let fallback =
+    splitEvents().upcoming[0] || splitEvents().past[0] || EVENTS[0];
   let selected = EVENTS.find((e) => e.id === requested) || fallback;
   let [year, month] = parts(selected || { date: new Date().toISOString() });
   month--;
@@ -91,41 +125,56 @@ export function mountEvents(root) {
     syncUrl();
     root
       .querySelectorAll('[data-event]')
-      .forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.event === e.id)));
+      .forEach((b) =>
+        b.setAttribute('aria-pressed', String(b.dataset.event === e.id)),
+      );
     detail();
   };
   function detail() {
-    stopRSVP();
     const panel = q('#event-detail');
+    const existingRSVP = panel.querySelector('#event-rsvp');
+    const keepRSVP =
+      existingRSVP &&
+      existingRSVP.dataset.eventId === selected?.id &&
+      selected.registrationOpen !== false &&
+      !eventIsPast(selected);
+    if (keepRSVP) existingRSVP.remove();
+    else stopRSVP();
     panel.scrollTop = 0;
     q('#calendar-read').hidden = !selected;
     if (!selected) {
-      panel.innerHTML = '';
+      panel.innerHTML =
+        '<p>Select an event from the calendar to see the details.</p>';
       return;
     }
     const past = eventIsPast(selected);
     let going = readEventPlans().includes(selected.id);
-    panel.innerHTML = /* HTML */ `<button class="event-calendar-back">← Back to calendar</button>
+    panel.innerHTML = /* HTML */ `<button class="event-calendar-back">
+        ← Back to calendar
+      </button>
       <div class="event-detail-meta">
-        <span class="tag">${selected.category}</span
+        <span class="tag">${escapeHTML(selected.category)}</span
         ><span>${past ? 'Past event' : 'Coming up'}</span>
       </div>
       <div class="event-detail-date">
-        ${eventDate(selected)} <span>${parts(selected)[0]} · ${eventTime(selected)}</span>
+        ${eventDate(selected)}
+        <span>${parts(selected)[0]} · ${eventTime(selected)}</span>
       </div>
-      <h2>${selected.title}</h2>
-      ${selected.summary ? /* HTML */ `<p class="event-description">${selected.summary}</p>` : ''}${
+      <h2>${escapeHTML(selected.title)}</h2>
+      ${selected.targetAudience ? '<h3>Who is this for?</h3><p>' + escapeHTML(selected.targetAudience) + '</p>' : ''}
+      ${selected.learningOutcomes?.length ? '<h3>Learning outcomes</h3><ul>' + selected.learningOutcomes.map((x) => '<li>' + escapeHTML(x) + '</li>').join('') + '</ul>' : ''}
+      ${selected.summary ? /* HTML */ `<p class="event-description">${escapeHTML(selected.summary)}</p>` : ''}${
         selected.location
           ? /* HTML */ `<div class="event-venue">
               <span>WHERE</span>
-              <p>${selected.location}</p>
+              <p>${escapeHTML(selected.location)}</p>
             </div>`
           : ''
       }${
         selected.agenda.length
           ? /* HTML */ `<h3>${past ? 'Meeting details' : 'On the agenda'}</h3>
               <ul>
-                ${selected.agenda.map((x) => /* HTML */ `<li>${x}</li>`).join('')}
+                ${selected.agenda.map((x) => /* HTML */ `<li>${escapeHTML(x)}</li>`).join('')}
               </ul>`
           : past
             ? ''
@@ -134,20 +183,34 @@ export function mountEvents(root) {
         selected.preparation.length
           ? /* HTML */ `<h3>Before you come</h3>
               <ul>
-                ${selected.preparation.map((x) => /* HTML */ `<li>${x}</li>`).join('')}
+                ${selected.preparation.map((x) => /* HTML */ `<li>${escapeHTML(x)}</li>`).join('')}
               </ul>`
           : ''
       }
       <div class="event-detail-actions">
+        ${selected.meetingUrl ? '<a class="outline-link" target="_blank" rel="noopener" href="' + escapeHTML(selected.meetingUrl) + '">Open meeting link ↗</a>' : ''}
         ${past ? '' : /* HTML */ `<button id="event-going" class="solid-link" aria-pressed="${going}">${going ? '✓ In my plans' : 'Save to my plans'}</button><button id="save-event" class="outline-link">Add to calendar ↓</button>`}<a
           href="mailto:${CONTACT_EMAIL}"
           >Ask about this event ↗</a
         >
       </div>
       ${past ? '' : /* HTML */ `<p id="event-plan-status" class="event-plan-status" role="status">${going ? 'Saved on this device. Select again to remove.' : 'Save to your plans on this device.'}</p>`}`;
-    if (!past) {
-      panel.insertAdjacentHTML('beforeend', `<form id="event-rsvp" class="club-form rsvp-form"><h3>RSVP for this event</h3>${identityFields()}${formFooter('Save my RSVP','I would like to register for this event and receive messages about my RSVP.')}</form>`);
-      stopRSVP = mountForm(q('#event-rsvp'), {kind:'rsvp',extra:{eventId:selected.id}});
+    if (keepRSVP) panel.append(existingRSVP);
+    else if (!past && selected.registrationOpen !== false) {
+      panel.insertAdjacentHTML(
+        'beforeend',
+        `<form id="event-rsvp" class="club-form rsvp-form"><h3>RSVP for this event</h3>${identityFields()}${formFooter('Save my RSVP', 'I would like to register for this event and receive messages about my RSVP.')}</form>`,
+      );
+      stopRSVP = mountForm(q('#event-rsvp'), {
+        kind: 'rsvp',
+        extra: { eventId: selected.id },
+      });
+      q('#event-rsvp').dataset.eventId = selected.id;
+    } else if (!past) {
+      panel.insertAdjacentHTML(
+        'beforeend',
+        '<p>RSVPs are closed for this event.</p>',
+      );
     }
     q('.event-calendar-back').onclick = () => {
       q('.event-calendar').scrollIntoView({ block: 'start' });
@@ -160,7 +223,9 @@ export function mountEvents(root) {
         if (saveEventPlan(selected.id, next)) {
           going = next;
           goingButton.setAttribute('aria-pressed', String(going));
-          goingButton.textContent = going ? '✓ In my plans' : 'Save to my plans';
+          goingButton.textContent = going
+            ? '✓ In my plans'
+            : 'Save to my plans';
           q('#event-plan-status').textContent = going
             ? 'Saved on this device. Select again to remove.'
             : 'Removed from your plans.';
@@ -174,7 +239,9 @@ export function mountEvents(root) {
       save.onclick = () => {
         const a = document.createElement('a'),
           url = URL.createObjectURL(
-            new Blob([eventCalendar(selected)], { type: 'text/calendar;charset=utf-8' }),
+            new Blob([eventCalendar(selected)], {
+              type: 'text/calendar;charset=utf-8',
+            }),
           );
         a.href = url;
         a.download = selected.id + '-' + selected.date.slice(0, 4) + '.ics';
@@ -204,12 +271,14 @@ export function mountEvents(root) {
           ? /* HTML */ `<button
               data-event="${e.id}"
               aria-pressed="${selected?.id === e.id}"
-              aria-label="${eventDate(e)}: ${e.title}"
+              aria-label="${eventDate(e)}: ${escapeHTML(e.title)}"
               ${key === now ? 'aria-current="date"' : ''}
             >
               <span>${day}</span><i></i>
             </button>`
-          : /* HTML */ `<span class="calendar-day" ${key === now ? 'aria-current="date"' : ''}
+          : /* HTML */ `<span
+              class="calendar-day"
+              ${key === now ? 'aria-current="date"' : ''}
               >${day}</span
             >`;
       })
@@ -218,16 +287,27 @@ export function mountEvents(root) {
       ? events
           .map(
             (e) =>
-              /* HTML */ `<button data-event="${e.id}" aria-pressed="${e.id === selected?.id}">
-                <span>${eventDate(e)}</span><strong>${e.title}</strong><b aria-hidden="true">↗</b>
+              /* HTML */ `<button
+                data-event="${e.id}"
+                aria-pressed="${e.id === selected?.id}"
+              >
+                <span>${eventDate(e)}</span
+                ><strong>${escapeHTML(e.title)}</strong
+                ><b aria-hidden="true">↗</b>
               </button>`,
           )
           .join('')
       : '<p>No events listed for this month.</p>' +
-        (fallback ? '<button id="next-announced">View club events →</button>' : '');
+        (fallback
+          ? '<button id="next-announced">View club events →</button>'
+          : '');
     root
       .querySelectorAll('[data-event]')
-      .forEach((b) => (b.onclick = () => choose(EVENTS.find((e) => e.id === b.dataset.event))));
+      .forEach(
+        (b) =>
+          (b.onclick = () =>
+            choose(EVENTS.find((e) => e.id === b.dataset.event))),
+      );
     if (q('#next-announced'))
       q('#next-announced').onclick = () => {
         selected = fallback;
@@ -255,17 +335,55 @@ export function mountEvents(root) {
   q('#calendar-next').onclick = () => shift(1);
   const dialog = q('#workshop-dialog');
   q('#workshop-request').onclick = () =>
-    WORKSHOP_REQUEST_URL ? location.assign(WORKSHOP_REQUEST_URL) : dialog.showModal();
+    WORKSHOP_REQUEST_URL
+      ? location.assign(WORKSHOP_REQUEST_URL)
+      : dialog.showModal();
   dialog.querySelector('.dialog-close').onclick = () => dialog.close();
   dialog.onclick = (e) => {
     if (e.target === dialog) {
       const r = dialog.getBoundingClientRect();
-      if (e.clientX < r.left || e.clientX > r.right || e.clientY < r.top || e.clientY > r.bottom)
+      if (
+        e.clientX < r.left ||
+        e.clientX > r.right ||
+        e.clientY < r.top ||
+        e.clientY > r.bottom
+      )
         dialog.close();
     }
   };
+  const freshness = () => {
+    q('#event-freshness').textContent = eventsFresh
+      ? requested && !EVENTS.some((e) => e.id === requested)
+        ? 'That event is no longer listed. Browse the calendar for current events.'
+        : ''
+      : 'Checking the current calendar… If it stays unavailable, please try again shortly.';
+  };
+  const updated = () => {
+    fallback = splitEvents().upcoming[0] || splitEvents().past[0] || EVENTS[0];
+    const previous = selected;
+    selected =
+      EVENTS.find((e) => e.id === (selected?.id || requested)) || fallback;
+    if (
+      selected &&
+      (!previous ||
+        previous.id !== selected.id ||
+        previous.date !== selected.date)
+    ) {
+      [year, month] = parts(selected);
+      month--;
+    }
+    syncUrl();
+    draw();
+    freshness();
+  };
+  document.addEventListener('club:events-updated', updated);
+  document.addEventListener('club:events-status', freshness);
   draw();
+  freshness();
+  refreshEvents();
   return () => {
+    document.removeEventListener('club:events-updated', updated);
+    document.removeEventListener('club:events-status', freshness);
     stopWorkshop();
     stopRSVP();
     if (dialog.open) dialog.close();

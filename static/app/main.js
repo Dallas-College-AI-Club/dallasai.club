@@ -1,6 +1,8 @@
 import { readRun, visitSavedPage } from '../storage/drive.js';
 import { routeFromUrl } from './routes.js';
 import { JOIN_URL } from '../content/club.js';
+import { startEventUpdates } from '../content/events.js';
+startEventUpdates();
 import { mountRankings } from '../games/rankings.js';
 import { renderActivity } from '../pages/lab.js';
 import { mountHub } from '../games/hub.js';
@@ -16,7 +18,8 @@ let journey = null,
   cleanup = () => {},
   mode = 'summary',
   reduced =
-    params.get('motion') === 'off' || matchMedia('(prefers-reduced-motion: reduce)').matches;
+    params.get('motion') === 'off' ||
+    matchMedia('(prefers-reduced-motion: reduce)').matches;
 const names = {
   compare: 'AI Lab',
   drift: 'AI Lab',
@@ -41,20 +44,31 @@ for (const game of GAMES) names[game.id] = game.title;
 const games = new Set(GAMES.map((g) => g.id)),
   retroGames = new Set(GAMES.filter((g) => g.load).map((g) => g.id));
 const normalize = (id) =>
-  ({ campuses: 'explore', home: 'summary', browse: 'summary', latest: 'summary' })[
-    id
-  ] || id;
+  ({
+    campuses: 'explore',
+    home: 'summary',
+    browse: 'summary',
+    latest: 'summary',
+  })[id] || id;
 function urlFor(next, article = null, route = {}) {
   const q = new URLSearchParams({ mode: next });
   if (next === 'article' && article !== null) q.set('article', article);
   if (route.event && next === 'events') q.set('event', route.event);
   if (reduced) q.set('motion', 'off');
-  return 'club.html?' + q + (route.anchor ? '#' + encodeURIComponent(route.anchor) : '');
+  return (
+    'club.html?' +
+    q +
+    (route.anchor ? '#' + encodeURIComponent(route.anchor) : '')
+  );
 }
 function resumeMode() {
   const a = readArcade();
   if (a.last === 'explore' && readRun()) return 'explore';
-  if (retroGames.has(a.last) && a.games[a.last]?.state && a.games[a.last].state.phase !== 'ready')
+  if (
+    retroGames.has(a.last) &&
+    a.games[a.last]?.state &&
+    a.games[a.last].state.phase !== 'ready'
+  )
     return a.last;
   return readRun() ? 'explore' : 'play';
 }
@@ -63,10 +77,17 @@ function updateGameEntry() {
     entry = $('.explore-entry');
   entry.dataset.mode = next;
   entry.href = urlFor(next);
-  const resumeLabels = { explore: 'Resume drive', ride: 'Resume ride', snake: 'Resume Snake' };
-  $('#explore-entry-label').textContent = resumeLabels[next] || 'Explore & Play';
+  const resumeLabels = {
+    explore: 'Resume drive',
+    ride: 'Resume ride',
+    snake: 'Resume Snake',
+  };
+  $('#explore-entry-label').textContent =
+    resumeLabels[next] || 'Explore & Play';
   entry.title =
-    next === 'play' ? 'Explore & Play: choose a game' : 'Back to your spot in ' + names[next];
+    next === 'play'
+      ? 'Explore & Play: choose a game'
+      : 'Back to your spot in ' + names[next];
   entry.setAttribute('aria-label', entry.title);
   $('.arcade-library-link').hidden = next === 'play';
 }
@@ -120,7 +141,10 @@ function renderView(next, article = null, push = true, route = {}) {
     else {
       if (journey?.world.experience.score) journey.world.experience.page(next);
       else visitSavedPage(next);
-      cleanup = renderActivity(content, next, { open: show, back: () => show(resumeMode()) });
+      cleanup = renderActivity(content, next, {
+        open: show,
+        back: () => show(resumeMode()),
+      });
     }
     content.focus({ preventScroll: true });
   }
@@ -184,7 +208,9 @@ function motion() {
   $('#motion-toggle').textContent = reduced ? 'Motion off' : 'Motion on';
   $('#motion-toggle').setAttribute('aria-pressed', String(reduced));
   journey?.setMotion(reduced);
-  document.dispatchEvent(new CustomEvent('club:motion', { detail: { reduced } }));
+  document.dispatchEvent(
+    new CustomEvent('club:motion', { detail: { reduced } }),
+  );
 }
 document.querySelector('.drive-maker-link').href = JOIN_URL;
 document.querySelectorAll('[data-mode]').forEach(
@@ -224,7 +250,8 @@ document.addEventListener('club:navigate', (e) => {
   } catch {
     return;
   }
-  if (url.origin !== location.origin || !url.pathname.endsWith('/club.html')) return;
+  if (url.origin !== location.origin || !url.pathname.endsWith('/club.html'))
+    return;
   const route = routeFromUrl(url);
   show(route.mode, route.article, true, route);
 });

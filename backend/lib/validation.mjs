@@ -63,6 +63,7 @@ export function validate(body, events = [], now = new Date()) {
     }).format(now);
     if (
       !event ||
+      event.registrationOpen === false ||
       (/^\d{4}-\d{2}-\d{2}$/.test(event.date)
         ? event.date < today
         : new Date(event.end || event.date) <= now)

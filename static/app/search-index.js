@@ -13,19 +13,36 @@ const page = (id, title, description) => ({
 });
 const sections = [
   page('summary', 'Latest', 'The latest from across the club'),
-  page('journal', 'The AI Review', 'Student essays, reflections, and research notes'),
-  page('lab', 'AI Lab', 'Questions from your field and four hands-on experiments'),
-  page('projects', 'Projects', 'Working demos, projects in development, and concepts'),
+  page(
+    'journal',
+    'The AI Review',
+    'Student essays, reflections, and research notes',
+  ),
+  page(
+    'lab',
+    'AI Lab',
+    'Questions from your field and four hands-on experiments',
+  ),
+  page(
+    'projects',
+    'Projects',
+    'Working demos, projects in development, and concepts',
+  ),
   page('events', 'Events', 'Upcoming workshops and meeting history'),
-  page('about', 'About the club', 'Our vision, learning paths, and co-advisors'),
+  page(
+    'about',
+    'About the club',
+    'Our vision, learning paths, and co-advisors',
+  ),
   page('play', 'Explore & Play', 'Choose a game and discover the club'),
   page('subscribe', 'Subscribe to The AI Review', 'Follow the publication'),
   page('rankings', 'Rankings', 'Top ten scores for each game'),
 ];
 sections.find((e) => e.id === 'page-about').keywords =
   'join Teams membership contact David Bracewell PhD professor Russ Pearlman JD';
-sections.find((e) => e.id === 'page-summary').keywords = 'news updates announcements';
-export const SEARCH_ENTRIES = [
+sections.find((e) => e.id === 'page-summary').keywords =
+  'news updates announcements';
+const searchEntries = () => [
   ...sections,
   {
     id: 'lab-fields',
@@ -44,9 +61,13 @@ export const SEARCH_ENTRIES = [
     title: a.title,
     description: a.abstract,
     category: 'AI Review article',
-    keywords: [a.category, a.section, ...a.headings, ...a.paragraphs, ...a.references.flat()].join(
-      ' ',
-    ),
+    keywords: [
+      a.category,
+      a.section,
+      ...a.headings,
+      ...a.paragraphs,
+      ...a.references.flat(),
+    ].join(' '),
     href: articleUrl(a),
   })),
   ...PROJECT_LINKS.map(({ id, title, description, href }) => ({
@@ -61,12 +82,19 @@ export const SEARCH_ENTRIES = [
     .map((e) => ({
       id: 'event-' + e.id,
       title: e.title,
-      description: eventDate(e) + ' ' + e.date.slice(0, 4) + ' · ' + (e.summary || e.category),
+      description:
+        eventDate(e) +
+        ' ' +
+        e.date.slice(0, 4) +
+        ' · ' +
+        (e.summary || e.category),
       category: 'Event',
       keywords: [
         e.date,
         e.category,
         e.location,
+        e.targetAudience || '',
+        ...(e.learningOutcomes || []),
         ...e.agenda,
         ...e.preparation,
         new Intl.DateTimeFormat('en-US', {
@@ -78,8 +106,16 @@ export const SEARCH_ENTRIES = [
       href: e.url,
     })),
   ...[
-    ['lab', 'Train a model', 'Train a neural network and inspect its predictions.'],
-    ['ethics', 'Check its answers', 'Change the test mix and compare accuracy across groups.'],
+    [
+      'lab',
+      'Train a model',
+      'Train a neural network and inspect its predictions.',
+    ],
+    [
+      'ethics',
+      'Check its answers',
+      'Change the test mix and compare accuracy across groups.',
+    ],
     [
       'compare',
       'Compare AI tools',
@@ -112,25 +148,34 @@ const normalize = (s) =>
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim();
-const indexedEntries = SEARCH_ENTRIES.map((entry, index) => ({
-  entry,
-  index,
-  title: normalize(entry.title),
-  category: normalize(entry.category),
-  description: normalize(entry.description),
-  keywords: normalize(entry.keywords || ''),
-}));
+export const SEARCH_ENTRIES = searchEntries();
+const indexedEntries = () =>
+  searchEntries().map((entry, index) => ({
+    entry,
+    index,
+    title: normalize(entry.title),
+    category: normalize(entry.category),
+    description: normalize(entry.description),
+    keywords: normalize(entry.keywords || ''),
+  }));
 export function searchClub(query) {
   const phrase = normalize(query);
   if (!phrase) return sections;
   const terms = phrase
     .split(/\s+/)
     .map((term) =>
-      ['articles', 'projects', 'events', 'games', 'experiments', 'meetings'].includes(term)
+      [
+        'articles',
+        'projects',
+        'events',
+        'games',
+        'experiments',
+        'meetings',
+      ].includes(term)
         ? term.slice(0, -1)
         : term,
     );
-  return indexedEntries
+  return indexedEntries()
     .map(({ entry, index, title, category, description, keywords }) => {
       const all = [title, category, description, keywords].join(' ');
       if (!terms.every((term) => all.includes(term))) return null;

@@ -1,4 +1,5 @@
 import { createAuthClient } from 'better-auth/client';
+import { mountEventEditor } from './event-editor.js';
 const auth = createAuthClient(),
   q = (s) => document.querySelector(s);
 const labels = {
@@ -48,6 +49,9 @@ function showLogin() {
   q('#entries').replaceChildren();
   q('#password-form').reset();
   q('#password-settings').open = false;
+  q('#events-pane').hidden = true;
+  q('#inbox-pane').hidden = false;
+  editor.clear();
 }
 function filters() {
   const params = new URLSearchParams([
@@ -131,6 +135,8 @@ async function load() {
     q('#office').hidden = false;
     q('#signout').hidden = false;
     q('#identity').textContent = 'Signed in as ' + data.user;
+    if (location.hash === '#events' && q('#events-pane').hidden)
+      showPane('events');
     q('#counts').replaceChildren(
       ...Object.entries(labels).map(([kind, label]) => {
         const count = data.counts.find((x) => x.kind === kind) || {
@@ -227,6 +233,7 @@ q('#password-form').onsubmit = async (event) => {
   }
 };
 q('#signout').onclick = async () => {
+  if (!editor.canLeave()) return;
   sessionGeneration++;
   try {
     const result = await auth.signOut();
@@ -238,6 +245,22 @@ q('#signout').onclick = async () => {
     status(e.message);
   }
 };
+const editor = mountEventEditor(api);
+function showPane(name) {
+  if (name !== 'events' && !editor.canLeave()) return;
+  q('#inbox-pane').hidden = name === 'events';
+  q('#events-pane').hidden = name !== 'events';
+  q('#inbox-tab').setAttribute('aria-pressed', String(name !== 'events'));
+  q('#events-tab').setAttribute('aria-pressed', String(name === 'events'));
+  history.replaceState(
+    {},
+    '',
+    name === 'events' ? '#events' : location.pathname,
+  );
+  if (name === 'events') editor.show();
+}
+q('#events-tab').onclick = () => showPane('events');
+q('#inbox-tab').onclick = () => showPane('inbox');
 q('#refresh').onclick = () => {
   status();
   load();

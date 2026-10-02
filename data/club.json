@@ -33,5 +33,7 @@
   ],
   "WORKSHOP_REQUEST_URL": "",
   "FORMS_API_URL": "https://dallasai-leaderboard.vercel.app/api/forms",
+  "EVENTS_API_URL": "https://dallasai-leaderboard.vercel.app/api/events",
+  "ADMIN_URL": "https://dallasai-leaderboard.vercel.app/admin/#events",
   "LEADERBOARD_API_URL": "https://dallasai-leaderboard.vercel.app/api/leaderboard"
 }

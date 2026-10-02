@@ -61,6 +61,12 @@
 {{- with site.Params.formsAPIURL -}}
   {{- $club = merge $club (dict "FORMS_API_URL" .) -}}
 {{- end -}}
+{{- with site.Params.eventsAPIURL -}}
+  {{- $club = merge $club (dict "EVENTS_API_URL" .) -}}
+{{- end -}}
+{{- with site.Params.adminURL -}}
+  {{- $club = merge $club (dict "ADMIN_URL" .) -}}
+{{- end -}}
 {{- return (dict
   "articles" $articles
   "events" $events

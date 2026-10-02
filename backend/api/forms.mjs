@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { liveEvents } from '../lib/events.mjs';
 import { database } from '../lib/db.mjs';
 import { cors, jsonBody, limit, send, fail } from '../lib/http.mjs';
 import { submit } from '../lib/submissions.mjs';
@@ -23,12 +23,7 @@ export default async function handler(req, res) {
       return send(res, 200, {
         message: 'Thank you. Your request has been received.',
       });
-    const events = JSON.parse(
-      await readFile(
-        new URL('../generated/events.json', import.meta.url),
-        'utf8',
-      ),
-    );
+    const events = body.kind === 'rsvp' ? await liveEvents(db) : [];
     await submit(db, body, events);
     // Success is returned only after the database transaction commits.
     send(res, 200, { message: confirmations[body.kind] });

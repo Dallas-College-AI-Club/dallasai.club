@@ -39,9 +39,7 @@ const server = http.createServer(async (req, res) => {
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const origin = 'http://127.0.0.1:' + server.address().port;
 const browser = await chromium.launch({
-  executablePath:
-    process.env.CHROME_PATH ||
-    'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  executablePath: process.env.CHROME_PATH,
   headless: true,
 });
 const errors = [],
@@ -54,6 +52,23 @@ try {
   await page.route(
     'https://dallasai-leaderboard.vercel.app/api/**',
     async (route) => {
+      if (new URL(route.request().url()).pathname === '/api/events')
+        return route.fulfill({
+          contentType: 'application/json',
+          headers: { 'Access-Control-Allow-Origin': origin },
+          body: JSON.stringify({
+            events: JSON.parse(
+              await readFile(
+                path.join(backend, 'generated/events.json'),
+                'utf8',
+              ),
+            ).map((e) =>
+              e.id === 'productivity'
+                ? { ...e, date: '2099-10-02', end: null }
+                : e,
+            ),
+          }),
+        });
       if (route.request().method() === 'OPTIONS')
         return route.fulfill({
           status: 204,

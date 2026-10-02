@@ -30,6 +30,8 @@ q('#enable-alerts').onclick = async () => {
     if (browserAlerts) {
       browserAlerts = false;
       q('#enable-alerts').textContent = 'Enable browser alerts';
+      q('#notification-status').textContent =
+        'Browser alerts are off. New counts still appear here. Email alerts are not connected.';
       return;
     }
     browserAlerts = (await Notification.requestPermission()) === 'granted';

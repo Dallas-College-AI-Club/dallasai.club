@@ -236,6 +236,18 @@ try {
     viewport: { width: 1280, height: 900 },
   });
   admin.on('pageerror', (error) => errors.push(error.message));
+  await admin.addInitScript(() => {
+    window.testAlerts = [];
+    window.Notification = class {
+      static permission = 'granted';
+      static async requestPermission() {
+        return 'granted';
+      }
+      constructor(title, options) {
+        window.testAlerts.push({ title, ...options });
+      }
+    };
+  });
   await admin.route('**/api/auth/**', (route) =>
     route.fulfill({
       contentType: 'application/json',
@@ -310,6 +322,27 @@ try {
   assert.equal(await admin.locator('.entry img').count(), 0);
   await admin.getByRole('button', { name: 'Mark reviewed' }).click();
   await admin.locator('.badge').filter({ hasText: 'reviewed' }).waitFor();
+  await admin
+    .getByRole('button', { name: 'Enable browser alerts', exact: true })
+    .click();
+  fixture.counts[0].latest = '2099-01-01T00:00:00Z';
+  await admin.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await admin.waitForFunction(() => window.testAlerts.length === 1);
+  await admin
+    .getByRole('button', { name: 'Turn off browser alerts', exact: true })
+    .click();
+  await admin
+    .getByText(
+      'Browser alerts are off. New counts still appear here. Email alerts are not connected.',
+      { exact: true },
+    )
+    .waitFor();
+  fixture.counts[0].latest = '2099-01-02T00:00:00Z';
+  await admin.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await admin.waitForFunction(
+    () => !document.querySelector('#refresh').disabled,
+  );
+  assert.equal(await admin.evaluate(() => window.testAlerts.length), 1);
   await admin.getByText('Appearance', { exact: true }).click();
   for (const theme of ['garden', 'blue', 'ink']) {
     await admin.locator('#office-theme').selectOption(theme);

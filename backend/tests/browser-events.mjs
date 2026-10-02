@@ -169,10 +169,15 @@ try {
     ),
   );
   await page.reload();
-  await page.waitForFunction(
-    () => document.documentElement.dataset.theme === 'studio',
+  assert.equal(
+    await page.locator('#office-theme, #office-font, #office-layout').count(),
+    0,
   );
-  assert.equal(await page.locator('html').getAttribute('data-font'), 'geist');
+  assert.ok(
+    await page.evaluate(() =>
+      getComputedStyle(document.documentElement).fontFamily.includes('Geist'),
+    ),
+  );
   await page
     .getByLabel('Email address', { exact: true })
     .fill('officer@example.com');
@@ -190,10 +195,7 @@ try {
     .waitFor();
   await page.getByLabel('Sign-in code', { exact: true }).fill('123456');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await page.getByText('Appearance', { exact: true }).click();
-  await page.locator('#office-theme').selectOption('studio');
-  await page.locator('#office-font').selectOption('dm');
-  await page.locator('#office-layout').selectOption('desk');
+
   await page.getByRole('button', { name: 'New event', exact: true }).click();
   assert.deepEqual(
     await page.locator('[name="category"] option').allTextContents(),
@@ -247,37 +249,23 @@ try {
   assert.equal(records[0].draft.agenda.length, 10);
   assert.equal(records[0].published, null);
   assert.equal(records[0].draft.images.length, 1);
-  for (const [theme, font, layout, family] of [
-    ['studio', 'geist', 'desk', 'Geist'],
-    ['midnight', 'space', 'gallery', 'Space Grotesk'],
-    ['clay', 'dm', 'focus', 'DM Sans'],
-  ]) {
-    await page.locator('#office-theme').selectOption(theme);
-    await page.locator('#office-font').selectOption(font);
-    await page.locator('#office-layout').selectOption(layout);
-    assert.ok(
-      await page.evaluate(
-        async (family) =>
-          (await document.fonts.load('14px "' + family + '"')).length > 0,
-        family,
-      ),
-    );
-    await page.evaluate(() => scrollTo(0, 0));
-    await page.screenshot({
-      path: path.join(screens, 'events-' + theme + '.png'),
-    });
-    await page.setViewportSize({ width: 320, height: 820 });
-    assert.ok(
-      await page.evaluate(
-        () => document.documentElement.scrollWidth <= innerWidth,
-      ),
-      theme + ' overflows',
-    );
-    await page.setViewportSize({ width: 1365, height: 950 });
-  }
-  await page.locator('#office-theme').selectOption('studio');
-  await page.locator('#office-font').selectOption('geist');
-  await page.locator('#office-layout').selectOption('desk');
+  assert.ok(
+    await page.evaluate(
+      async () => (await document.fonts.load('14px Geist')).length > 0,
+    ),
+  );
+  await page.waitForFunction(
+    () => document.querySelector('.office-logo')?.naturalWidth > 0,
+  );
+  await page.evaluate(() => scrollTo(0, 0));
+  await page.screenshot({ path: path.join(screens, 'events-studio.png') });
+  await page.setViewportSize({ width: 320, height: 820 });
+  assert.ok(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  );
+  await page.setViewportSize({ width: 1365, height: 950 });
   assert.ok(
     (await page.locator('.event-list-group').first().textContent()).includes(
       'Drafts',
@@ -313,7 +301,10 @@ try {
     .getByRole('button', { name: 'Close preview', exact: true })
     .click();
   await page.reload();
-  assert.equal(await page.locator('html').getAttribute('data-theme'), 'studio');
+  assert.equal(
+    await page.locator('#office-theme, #office-font, #office-layout').count(),
+    0,
+  );
   await page
     .getByRole('button', {
       name: new RegExp(workshop.title.replace(/[+]/g, '\\+')),
@@ -625,7 +616,7 @@ try {
   await page.locator('.event-choice').waitFor();
   assert.deepEqual(errors, []);
   console.log(
-    'Passed: four event types, modern fonts/themes/layouts, workshop entry, private image preview, persistence, publish, public refresh, safe rendering, conflict recovery, archived editing, reload, restore as draft, preserved RSVPs/images, republish, unpublish, sign-out, and mobile layouts.',
+    'Passed: four event types, fixed Studio design and office-only logo, workshop entry, private image preview, persistence, publish, public refresh, safe rendering, conflict recovery, archived editing, reload, restore as draft, preserved RSVPs/images, republish, unpublish, sign-out, and mobile layouts.',
   );
 } finally {
   await browser.close();

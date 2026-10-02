@@ -1,8 +1,6 @@
 import { createAuthClient } from 'better-auth/client';
 import { emailOTPClient } from 'better-auth/client/plugins';
 import { mountEventEditor } from './event-editor.js';
-import { mountPreferences } from './preferences.js';
-mountPreferences();
 const auth = createAuthClient({ plugins: [emailOTPClient()] }),
   q = (s) => document.querySelector(s);
 const labels = {

@@ -10,18 +10,6 @@
   font-weight: 500 900;
   font-display: swap;
 }
-@font-face {
-  font-family: 'DM Sans';
-  src: url('./assets/dmsans.ttf') format('truetype');
-  font-weight: 100 900;
-  font-display: swap;
-}
-@font-face {
-  font-family: 'Space Grotesk';
-  src: url('./assets/space-grotesk.ttf') format('truetype');
-  font-weight: 300 700;
-  font-display: swap;
-}
 :root {
   font-family: Geist, system-ui, sans-serif;
   color-scheme: light;
@@ -42,43 +30,6 @@
   background: var(--page);
   color: var(--text);
   font-synthesis: none;
-}
-:root[data-theme='midnight'] {
-  color-scheme: dark;
-  --page: #151719;
-  --surface: #1e2124;
-  --text: #f2f3f0;
-  --muted: #abb1b3;
-  --accent: #d5f987;
-  --button-text: #1c2612;
-  --line: #373c40;
-  --selected: #303c25;
-  --subtle: #25292c;
-  --notice: #3a321f;
-  --notice-text: #f4d58c;
-  --success: #a4e1bf;
-  --shadow: 0 4px 24px #0001;
-}
-:root[data-theme='clay'] {
-  --page: #f6f1ed;
-  --surface: #fffcf9;
-  --text: #372923;
-  --muted: #7a655b;
-  --accent: #9b482f;
-  --button-text: #fff;
-  --line: #e6d9cf;
-  --selected: #f8e6dc;
-  --subtle: #faf4ee;
-  --notice: #fff0ce;
-  --notice-text: #7a5005;
-  --success: #426d49;
-  --shadow: 0 4px 24px #44220b05;
-}
-:root[data-font='dm'] {
-  font-family: 'DM Sans', system-ui, sans-serif;
-}
-:root[data-font='space'] {
-  font-family: 'Space Grotesk', system-ui, sans-serif;
 }
 * {
   box-sizing: border-box;
@@ -206,15 +157,12 @@ p {
   font-weight: 600;
   letter-spacing: -0.02em;
 }
-.brand-mark {
-  display: grid;
-  place-items: center;
-  width: 38px;
-  height: 38px;
-  border-radius: 11px;
-  font-size: 25px;
-  background: var(--accent);
-  color: var(--button-text);
+.office-logo {
+  display: block;
+  width: 88px;
+  height: 88px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 .workspace-label {
   color: var(--muted);
@@ -258,12 +206,6 @@ summary {
 }
 details[open] > summary {
   margin-bottom: 16px;
-}
-.preference-fields {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 18px;
-  margin-top: 16px;
 }
 .office-tabs {
   display: flex;
@@ -767,41 +709,6 @@ input::file-selector-button {
 #site-preview-frame.mobile-preview {
   width: min(390px, 100%);
 }
-:root[data-layout='focus'] main {
-  max-width: 1120px;
-}
-:root[data-layout='focus'] .event-workspace {
-  grid-template-columns: 240px minmax(0, 1fr);
-  gap: 20px;
-}
-:root[data-layout='focus'] .counts {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-:root[data-layout='gallery'] .event-workspace {
-  grid-template-columns: 1fr;
-}
-:root[data-layout='gallery'] .event-library {
-  position: static;
-}
-:root[data-layout='gallery'] #event-list {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  max-height: 310px;
-}
-:root[data-layout='gallery'] .event-list-group {
-  grid-column: 1 / -1;
-}
-:root[data-layout='gallery'] #event-form {
-  max-width: 900px;
-  margin: 0 auto;
-}
-:root[data-layout='gallery'] .event-library > label {
-  max-width: 440px;
-}
-:root[data-layout='gallery'] #reload-events {
-  width: auto;
-}
 @media (max-width: 900px) {
   main {
     padding: 24px 20px 60px;
@@ -809,8 +716,7 @@ input::file-selector-button {
   .app-header {
     padding: 12px 20px;
   }
-  .event-workspace,
-  :root[data-layout='focus'] .event-workspace {
+  .event-workspace {
     grid-template-columns: 240px minmax(0, 1fr);
     gap: 16px;
   }
@@ -830,8 +736,7 @@ input::file-selector-button {
   }
 }
 @media (max-width: 700px) {
-  .event-workspace,
-  :root[data-layout='focus'] .event-workspace {
+  .event-workspace {
     grid-template-columns: 1fr;
   }
   .event-library {
@@ -840,14 +745,8 @@ input::file-selector-button {
   #event-list {
     max-height: 270px;
   }
-  :root[data-layout='gallery'] #event-list {
-    grid-template-columns: 1fr 1fr;
-  }
   .counts {
     grid-template-columns: 1fr 1fr;
-  }
-  .preference-fields {
-    grid-template-columns: 1fr;
   }
   .brand {
     font-size: 12px;
@@ -882,11 +781,9 @@ input::file-selector-button {
   .app-header {
     padding: 12px 14px;
   }
-  .brand-mark {
-    width: 30px;
-    height: 30px;
-    font-size: 21px;
-    flex-shrink: 0;
+  .office-logo {
+    width: 64px;
+    height: 64px;
   }
   .event-fields,
   .filters {
@@ -904,9 +801,6 @@ input::file-selector-button {
   }
   .editor-section {
     padding: 18px;
-  }
-  :root[data-layout='gallery'] #event-list {
-    grid-template-columns: 1fr;
   }
   .primary-actions button {
     flex: 1;

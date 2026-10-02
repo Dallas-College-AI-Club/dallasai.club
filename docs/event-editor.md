@@ -131,7 +131,7 @@ The browser audit enters the supplied workshop through the actual editor
 against an isolated test database, checks draft persistence and blank-date
 preview, publishes only locally, and verifies safe display, RSVP input retention,
 conflict recovery, closed registration, archive/edit/restore/republish with
-retained images and RSVPs, unpublishing, all new fonts/themes/layouts at desktop
-and mobile widths, and sign-out/sign-in. Unit tests cover transactional history, validation, public
+retained images and RSVPs, unpublishing, the approved Studio design and office
+logo at desktop and mobile widths, and sign-out/sign-in. Unit tests cover transactional history, validation, public
 versus private data, authorization, Central daylight-saving changes, and RSVPs.
 Live checks must not publish synthetic test events or send emails.

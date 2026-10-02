@@ -343,16 +343,10 @@ try {
     () => !document.querySelector('#refresh').disabled,
   );
   assert.equal(await admin.evaluate(() => window.testAlerts.length), 1);
-  await admin.getByText('Appearance', { exact: true }).click();
-  for (const theme of ['studio', 'midnight', 'clay']) {
-    await admin.locator('#office-theme').selectOption(theme);
-    await admin.screenshot({
-      path: path.join(screens, 'office-' + theme + '.png'),
-      fullPage: true,
-    });
-  }
-  await admin.locator('#office-font').selectOption('space');
-  await admin.locator('#office-layout').selectOption('focus');
+  assert.equal(
+    await admin.locator('#office-theme, #office-font, #office-layout').count(),
+    0,
+  );
   await admin.screenshot({
     path: path.join(screens, 'admin-desktop.png'),
     fullPage: true,
@@ -369,7 +363,7 @@ try {
   });
   assert.deepEqual(errors, []);
   console.log(
-    'Browser checks passed: six forms, question dialogs, attachments, RSVP event filtering/export, office themes, mobile layouts, recoverable errors, admin sign-in/review, and safe rendering.',
+    'Browser checks passed: six forms, question dialogs, attachments, RSVP event filtering/export, Studio office, mobile layouts, recoverable errors, admin sign-in/review, and safe rendering.',
   );
 } finally {
   await browser.close();

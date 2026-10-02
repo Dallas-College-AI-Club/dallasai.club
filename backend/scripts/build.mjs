@@ -8,7 +8,7 @@ import {
 } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
-import { parse } from 'yaml';
+import { parseEventSource } from '../lib/event-registry.mjs';
 import { build } from 'esbuild';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const content = path.resolve(root, '../content/events');
@@ -18,22 +18,8 @@ if (await stat(content).catch(() => null)) {
   for (const name of await readdir(content)) {
     if (!name.endsWith('.md')) continue;
     const source = await readFile(path.join(content, name), 'utf8');
-    const header = source.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-    if (!header) continue;
-    const value = parse(header[1]);
-    if (
-      !value.id ||
-      value.draft ||
-      new Date(value.publishDate || 0) > new Date()
-    )
-      continue;
-    events.push({
-      id: value.id,
-      title: value.title,
-      date: value.eventDate,
-      end: value.end || null,
-      location: value.location || '',
-    });
+    const event = parseEventSource(source);
+    if (event) events.push(event);
   }
   await writeFile(
     path.join(root, 'generated/events.json'),

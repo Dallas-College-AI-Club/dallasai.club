@@ -58,7 +58,7 @@ const cookies = (response) =>
     .getSetCookie()
     .map((x) => x.split(';')[0])
     .join('; ');
-test('public account creation and obsolete email-code routes are unavailable; outsiders cannot access admin records', async () => {
+test('legacy fallback blocks public account creation and email-code routes; outsiders cannot access admin records', async () => {
   assert.notEqual(
     (
       await post('/sign-up/email', {

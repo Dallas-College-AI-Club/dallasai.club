@@ -1,9 +1,11 @@
 {{ define "main" }}
 <article>
+  {{ if and (eq .Section "events") (or site.Params.eventsAPIURL hugo.Data.club.EVENTS_API_URL) }}
+  <h1>Club event</h1>
+  <p>Event details may have changed. Open the club calendar for the current title, date, location, and RSVP options.</p>
+  <p><a href="{{ printf "club.html?mode=events&event=%s" .Params.id | relURL }}">View current event details</a></p>
+  {{ else }}
   <h1>{{ .Title }}</h1>
-  {{ if eq .Section "events" }}
-  <p><a href="{{ printf "club.html?mode=events&event=%s" .Params.id | relURL }}">View in the club calendar</a></p>
-  {{ end }}
   {{ with .Params.eventdate }}
   <p>{{ (time.AsTime .).Format "January 2, 2006" }}</p>
   {{ else }}
@@ -21,6 +23,7 @@
   {{ end }}
   {{ if eq .Section "blog" }}
   <p><a href="{{ printf "club.html?mode=article&article=%s" (.Slug | default .File.ContentBaseName) | relURL }}">Read in The AI Review</a></p>
+  {{ end }}
   {{ end }}
 </article>
 {{ end }}

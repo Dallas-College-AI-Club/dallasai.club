@@ -39,9 +39,7 @@ const server = http.createServer(async (req, res) => {
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
 const origin = 'http://127.0.0.1:' + server.address().port;
 const browser = await chromium.launch({
-  executablePath:
-    process.env.CHROME_PATH ||
-    'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  executablePath: process.env.CHROME_PATH,
   headless: true,
 });
 const errors = [],
@@ -54,6 +52,23 @@ try {
   await page.route(
     'https://dallasai-leaderboard.vercel.app/api/**',
     async (route) => {
+      if (new URL(route.request().url()).pathname === '/api/events')
+        return route.fulfill({
+          contentType: 'application/json',
+          headers: { 'Access-Control-Allow-Origin': origin },
+          body: JSON.stringify({
+            events: JSON.parse(
+              await readFile(
+                path.join(backend, 'generated/events.json'),
+                'utf8',
+              ),
+            ).map((e) =>
+              e.id === 'productivity'
+                ? { ...e, date: '2099-10-02', end: null }
+                : e,
+            ),
+          }),
+        });
       if (route.request().method() === 'OPTIONS')
         return route.fulfill({
           status: 204,
@@ -243,21 +258,12 @@ try {
     .getByLabel('Email address', { exact: true })
     .fill('officer@example.com');
   await admin
-    .getByLabel('Password', { exact: true })
-    .fill('Test-password-987!');
+    .getByRole('button', { name: 'Send sign-in code', exact: true })
+    .click();
+  await admin.getByLabel('Sign-in code', { exact: true }).fill('123456');
   await admin.getByRole('button', { name: 'Sign in', exact: true }).click();
   await admin.getByRole('heading', { name: 'Your club inbox' }).waitFor();
-  await admin.getByText('Change password', { exact: true }).click();
-  await admin
-    .getByLabel('Current password', { exact: true })
-    .fill('Test-password-987!');
-  await admin
-    .getByLabel('New password', { exact: true })
-    .fill('Updated-password-987!');
-  await admin
-    .getByRole('button', { name: 'Update password', exact: true })
-    .click();
-  await admin.getByText('Password updated.', { exact: true }).waitFor();
+  assert.equal(await admin.locator('input[type="password"]').count(), 0);
   await admin.locator('#filters [name="kind"]').selectOption('join');
   await admin.getByRole('button', { name: 'Apply', exact: true }).click();
   await admin.getByText('Submission details', { exact: true }).click();

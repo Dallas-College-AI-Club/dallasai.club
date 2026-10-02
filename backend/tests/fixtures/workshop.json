@@ -1,0 +1,38 @@
+{
+  "title": "AI + Programming for Everyone: From Messy Data to Useful Answers",
+  "category": "Workshop",
+  "date": "",
+  "startTime": "",
+  "endDate": "",
+  "endTime": "",
+  "location": "",
+  "meetingUrl": "",
+  "summary": "",
+  "targetAudience": "Students from any major, including students with no programming experience.",
+  "learningOutcomes": [
+    "Use AI to help understand an unfamiliar dataset.",
+    "Break a data problem into smaller steps.",
+    "Generate and run simple Python with AI assistance.",
+    "Clean messy data.",
+    "Ask useful questions of a dataset.",
+    "Create basic charts and summaries.",
+    "Debug simple problems with AI.",
+    "Explain what generated code is doing.",
+    "Recognize when AI-generated analysis may be wrong or misleading.",
+    "Complete a small data-analysis project largely through natural-language interaction with AI."
+  ],
+  "agenda": [
+    "20 minutes · 1. AI, Data, and Programming · What programming lets you do",
+    "20 minutes · 2. Meet the Dataset · Explore a messy student survey",
+    "30 minutes · 3. Your First AI-Assisted Program · Load, inspect, and summarize data",
+    "30 minutes · 4. Cleaning Real-World Data · Fix inconsistent and invalid values",
+    "30 minutes · Break",
+    "30 minutes · 5. Asking Questions with Code · Statistics, grouping, comparisons",
+    "30 minutes · 6. Visualizing the Data · Charts and communicating findings",
+    "20 minutes · 7. Debugging and AI Skepticism · Break code, fix code, verify answers",
+    "20 minutes · 8. Student Mini-Project · Students investigate their own question",
+    "10 minutes · Wrap-up · Key lessons and next steps"
+  ],
+  "preparation": [],
+  "registrationOpen": true
+}

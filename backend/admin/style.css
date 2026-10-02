@@ -241,15 +241,125 @@ summary:focus-visible {
   }
 }
 
-#password-form {
+#code-instructions {
+  overflow-wrap: anywhere;
+}
+.office-tabs,
+.event-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 24px 0;
+}
+.office-tabs button[aria-pressed='false'],
+button.secondary {
+  color: #365b2f;
+  background: white;
+}
+.office-tabs button[aria-pressed='true'] {
+  box-shadow: 0 3px 0 #20271d;
+}
+.event-workspace {
   display: grid;
-  gap: 14px;
-  max-width: 390px;
-  margin: 18px 0;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 32px;
+  margin-top: 24px;
 }
-#password-form button {
-  justify-self: start;
+.event-workspace > * {
+  min-width: 0;
 }
-#password-settings summary {
-  cursor: pointer;
+#event-list {
+  max-height: 75vh;
+  overflow: auto;
+  margin-top: 16px;
+}
+.event-choice {
+  display: grid;
+  gap: 7px;
+  text-align: left;
+  width: 100%;
+  background: white;
+  color: #20271d;
+  margin: 0 0 10px;
+  overflow-wrap: anywhere;
+}
+.event-choice[aria-pressed='true'] {
+  background: #e2f0d7;
+  border-width: 2px;
+}
+.event-choice small,
+.event-choice span {
+  font-size: 12px;
+}
+#event-form {
+  display: grid;
+  gap: 18px;
+}
+#event-form h3,
+#event-form p,
+#event-form .event-actions {
+  margin: 0;
+}
+.event-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+textarea {
+  resize: vertical;
+  min-width: 0;
+  width: 100%;
+  font: inherit;
+  padding: 11px;
+  background: white;
+  color: #20271d;
+  border: 1px solid #929c88;
+  border-radius: 5px;
+}
+textarea:focus-visible {
+  outline: 3px solid #88a976;
+  outline-offset: 3px;
+}
+label.checkbox {
+  display: flex;
+  align-items: center;
+}
+.checkbox input {
+  width: 20px;
+  height: 20px;
+}
+#event-status {
+  color: #365b2f;
+  white-space: pre-wrap;
+}
+.event-description {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+#event-preview {
+  overflow-wrap: anywhere;
+}
+#reload-events {
+  margin-top: 12px;
+}
+@media (max-width: 760px) {
+  .event-workspace {
+    grid-template-columns: 1fr;
+  }
+  #event-list {
+    max-height: 260px;
+  }
+}
+@media (max-width: 420px) {
+  .event-fields {
+    grid-template-columns: 1fr;
+  }
+  #events-pane .heading {
+    flex-direction: column;
+  }
+  main {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
 }

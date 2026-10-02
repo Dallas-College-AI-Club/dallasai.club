@@ -10,7 +10,9 @@
 {{ if eq .Section "projects" }}
 <p><a href="{{ "club.html?mode=projects" | relURL }}">Explore the current projects and demos</a>.</p>
 {{ end }}
-{{ if .Pages }}
+{{ if and (eq .Section "events") (or site.Params.eventsAPIURL hugo.Data.club.EVENTS_API_URL) }}
+<p>Use the live calendar for current event details and RSVPs.</p>
+{{ else if .Pages }}
 <ul class="records">
   {{ range .Pages.ByDate.Reverse }}
   <li><a href="{{ .RelPermalink }}">{{ .Title }}</a>{{ with .Description }}<p>{{ . }}</p>{{ end }}</li>

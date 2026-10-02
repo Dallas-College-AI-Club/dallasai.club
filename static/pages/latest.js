@@ -2,6 +2,7 @@ import { desktopMarkup, renderViews, safeURL } from '../desktop/views.js';
 import { mountDesktop } from '../desktop/windows.js';
 import { mountReplay } from '../desktop/replay.js';
 import { buildLatest } from '../content/latest.js';
+import { EVENTS, refreshEvents, eventsFresh } from '../content/events.js';
 
 let cachedContent = null;
 
@@ -33,7 +34,8 @@ export function mountLatest(root) {
         const recordingChanged =
           id === 'major' &&
           (data.introSeconds !== current.introSeconds ||
-            JSON.stringify(data.recordings) !== JSON.stringify(current.recordings));
+            JSON.stringify(data.recordings) !==
+              JSON.stringify(current.recordings));
         if (view.body !== views[id].body || recordingChanged) {
           const saved = id === 'major' ? player?.getState() : null;
           if (id === 'major') player?.destroy();
@@ -42,14 +44,20 @@ export function mountLatest(root) {
           body.innerHTML = view.body;
           body.scrollTop = scroll;
           if (id === 'major')
-            player = mountReplay(section, data.recordings, data.introSeconds, saved);
+            player = mountReplay(
+              section,
+              data.recordings,
+              data.introSeconds,
+              saved,
+            );
         }
         if (view.menu !== views[id].menu) {
           const menu = section.querySelector('.r95-window-menu');
           menu.innerHTML = view.menu;
           menu.hidden = !view.menu;
         }
-        section.querySelector('.r95-statusbar > span').textContent = view.footer;
+        section.querySelector('.r95-statusbar > span').textContent =
+          view.footer;
       }
       // The Start menu keeps its focus and open state when club destinations change.
       for (const name of ['major', 'join']) {
@@ -65,7 +73,10 @@ export function mountLatest(root) {
     views = next;
     freshness(
       'Club content checked at ' +
-        new Date(data.checkedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+        new Date(data.checkedAt).toLocaleTimeString([], {
+          hour: 'numeric',
+          minute: '2-digit',
+        }),
     );
   }
   async function refresh() {
@@ -73,15 +84,29 @@ export function mountLatest(root) {
     request = new AbortController();
     const timeout = setTimeout(() => request?.abort(), 8000);
     try {
-      const response = await fetch('latest.json', { cache: 'no-store', signal: request.signal });
+      const response = await fetch('latest.json', {
+        cache: 'no-store',
+        signal: request.signal,
+      });
       if (!response.ok) throw new Error('Content unavailable');
       const data = await response.json();
       if (!Array.isArray(data.articles) || !Array.isArray(data.events))
         throw new Error('Invalid published content');
-      if (!disposed) render(buildLatest(new Date(), data));
+      await refreshEvents();
+      if (!disposed) {
+        render(buildLatest(new Date(), { ...data, events: EVENTS }));
+        if (!eventsFresh)
+          freshness(
+            'Showing the last available events. Reconnecting automatically.',
+            true,
+          );
+      }
     } catch {
       if (disposed) return;
-      freshness('Showing the last available club updates. Reconnecting automatically.', true);
+      freshness(
+        'Showing the last available club updates. Reconnecting automatically.',
+        true,
+      );
     } finally {
       clearTimeout(timeout);
       request = null;
@@ -104,12 +129,18 @@ export function mountLatest(root) {
     const url = new URL(anchor.href);
     if (url.origin !== location.origin || url.pathname !== '/club.html') return;
     event.preventDefault();
-    document.dispatchEvent(new CustomEvent('club:navigate', { detail: { href: url.href } }));
+    document.dispatchEvent(
+      new CustomEvent('club:navigate', { detail: { href: url.href } }),
+    );
   };
   root.addEventListener('click', navigate);
   document.addEventListener('visibilitychange', refresh);
   window.addEventListener('online', refresh);
-  render(cachedContent || buildLatest());
+  const updateEvents = () => {
+    if (!disposed) render(buildLatest());
+  };
+  document.addEventListener('club:events-updated', updateEvents);
+  render(buildLatest());
   refresh();
   return () => {
     disposed = true;
@@ -117,6 +148,7 @@ export function mountLatest(root) {
     request?.abort();
     root.removeEventListener('click', navigate);
     document.removeEventListener('visibilitychange', refresh);
+    document.removeEventListener('club:events-updated', updateEvents);
     window.removeEventListener('online', refresh);
     player?.destroy();
     stopDesktop?.();

@@ -15,6 +15,13 @@
     "api/admin.mjs": {
       "maxDuration": 60
     },
+    "api/events.mjs": {
+      "maxDuration": 30,
+      "includeFiles": "generated/events.json"
+    },
+    "api/auth.mjs": {
+      "maxDuration": 30
+    },
     "api/maintenance.mjs": {
       "maxDuration": 30
     }

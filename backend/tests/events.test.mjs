@@ -9,7 +9,13 @@ import {
   centralTime,
 } from '../lib/event-content.mjs';
 import { parseEventSource } from '../lib/event-registry.mjs';
-import { saveEvent, liveEvents, editorEvents } from '../lib/events.mjs';
+import {
+  saveEvent,
+  liveEvents,
+  editorEvents,
+  eventActivity,
+} from '../lib/events.mjs';
+import { activityTime } from '../admin/event-activity.js';
 import { eventHandler } from '../api/events.mjs';
 import { RequestError } from '../lib/errors.mjs';
 import { validate } from '../lib/validation.mjs';
@@ -52,6 +58,64 @@ beforeEach(() => db.exec('TRUNCATE club_forms.events CASCADE'));
 after(() => db.close());
 const save = (action, revision, event = draft, id = 'new-event') =>
   saveEvent(db, { action, id, revision, event }, actor, legacy);
+test('activity pages retain attribution in revision order without exposing content or mixing events', async () => {
+  await save('draft', 0);
+  await db.query(`INSERT INTO club_forms.event_history(event_id,revision,action,actor,content,created_at)
+    SELECT 'new-event',n,CASE WHEN n=54 THEN 'archive' WHEN n=55 THEN 'restore' ELSE 'draft' END,
+    'second-officer@example.com','{"private":"draft text"}'::jsonb,'2026-10-02T20:00:00Z'::timestamptz + n * interval '1 second'
+    FROM generate_series(2,55) n`);
+  await save('draft', 0, draft, 'another-event');
+  const first = await eventActivity(db, 'new-event');
+  assert.equal(first.activity.length, 50);
+  assert.equal(first.nextBefore, 6);
+  assert.deepEqual(
+    first.activity.slice(0, 2).map((r) => r.action),
+    ['restore', 'archive'],
+  );
+  assert.equal(first.activity[0].actor, 'second-officer@example.com');
+  assert.equal(
+    new Date(first.activity[0].created_at).toISOString(),
+    '2026-10-02T20:00:55.000Z',
+  );
+  assert.deepEqual(Object.keys(first.activity[0]).sort(), [
+    'action',
+    'actor',
+    'created_at',
+    'revision',
+  ]);
+  const older = await eventActivity(db, 'new-event', String(first.nextBefore));
+  assert.deepEqual(
+    older.activity.map((r) => r.revision),
+    [5, 4, 3, 2, 1],
+  );
+  assert.equal(older.nextBefore, null);
+  assert.equal(older.activity.at(-1).actor, actor);
+  assert.deepEqual(await eventActivity(db, 'legacy-event'), {
+    activity: [],
+    nextBefore: null,
+  });
+  for (const cursor of ['0', '-1', '1.5', '2147483648', 'abc', ''])
+    await assert.rejects(
+      eventActivity(db, 'new-event', cursor),
+      (e) => e.status === 400,
+    );
+  await assert.rejects(
+    eventActivity(db, 'invalid id'),
+    (e) => e.status === 400,
+  );
+});
+test('activity timestamps always use Central with the correct winter and summer offsets', () => {
+  assert.match(
+    activityTime('2026-01-02T20:00:00Z'),
+    /Jan 2, 2026, 2:00:00 PM CST/,
+  );
+  assert.match(
+    activityTime('2026-07-02T20:00:00Z'),
+    /Jul 2, 2026, 3:00:00 PM CDT/,
+  );
+  assert.equal(activityTime(null), '');
+  assert.equal(activityTime('not a date'), '');
+});
 test('archive preserves drafts and live history; edits remain archived; restore stays private until explicitly published', async () => {
   await save('publish', 0);
   await save('draft', 1, { ...draft, title: 'Unpublished improvement' });
@@ -307,6 +371,14 @@ test('public API exposes only live content; admin reads and writes require autho
   );
   assert.equal(JSON.stringify(publicResult.body).includes(actor), false);
   assert.equal((await call('GET', '/api/events?admin=1')).statusCode, 401);
+  assert.equal(
+    (await call('GET', '/api/events?admin=1&history=new-event')).statusCode,
+    401,
+  );
+  assert.equal(
+    (await call('GET', '/api/events?history=new-event')).statusCode,
+    401,
+  );
   const body = {
     action: 'publish',
     id: 'new-event',
@@ -315,6 +387,13 @@ test('public API exposes only live content; admin reads and writes require autho
   };
   assert.equal((await call('POST', '/api/events', body)).statusCode, 401);
   allowed = true;
+  const history = await call('GET', '/api/events?admin=1&history=new-event');
+  assert.equal(history.statusCode, 200);
+  assert.equal(history.headers['Cache-Control'], 'no-store');
+  assert.equal(history.headers['Access-Control-Allow-Origin'], undefined);
+  assert.equal(history.body.activity[0].actor, actor);
+  assert.equal(history.body.activity[0].action, 'draft');
+  assert.equal(history.body.activity[0].content, undefined);
   assert.equal(
     (await call('POST', '/api/events', body, 'https://evil.example'))
       .statusCode,

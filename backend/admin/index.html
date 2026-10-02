@@ -219,7 +219,24 @@
                 <div class="editor-heading">
                   <h3 id="event-heading" tabindex="-1">New event</h3>
                   <p id="event-state" class="hint"></p>
+                  <p id="event-updated" class="hint"></p>
                 </div>
+                <details id="event-activity" class="activity-panel" hidden>
+                  <summary>Activity history</summary>
+                  <p class="hint">
+                    Saved changes, newest first. All times are Central.
+                  </p>
+                  <ol id="event-activity-list" aria-label="Event activity"></ol>
+                  <p id="event-activity-status" class="hint" role="status"></p>
+                  <button
+                    id="event-activity-more"
+                    type="button"
+                    class="secondary"
+                    hidden
+                  >
+                    Load older activity
+                  </button>
+                </details>
                 <fieldset class="editor-section">
                   <legend><span>01</span> The essentials</legend>
                   <label

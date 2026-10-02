@@ -58,6 +58,15 @@ If someone else edits the same event, the save is rejected and your text remains
 in the form. Copy it, refresh the list, and review the latest saved version.
 The editor also warns before leaving unsaved changes.
 
+The editor shows **Last updated by** with the officer's account and the saved
+timestamp. **Activity history** lists draft saves, publication, unpublishing,
+archiving, and restoration, newest first. Every entry includes the actor and
+the date and time in Central Time (CST/CDT), including seconds. **Load older
+activity** retrieves earlier changes. Existing recorded history is included;
+events imported from the website have no office history until an officer saves
+a change. Previewing or typing without saving does not create a history entry.
+Activity is visible only to signed-in officers and clears on sign-out.
+
 The workshop **AI + Programming for Everyone: From Messy Data to Useful
 Answers** is intended to remain a private draft with blank date, time, and
 location until those details are decided. No workshop email is sent.

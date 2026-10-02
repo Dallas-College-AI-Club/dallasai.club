@@ -249,6 +249,31 @@ try {
   assert.equal(records[0].draft.agenda.length, 10);
   assert.equal(records[0].published, null);
   assert.equal(records[0].draft.images.length, 1);
+  assert.match(
+    await page.locator('#event-updated').textContent(),
+    /Last updated by officer@example.com/,
+  );
+  assert.equal(
+    await page.locator('#event-updated time').getAttribute('datetime'),
+    new Date(records[0].updated_at).toISOString(),
+  );
+  await page.getByText('Activity history', { exact: true }).click();
+  await page.locator('#event-activity-list li').waitFor();
+  assert.equal(
+    await page.locator('#event-activity-list strong').first().textContent(),
+    'Draft saved',
+  );
+  assert.equal(
+    await page
+      .locator('#event-activity-list .activity-actor')
+      .first()
+      .textContent(),
+    'By officer@example.com',
+  );
+  assert.match(
+    await page.locator('#event-activity-list time').first().textContent(),
+    /C[DS]T$/,
+  );
   assert.ok(
     await page.evaluate(
       async () => (await document.fonts.load('14px Geist')).length > 0,
@@ -485,6 +510,13 @@ try {
     await page.locator('#archived-events').getAttribute('aria-pressed'),
     'true',
   );
+  if (!(await page.locator('#event-activity').evaluate((el) => el.open)))
+    await page.getByText('Activity history', { exact: true }).click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector('#event-activity-list strong')?.textContent ===
+      'Archived',
+  );
   assert.equal(
     await page
       .getByRole('button', { name: 'Publish event', exact: true })
@@ -514,6 +546,17 @@ try {
       exact: true,
     })
     .waitFor();
+  await page.getByText('Activity history', { exact: true }).click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector('#event-activity-list strong')?.textContent ===
+      'Draft saved',
+  );
+  assert.ok(
+    (
+      await page.locator('#event-activity-list strong').allTextContents()
+    ).includes('Archived'),
+  );
   await page
     .getByRole('button', { name: 'Restore as draft', exact: true })
     .click();
@@ -526,6 +569,11 @@ try {
   assert.equal(
     await page.locator('#active-events').getAttribute('aria-pressed'),
     'true',
+  );
+  await page.waitForFunction(
+    () =>
+      document.querySelector('#event-activity-list strong')?.textContent ===
+      'Restored as draft',
   );
   assert.equal(
     await page.locator('[name="title"]').inputValue(),
@@ -605,6 +653,8 @@ try {
     .getByRole('button', { name: 'Send sign-in code', exact: true })
     .waitFor();
   assert.equal(await page.locator('#event-list').textContent(), '');
+  assert.equal(await page.locator('#event-activity-list').textContent(), '');
+  assert.equal(await page.locator('#event-updated').textContent(), '');
   await page
     .getByLabel('Email address', { exact: true })
     .fill('officer@example.com');

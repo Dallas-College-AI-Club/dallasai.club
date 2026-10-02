@@ -60,6 +60,27 @@ export async function editorEvents(db, originals) {
     }))
     .sort((a, b) => (b.draft.date || '').localeCompare(a.draft.date || ''));
 }
+export async function eventActivity(db, id, before = null) {
+  if (
+    !eventIdPattern.test(id || '') ||
+    (before !== null &&
+      (!/^[1-9]\d{0,9}$/.test(before) || Number(before) > 2147483647))
+  )
+    throw new RequestError(400, 'Reload the event activity and try again.');
+  const rows = (
+    await db.query(
+      `SELECT revision,action,actor,created_at FROM club_forms.event_history
+     WHERE event_id=$1 AND ($2::integer IS NULL OR revision<$2)
+     ORDER BY revision DESC LIMIT 51`,
+      [id, before === null ? null : Number(before)],
+    )
+  ).rows;
+  const activity = rows.slice(0, 50);
+  return {
+    activity,
+    nextBefore: rows.length > 50 ? activity.at(-1).revision : null,
+  };
+}
 export async function saveEvent(db, body, actor, originals) {
   if (
     !['draft', 'publish', 'unpublish', 'archive', 'restore'].includes(

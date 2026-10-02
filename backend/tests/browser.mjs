@@ -381,15 +381,17 @@ try {
       }
     };
   });
+  let testSignedIn = false;
   await admin.route('**/api/auth/**', (route) =>
     route.fulfill({
       contentType: 'application/json',
-      body: route.request().url().endsWith('get-session')
-        ? 'null'
-        : JSON.stringify({
-            success: true,
-            user: { email: 'officer@example.com', emailVerified: true },
-          }),
+      body:
+        route.request().url().endsWith('get-session') && !testSignedIn
+          ? 'null'
+          : JSON.stringify({
+              success: true,
+              user: { email: 'officer@example.com', emailVerified: true },
+            }),
     }),
   );
   const fixture = {
@@ -423,11 +425,46 @@ try {
     hasMore: false,
     events: [{ id: 'future', title: 'Upcoming workshop', date: '2099-01-01' }],
   };
+  const activity = [];
+  let failComment = false;
+  const postedComments = [];
   await admin.route('**/api/admin*', async (route) => {
+    if (new URL(route.request().url()).searchParams.has('history'))
+      return route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ activity, nextBefore: null }),
+      });
     if (route.request().method() === 'POST') {
       const body = route.request().postDataJSON();
+      if (body.action === 'comment') {
+        postedComments.push(body);
+        if (failComment)
+          return route.fulfill({
+            status: 503,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: 'Please retry.' }),
+          });
+        activity.unshift({
+          id: String(activity.length + 1),
+          actor: 'officer@example.com',
+          created_at: '2026-10-02T22:00:00Z',
+          action: 'comment-added',
+          comment: body.comment,
+        });
+        return route.fulfill({
+          contentType: 'application/json',
+          body: '{"comment":{}}',
+        });
+      }
       fixture.entries[0].review_status = body.status;
       fixture.counts[0].new = 0;
+      activity.unshift({
+        id: String(activity.length + 1),
+        actor: 'officer@example.com',
+        created_at: '2026-10-02T22:00:00Z',
+        action: 'review:' + body.status,
+        comment: null,
+      });
     }
     await route.fulfill({
       contentType: 'application/json',
@@ -444,6 +481,7 @@ try {
   await admin.getByLabel('Sign-in code', { exact: true }).fill('123456');
   await admin.getByRole('button', { name: 'Sign in', exact: true }).click();
   await admin.getByRole('heading', { name: 'Your club inbox' }).waitFor();
+  testSignedIn = true;
   await admin
     .locator('#counts')
     .getByText('The AI Review subscription', { exact: true })
@@ -473,9 +511,59 @@ try {
   await admin.locator('.badge').filter({ hasText: 'closed' }).waitFor();
   await admin.getByRole('button', { name: 'Mark new', exact: true }).click();
   await admin.locator('.badge').filter({ hasText: 'new' }).waitFor();
+  await admin.getByText('Activity & comments', { exact: true }).click();
+  await admin.getByText('Marked reviewed', { exact: true }).waitFor();
+  await admin.getByText('Marked closed', { exact: true }).waitFor();
+  await admin
+    .getByLabel('Add a private comment', { exact: true })
+    .fill('Follow up tomorrow. <img src=x onerror=alert(1)>');
+  await admin.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await admin.waitForFunction(
+    () => !document.querySelector('#refresh').disabled,
+  );
+  assert.equal(
+    await admin
+      .getByLabel('Add a private comment', { exact: true })
+      .inputValue(),
+    'Follow up tomorrow. <img src=x onerror=alert(1)>',
+  );
+  failComment = true;
+  await admin.getByRole('button', { name: 'Add comment', exact: true }).click();
+  await admin
+    .getByText('Could not confirm the comment was saved.', { exact: false })
+    .waitFor();
+  failComment = false;
+  await admin.getByRole('button', { name: 'Add comment', exact: true }).click();
+  await admin
+    .getByText('Comment saved with this entry.', { exact: false })
+    .waitFor();
+  await admin.locator('.officer-comment').waitFor();
+  assert.equal(postedComments[0].commentId, postedComments[1].commentId);
+  assert.equal(await admin.locator('.officer-comment img').count(), 0);
+  assert.equal(
+    await admin.locator('.officer-comment').textContent(),
+    'Follow up tomorrow. <img src=x onerror=alert(1)>',
+  );
+  assert.ok(
+    (await admin.locator('.submission-timeline').textContent()).includes(
+      '5:00:00 PM CDT',
+    ),
+  );
+  await admin.getByRole('button', { name: 'Mark closed', exact: true }).click();
+  await admin.locator('.badge').filter({ hasText: 'closed' }).waitFor();
+  await admin.locator('.officer-comment').waitFor();
+
   await admin
     .getByRole('button', { name: 'Enable browser alerts', exact: true })
     .click();
+  await admin.reload();
+  await admin.getByRole('heading', { name: 'Your club inbox' }).waitFor();
+  assert.equal(
+    await admin
+      .getByRole('button', { name: 'Turn off browser alerts', exact: true })
+      .getAttribute('aria-pressed'),
+    'true',
+  );
   fixture.counts[0].latest = '2099-01-01T00:00:00Z';
   await admin.getByRole('button', { name: 'Refresh', exact: true }).click();
   await admin.waitForFunction(() => window.testAlerts.length === 1);
@@ -497,6 +585,35 @@ try {
   assert.equal(
     await admin.locator('#office-theme, #office-font, #office-layout').count(),
     0,
+  );
+  await admin.reload();
+  await admin.getByRole('heading', { name: 'Your club inbox' }).waitFor();
+  assert.equal(
+    await admin
+      .getByRole('button', { name: 'Enable browser alerts', exact: true })
+      .getAttribute('aria-pressed'),
+    'false',
+  );
+  await admin.emulateMedia({ colorScheme: 'dark' });
+  await admin.waitForFunction(() =>
+    document
+      .querySelector('.office-logo')
+      .currentSrc.includes('club-office-logo-dark.png'),
+  );
+  await admin.waitForFunction(
+    () => document.querySelector('.office-logo').complete,
+  );
+  await admin.getByText('Activity & comments', { exact: true }).click();
+  await admin.locator('.officer-comment').waitFor();
+  await admin.screenshot({
+    path: path.join(screens, 'admin-dark.png'),
+    fullPage: true,
+  });
+  await admin.emulateMedia({ colorScheme: 'light' });
+  await admin.waitForFunction(() =>
+    document
+      .querySelector('.office-logo')
+      .currentSrc.endsWith('/club-office-logo.png'),
   );
   await admin.screenshot({
     path: path.join(screens, 'admin-desktop.png'),

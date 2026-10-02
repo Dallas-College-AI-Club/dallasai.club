@@ -8,6 +8,10 @@ import { kinds, uuid } from '../lib/validation.mjs';
 import { liveEvents } from '../lib/events.mjs';
 import { upcomingEvents, inboxFilter } from '../lib/inbox.mjs';
 import { submissionsCSV } from '../lib/submission-export.mjs';
+import {
+  submissionActivity,
+  addSubmissionComment,
+} from '../lib/submission-activity.mjs';
 export { csvCell } from '../lib/submission-export.mjs';
 export function adminHandler({
   authorize = requireAdmin,
@@ -21,6 +25,16 @@ export function adminHandler({
       const db = getDatabase();
       const url = new URL(req.url, 'https://admin.invalid');
       if (req.method === 'GET') {
+        if (url.searchParams.has('history'))
+          return send(
+            res,
+            200,
+            await submissionActivity(
+              db,
+              url.searchParams.get('history'),
+              url.searchParams.get('before'),
+            ),
+          );
         if (url.searchParams.has('attachment')) {
           const id = url.searchParams.get('attachment');
           if (!uuid.test(id))
@@ -109,7 +123,11 @@ export function adminHandler({
       if (req.method !== 'POST')
         throw new RequestError(405, 'Method not allowed.');
       adminOrigin(req);
-      const body = await jsonBody(req, 2048);
+      const body = await jsonBody(req, 32768);
+      if (body.action === 'comment') {
+        const comment = await addSubmissionComment(db, body, user.email);
+        return send(res, 200, { comment });
+      }
       if (
         body.action !== 'review' ||
         !uuid.test(body.id || '') ||

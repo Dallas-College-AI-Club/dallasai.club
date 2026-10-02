@@ -11,18 +11,29 @@
       rel="icon"
       type="image/png"
       href="/admin/assets/club-office-logo.png"
+      media="(prefers-color-scheme: light)"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      href="/admin/assets/club-office-logo-dark.png"
+      media="(prefers-color-scheme: dark)"
     />
   </head>
   <body>
     <header class="app-header">
       <a class="brand" href="https://dallasai.club"
-        ><img
-          class="office-logo"
-          src="/admin/assets/club-office-logo.png"
-          width="88"
-          height="88"
-          alt=""
-        />
+        ><picture
+          ><source
+            srcset="/admin/assets/club-office-logo-dark.png"
+            media="(prefers-color-scheme: dark)" />
+          <img
+            class="office-logo"
+            src="/admin/assets/club-office-logo.png"
+            width="88"
+            height="88"
+            alt=""
+        /></picture>
         <span>Dallas College AI Club</span></a
       >
       <span class="workspace-label">/ &nbsp; Club office</span

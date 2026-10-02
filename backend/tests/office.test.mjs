@@ -7,6 +7,7 @@ import sharp from 'sharp';
 import { PGlite } from '@electric-sql/pglite';
 import { eventHandler } from '../api/events.mjs';
 import { adminHandler } from '../api/admin.mjs';
+import { addSubmissionComment } from '../lib/submission-activity.mjs';
 import { RequestError } from '../lib/errors.mjs';
 import { submit } from '../lib/submissions.mjs';
 import { upcomingEvents } from '../lib/inbox.mjs';
@@ -53,6 +54,7 @@ before(async () => {
     '006_event_editor.sql',
     '007_office_tools.sql',
     '008_event_archive.sql',
+    '009_submission_comments.sql',
   ])
     await db.exec(
       await readFile(new URL('../' + file, import.meta.url), 'utf8'),
@@ -526,4 +528,186 @@ test('reviewing, closing and reopening keep the submission and only change its r
     )
   ).rows.map((r) => r.action);
   assert.deepEqual(actions, ['review:reviewed', 'review:closed', 'review:new']);
+});
+
+test('private comments persist author, time and text separately; retries do not duplicate comments or history', async () => {
+  const row = await submit(
+    db,
+    entry('question', { subject: 'Question', message: 'Hello' }),
+    events,
+  );
+  const body = {
+    action: 'comment',
+    id: row.id,
+    commentId: randomUUID(),
+    comment: '  I will follow up.\n안녕하세요 <img src=x onerror=alert(1)>  ',
+    author_email: 'spoof@example.com',
+    created_at: '1999-01-01',
+  };
+  assert.equal((await request('/api/admin', body, false)).status, 401);
+  const start = Date.now();
+  const response = await request('/api/admin', body);
+  assert.equal(response.status, 200);
+  const comment = (await response.json()).comment;
+  assert.equal(comment.author_email, 'admin@example.com');
+  assert.equal(comment.body, body.comment.trim());
+  assert.ok(Date.parse(comment.created_at) >= start - 1000);
+  assert.equal((await request('/api/admin', body)).status, 200);
+  assert.equal(
+    (await db.query('SELECT * FROM club_forms.entry_comments')).rows.length,
+    1,
+  );
+  assert.equal(
+    (
+      await db.query(
+        "SELECT * FROM club_forms.audit WHERE action='comment-added' AND entry_id=$1",
+        [row.id],
+      )
+    ).rows.length,
+    1,
+  );
+  assert.equal(
+    (await request('/api/admin', { ...body, comment: 'Different text' }))
+      .status,
+    409,
+  );
+  assert.equal(
+    (
+      await request('/api/admin', {
+        ...body,
+        commentId: randomUUID(),
+        comment: ' ',
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request('/api/admin', {
+        ...body,
+        commentId: randomUUID(),
+        comment: 'x'.repeat(5001),
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request('/api/admin', {
+        ...body,
+        id: randomUUID(),
+        commentId: randomUUID(),
+      })
+    ).status,
+    404,
+  );
+  assert.equal(
+    (await request('/api/admin?history=' + row.id, null, false)).status,
+    401,
+  );
+  for (const status of ['closed', 'new'])
+    await request('/api/admin', { action: 'review', id: row.id, status });
+  const history = await (await request('/api/admin?history=' + row.id)).json();
+  assert.deepEqual(
+    history.activity.map((r) => r.action),
+    ['review:new', 'review:closed', 'comment-added'],
+  );
+  assert.equal(history.activity[2].comment, comment.body);
+  assert.equal(history.activity[2].actor, 'admin@example.com');
+  const stored = (
+    await db.query(
+      'SELECT entry_id,author_email,created_at,body FROM club_forms.entry_comments',
+    )
+  ).rows[0];
+  assert.equal(stored.entry_id, row.id);
+  assert.equal(stored.author_email, 'admin@example.com');
+  assert.equal(stored.body, comment.body);
+  assert.equal(
+    (await db.query('SELECT * FROM club_forms.outbox')).rows.length,
+    0,
+  );
+  const blocked = await fetch(origin + '/api/admin', {
+    method: 'POST',
+    headers: {
+      'x-test-admin': 'yes',
+      Origin: 'https://untrusted.invalid',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ ...body, commentId: randomUUID() }),
+  });
+  assert.equal(blocked.status, 403);
+});
+test('submission activity includes historical actions and paginates without mixing entries', async () => {
+  const row = await submit(
+    db,
+    entry('question', { subject: 'First', message: 'First' }),
+    events,
+  );
+  const other = await submit(
+    db,
+    entry('question', { subject: 'Other', message: 'Other' }),
+    events,
+  );
+  for (let i = 0; i < 55; i++)
+    await db.query(
+      "INSERT INTO club_forms.audit(actor,entry_id,action) VALUES($1,$2,'review:reviewed')",
+      ['officer-' + i + '@example.com', row.id],
+    );
+  await db.query(
+    "INSERT INTO club_forms.audit(actor,entry_id,action) VALUES('other@example.com',$1,'download-attachment')",
+    [other.id],
+  );
+  const first = await (await request('/api/admin?history=' + row.id)).json();
+  assert.equal(first.activity.length, 50);
+  const second = await (
+    await request(
+      '/api/admin?history=' + row.id + '&before=' + first.nextBefore,
+    )
+  ).json();
+  assert.equal(second.activity.length, 5);
+  assert.equal(second.nextBefore, null);
+  assert.equal(
+    new Set([...first.activity, ...second.activity].map((r) => r.id)).size,
+    55,
+  );
+  assert.ok(first.activity.every((r) => r.actor !== 'other@example.com'));
+  assert.equal(
+    (await request('/api/admin?history=' + row.id + '&before=oops')).status,
+    400,
+  );
+  assert.equal(
+    (await request('/api/admin?history=' + randomUUID())).status,
+    404,
+  );
+});
+test('comment and audit writes roll back together if activity recording fails', async () => {
+  const row = await submit(
+    db,
+    entry('question', { subject: 'Atomic', message: 'Hello' }),
+    events,
+  );
+  const failing = {
+    transaction: (run) =>
+      db.transaction((tx) =>
+        run({
+          query: (sql, values) => {
+            if (sql.startsWith('INSERT INTO club_forms.audit'))
+              throw Error('audit unavailable');
+            return tx.query(sql, values);
+          },
+        }),
+      ),
+  };
+  await assert.rejects(
+    addSubmissionComment(
+      failing,
+      { id: row.id, commentId: randomUUID(), comment: 'Do not partially save' },
+      'admin@example.com',
+    ),
+    /audit unavailable/,
+  );
+  assert.equal(
+    (await db.query('SELECT * FROM club_forms.entry_comments')).rows.length,
+    0,
+  );
 });

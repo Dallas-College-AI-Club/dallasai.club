@@ -865,3 +865,55 @@ input::file-selector-button {
     transition: none !important;
   }
 }
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #141419;
+    --surface: #1c1c24;
+    --text: #f1eff8;
+    --muted: #a7a5b8;
+    --accent: #a69bff;
+    --button-text: #19132e;
+    --line: #353442;
+    --selected: #2b2643;
+    --subtle: #22222d;
+    --notice: #382d18;
+    --notice-text: #ebc77f;
+    --success: #80d5b3;
+    --shadow: 0 4px 24px #0002;
+  }
+}
+.brand picture {
+  flex-shrink: 0;
+}
+.submission-activity {
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+}
+.submission-timeline {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+}
+.officer-comment {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--subtle);
+  color: var(--text);
+  margin: 6px 0 0;
+}
+.comment-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 20px;
+}
+.comment-form button {
+  justify-self: start;
+}
+.comment-form p {
+  margin: 0;
+}

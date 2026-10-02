@@ -71,7 +71,7 @@ export function eventHandler({
           200,
           await addEventType(getDatabase(), body.name, user.email, originals),
         );
-      if (body.action !== 'unpublish')
+      if (!['unpublish', 'archive', 'restore'].includes(body.action))
         body.event = await validateEventAssets(
           getDatabase(),
           draftContent(body.event, body.action === 'publish'),

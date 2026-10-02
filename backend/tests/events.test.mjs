@@ -41,11 +41,64 @@ before(async () => {
   await db.exec(
     await readFile(new URL('../006_event_editor.sql', import.meta.url), 'utf8'),
   );
+  await db.exec(
+    await readFile(
+      new URL('../008_event_archive.sql', import.meta.url),
+      'utf8',
+    ),
+  );
 });
 beforeEach(() => db.exec('TRUNCATE club_forms.events CASCADE'));
 after(() => db.close());
 const save = (action, revision, event = draft, id = 'new-event') =>
   saveEvent(db, { action, id, revision, event }, actor, legacy);
+test('archive preserves drafts and live history; edits remain archived; restore stays private until explicitly published', async () => {
+  await save('publish', 0);
+  await save('draft', 1, { ...draft, title: 'Unpublished improvement' });
+  const archived = await save('archive', 2);
+  assert.ok(archived.archived_at);
+  assert.equal(archived.published, null);
+  assert.equal(archived.draft.title, 'Unpublished improvement');
+  assert.equal((await liveEvents(db, legacy)).length, 1);
+  await assert.rejects(save('publish', 3), (error) => error.status === 409);
+  await assert.rejects(save('restore', 2), (error) => error.status === 409);
+  const updated = await save('draft', 3, {
+    ...draft,
+    title: 'Edit while archived',
+  });
+  assert.ok(updated.archived_at);
+  assert.equal(updated.published, null);
+  const restored = await save('restore', 4);
+  assert.equal(restored.archived_at, null);
+  assert.equal(restored.published, null);
+  assert.equal(restored.draft.title, 'Edit while archived');
+  assert.equal((await liveEvents(db, legacy)).length, 1);
+  await assert.rejects(save('restore', 5), (error) => error.status === 409);
+  await save('publish', 5, restored.draft);
+  assert.equal((await liveEvents(db, legacy)).length, 2);
+  const history = (
+    await db.query(
+      'SELECT action,content FROM club_forms.event_history ORDER BY revision',
+    )
+  ).rows;
+  assert.deepEqual(
+    history.map((r) => r.action),
+    ['publish', 'draft', 'archive', 'draft', 'restore', 'publish'],
+  );
+  assert.equal(history[2].content.previousPublished.title, draft.title);
+});
+test('archiving an untouched legacy event suppresses the static event and supports restoration; missing events cannot be archived', async () => {
+  await save('archive', 0, undefined, 'legacy-event');
+  assert.deepEqual(await liveEvents(db, legacy), []);
+  assert.ok((await editorEvents(db, legacy))[0].archived_at);
+  const restored = await save('restore', 1, undefined, 'legacy-event');
+  assert.equal(restored.draft.title, draft.title);
+  assert.deepEqual(await liveEvents(db, legacy), []);
+  await save('publish', 2, restored.draft, 'legacy-event');
+  assert.equal((await liveEvents(db, legacy)).length, 1);
+  await assert.rejects(save('archive', 0), (error) => error.status === 404);
+  await assert.rejects(save('restore', 0), (error) => error.status === 404);
+});
 test('drafts stay private; editing a published event leaves live content unchanged until publish', async () => {
   await save('draft', 0);
   assert.deepEqual(

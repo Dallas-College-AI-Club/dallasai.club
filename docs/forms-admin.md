@@ -8,7 +8,7 @@ Open the protected backend `/admin/` page. New submissions appear with review st
 
 **Enable browser alerts** requests browser permission and shows a generic alert when the new count increases. The officer must keep the office tab open; browser throttling can delay background checks. New counts and an on-screen notice also update without notification permission. Browser alerts are optional and stop at sign-out. Email alerts remain disconnected; the UI states this explicitly. Neon login-code delivery is a separate service and does not send inbox alerts.
 
-**Appearance** changes only this office on the current browser: Garden, Blue, or Ink themes; sans serif, serif, or monospace fonts; comfortable, compact, or wide layouts. These preferences do not change the public website.
+The office uses the approved Studio appearance with locally served Geist typography and the Desk layout (event list beside the editor). Appearance controls and alternative themes, fonts, and layouts have been removed; old saved preferences no longer apply. The supplied black-on-white logo is used only in the office, including its sign-in page and favicon. The public website's branding is unchanged.
 
 ## How people submit
 

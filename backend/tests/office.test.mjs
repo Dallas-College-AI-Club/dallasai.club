@@ -11,6 +11,8 @@ import { RequestError } from '../lib/errors.mjs';
 import { submit } from '../lib/submissions.mjs';
 import { upcomingEvents } from '../lib/inbox.mjs';
 import { uploadEventImage } from '../lib/event-assets.mjs';
+import { eventTypes, addEventType } from '../lib/event-assets.mjs';
+import { editorEvents, liveEvents } from '../lib/events.mjs';
 let db, server, origin;
 const blobs = new Map();
 const storage = {
@@ -50,6 +52,7 @@ before(async () => {
     '005_screen_confirmations.sql',
     '006_event_editor.sql',
     '007_office_tools.sql',
+    '008_event_archive.sql',
   ])
     await db.exec(
       await readFile(new URL('../' + file, import.meta.url), 'utf8'),
@@ -84,6 +87,49 @@ beforeEach(async () => {
 after(async () => {
   await new Promise((resolve) => server.close(resolve));
   await db.close();
+});
+test('legacy event types collapse into four groups without rewriting event details or duplicating aliases', async () => {
+  const originals = [
+    'Club event',
+    'Club meeting',
+    'Conversation',
+    'Hackathon',
+    'Presentation',
+    'Project meeting',
+    'Project workshop',
+    'Skills session',
+    'User testing',
+    'Workshop',
+  ].map((category, n) => ({
+    id: 'old-' + n,
+    category,
+    title: 'Original ' + n,
+    date: '2020-01-01',
+  }));
+  assert.deepEqual(await eventTypes(db, originals), [
+    'Workshop',
+    'Meeting',
+    'Talk',
+    'Hackathon',
+  ]);
+  const types = await addEventType(
+    db,
+    ' PROJECT   WORKSHOP ',
+    'admin',
+    originals,
+  );
+  assert.equal(types.selected, 'Workshop');
+  assert.equal(
+    (await db.query('SELECT * FROM club_forms.event_types')).rows.length,
+    0,
+  );
+  const edited = await editorEvents(db, originals);
+  assert.equal(edited.find((r) => r.id === 'old-4').draft.category, 'Talk');
+  assert.equal(
+    (await liveEvents(db, originals)).find((r) => r.id === 'old-5').category,
+    'Meeting',
+  );
+  assert.equal(originals[4].category, 'Presentation');
 });
 test('event groups reject free text on save and reuse one canonical name across case and whitespace', async () => {
   let response = await request('/api/events', {
@@ -198,7 +244,7 @@ test('uploaded images are decoded, resized, private in drafts, public only while
   assert.equal(
     (
       await request('/api/events', {
-        action: 'unpublish',
+        action: 'archive',
         id: 'illustrated',
         revision: 2,
       })
@@ -208,6 +254,36 @@ test('uploaded images are decoded, resized, private in drafts, public only while
   assert.equal(
     (await request('/api/events?image=' + image.id, null, false)).status,
     401,
+  );
+  assert.equal((await request('/api/events?image=' + image.id)).status, 200);
+  assert.equal(
+    (
+      await request('/api/events', {
+        action: 'restore',
+        id: 'illustrated',
+        revision: 3,
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await request('/api/events?image=' + image.id, null, false)).status,
+    401,
+  );
+  assert.equal(
+    (
+      await request('/api/events', {
+        action: 'publish',
+        id: 'illustrated',
+        revision: 4,
+        event,
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (await request('/api/events?image=' + image.id, null, false)).status,
+    200,
   );
 });
 test('image uploads reject unauthenticated clients and non-images; failed storage metadata removes the orphan', async () => {

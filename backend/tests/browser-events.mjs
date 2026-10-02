@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { PGlite } from '@electric-sql/pglite';
 import { eventHandler } from '../api/events.mjs';
 import { RequestError } from '../lib/errors.mjs';
+import { submit } from '../lib/submissions.mjs';
+import { liveEvents } from '../lib/events.mjs';
 import sharp from 'sharp';
 const backend = fileURLToPath(new URL('../', import.meta.url));
 const site = path.resolve(backend, '../public');
@@ -25,6 +27,9 @@ for (const file of [
   await db.exec(await readFile(new URL('../' + file, import.meta.url), 'utf8'));
 await db.exec(
   await readFile(new URL('../006_event_editor.sql', import.meta.url), 'utf8'),
+);
+await db.exec(
+  await readFile(new URL('../008_event_archive.sql', import.meta.url), 'utf8'),
 );
 const authorized = (req) => {
   if (req.headers.cookie?.includes('test-officer=signed-in'))
@@ -156,6 +161,18 @@ try {
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('dialog', (d) => d.accept());
   await page.goto(origin + '/admin/#events');
+  // Old appearance choices must fall back cleanly to the new design.
+  await page.evaluate(() =>
+    localStorage.setItem(
+      'club-office-appearance',
+      JSON.stringify({ theme: 'garden', font: 'serif', layout: 'comfortable' }),
+    ),
+  );
+  await page.reload();
+  await page.waitForFunction(
+    () => document.documentElement.dataset.theme === 'studio',
+  );
+  assert.equal(await page.locator('html').getAttribute('data-font'), 'geist');
   await page
     .getByLabel('Email address', { exact: true })
     .fill('officer@example.com');
@@ -174,10 +191,14 @@ try {
   await page.getByLabel('Sign-in code', { exact: true }).fill('123456');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.getByText('Appearance', { exact: true }).click();
-  await page.locator('#office-theme').selectOption('blue');
-  await page.locator('#office-font').selectOption('serif');
-  await page.locator('#office-layout').selectOption('wide');
+  await page.locator('#office-theme').selectOption('studio');
+  await page.locator('#office-font').selectOption('dm');
+  await page.locator('#office-layout').selectOption('desk');
   await page.getByRole('button', { name: 'New event', exact: true }).click();
+  assert.deepEqual(
+    await page.locator('[name="category"] option').allTextContents(),
+    ['Workshop', 'Meeting', 'Talk', 'Hackathon'],
+  );
   for (const [key, value] of Object.entries(workshop)) {
     const input = page.locator('#event-form [name="' + key + '"]');
     if (key === 'category') await input.selectOption(value);
@@ -200,13 +221,11 @@ try {
   })
     .png()
     .toBuffer();
-  await page
-    .locator('#event-image-upload')
-    .setInputFiles({
-      name: 'workshop.png',
-      mimeType: 'image/png',
-      buffer: image,
-    });
+  await page.locator('#event-image-upload').setInputFiles({
+    name: 'workshop.png',
+    mimeType: 'image/png',
+    buffer: image,
+  });
   await page
     .getByText(
       'Uploaded. Add a description for each image, then save your draft.',
@@ -228,6 +247,37 @@ try {
   assert.equal(records[0].draft.agenda.length, 10);
   assert.equal(records[0].published, null);
   assert.equal(records[0].draft.images.length, 1);
+  for (const [theme, font, layout, family] of [
+    ['studio', 'geist', 'desk', 'Geist'],
+    ['midnight', 'space', 'gallery', 'Space Grotesk'],
+    ['clay', 'dm', 'focus', 'DM Sans'],
+  ]) {
+    await page.locator('#office-theme').selectOption(theme);
+    await page.locator('#office-font').selectOption(font);
+    await page.locator('#office-layout').selectOption(layout);
+    assert.ok(
+      await page.evaluate(
+        async (family) =>
+          (await document.fonts.load('14px "' + family + '"')).length > 0,
+        family,
+      ),
+    );
+    await page.evaluate(() => scrollTo(0, 0));
+    await page.screenshot({
+      path: path.join(screens, 'events-' + theme + '.png'),
+    });
+    await page.setViewportSize({ width: 320, height: 820 });
+    assert.ok(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      theme + ' overflows',
+    );
+    await page.setViewportSize({ width: 1365, height: 950 });
+  }
+  await page.locator('#office-theme').selectOption('studio');
+  await page.locator('#office-font').selectOption('geist');
+  await page.locator('#office-layout').selectOption('desk');
   assert.ok(
     (await page.locator('.event-list-group').first().textContent()).includes(
       'Drafts',
@@ -263,7 +313,7 @@ try {
     .getByRole('button', { name: 'Close preview', exact: true })
     .click();
   await page.reload();
-  assert.equal(await page.locator('html').getAttribute('data-theme'), 'blue');
+  assert.equal(await page.locator('html').getAttribute('data-theme'), 'studio');
   await page
     .getByRole('button', {
       name: new RegExp(workshop.title.replace(/[+]/g, '\\+')),
@@ -418,6 +468,104 @@ try {
       { exact: true },
     )
     .waitFor();
+  // Save an actual RSVP in the isolated database, then exercise the full archive cycle.
+  const registration = await submit(
+    db,
+    {
+      kind: 'rsvp',
+      name: 'Test student',
+      email: 'student@example.com',
+      consent: true,
+      requestId: crypto.randomUUID(),
+      eventId: id,
+    },
+    [{ ...(await liveEvents(db, []))[0], registrationOpen: true }],
+  );
+  await page
+    .getByRole('button', { name: 'Archive event', exact: true })
+    .click();
+  await page
+    .getByText(
+      'Archived. Content, images, and RSVPs are kept. You can edit this event here or restore it as a draft.',
+      { exact: true },
+    )
+    .waitFor();
+  assert.equal(
+    await page.locator('#archived-events').getAttribute('aria-pressed'),
+    'true',
+  );
+  assert.equal(
+    await page
+      .getByRole('button', { name: 'Publish event', exact: true })
+      .isVisible(),
+    false,
+  );
+  assert.equal(
+    (await (await fetch(origin + '/api/events')).json()).events.length,
+    0,
+  );
+  const imageId = records[0].draft.images[0].id;
+  assert.equal(
+    (await fetch(origin + '/api/events?image=' + imageId)).status,
+    401,
+  );
+  await page.reload();
+  await page.locator('#archived-events').click();
+  await page.locator('.event-choice').click();
+  assert.equal(
+    await page.locator('[name="title"]').inputValue(),
+    workshop.title,
+  );
+  await page.locator('[name="title"]').fill('Saved in the archive');
+  await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+  await page
+    .getByText('Changes saved. This event is still archived and private.', {
+      exact: true,
+    })
+    .waitFor();
+  await page
+    .getByRole('button', { name: 'Restore as draft', exact: true })
+    .click();
+  await page
+    .getByText(
+      'Restored as a draft. Review your details, then publish when ready.',
+      { exact: true },
+    )
+    .waitFor();
+  assert.equal(
+    await page.locator('#active-events').getAttribute('aria-pressed'),
+    'true',
+  );
+  assert.equal(
+    await page.locator('[name="title"]').inputValue(),
+    'Saved in the archive',
+  );
+  assert.equal(
+    (await (await fetch(origin + '/api/events')).json()).events.length,
+    0,
+  );
+  assert.equal(
+    (
+      await db.query('SELECT id FROM club_forms.entries WHERE id=$1', [
+        registration.id,
+      ])
+    ).rows[0].id,
+    registration.id,
+  );
+  await page.locator('[name="title"]').fill(workshop.title);
+  await page
+    .getByRole('button', { name: 'Publish event', exact: true })
+    .click();
+  await page
+    .getByText(
+      'Published. The website will show this event on its next refresh.',
+      { exact: true },
+    )
+    .waitFor();
+  assert.equal(
+    (await fetch(origin + '/api/events?image=' + imageId)).status,
+    200,
+  );
   await page.setViewportSize({ width: 320, height: 820 });
   assert.ok(
     await page.evaluate(
@@ -477,7 +625,7 @@ try {
   await page.locator('.event-choice').waitFor();
   assert.deepEqual(errors, []);
   console.log(
-    'Passed: workshop entry, blank-date draft preview, persistence, publish, public refresh, safe rendering, retained RSVP input, conflict recovery, closed RSVPs, unpublish, sign-out, and mobile layouts.',
+    'Passed: four event types, modern fonts/themes/layouts, workshop entry, private image preview, persistence, publish, public refresh, safe rendering, conflict recovery, archived editing, reload, restore as draft, preserved RSVPs/images, republish, unpublish, sign-out, and mobile layouts.',
   );
 } finally {
   await browser.close();

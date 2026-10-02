@@ -9,15 +9,19 @@
     <link rel="stylesheet" href="/admin/style.css" />
   </head>
   <body>
-    <header>
-      <a href="https://dallasai.club">Dallas College AI Club</a
-      ><span>Club office</span><button id="signout" hidden>Sign out</button>
+    <header class="app-header">
+      <a class="brand" href="https://dallasai.club"
+        ><span class="brand-mark" aria-hidden="true">ai.</span
+        ><span>Dallas College AI Club</span></a
+      >
+      <span class="workspace-label">/ &nbsp; Club office</span
+      ><button id="signout" class="secondary" hidden>Sign out</button>
     </header>
     <main>
       <p id="session-loading" role="status">Checking your sign-in…</p>
       <section id="login" hidden>
         <p class="eyebrow">FOR CLUB OFFICERS</p>
-        <h1>A small place to keep things moving.</h1>
+        <h1>Good things start here.</h1>
         <p>Enter your club officer email. We will send you a sign-in code.</p>
         <form id="login-form">
           <label
@@ -60,36 +64,37 @@
         </p>
       </section>
       <section id="office" hidden>
-        <div class="heading">
+        <div class="office-intro">
           <div>
-            <p class="eyebrow">DALLAS COLLEGE AI CLUB</p>
+            <p class="eyebrow">THE OFFICER WORKSPACE</p>
             <h1>Your club office</h1>
+            <p class="intro-copy">A little planning. A lot of possibility.</p>
           </div>
+          <p id="identity"></p>
         </div>
-        <p id="identity"></p>
         <details class="office-preferences">
           <summary>Appearance</summary>
           <p class="hint">Personal choices for this office on this browser.</p>
           <div class="preference-fields">
             <label
               >Theme<select id="office-theme">
-                <option value="garden">Garden</option>
-                <option value="blue">Blue</option>
-                <option value="ink">Ink</option>
+                <option value="studio">Studio · cool &amp; bright</option>
+                <option value="midnight">Midnight · charcoal &amp; lime</option>
+                <option value="clay">Clay · warm &amp; soft</option>
               </select></label
             >
             <label
               >Font<select id="office-font">
-                <option value="sans">Clear sans serif</option>
-                <option value="serif">Book serif</option>
-                <option value="mono">Monospace</option>
+                <option value="geist">Geist · clean</option>
+                <option value="dm">DM Sans · rounded</option>
+                <option value="space">Space Grotesk · expressive</option>
               </select></label
             >
             <label
               >Layout<select id="office-layout">
-                <option value="comfortable">Comfortable</option>
-                <option value="compact">Compact</option>
-                <option value="wide">Wide workspace</option>
+                <option value="desk">Desk · list beside editor</option>
+                <option value="gallery">Gallery · cards above editor</option>
+                <option value="focus">Focus · narrow workspace</option>
               </select></label
             >
           </div>
@@ -187,17 +192,27 @@
         <section id="events-pane" aria-label="Event editor" hidden>
           <div class="heading">
             <div>
-              <h2>Plan your next event</h2>
+              <p class="eyebrow">MAKE SOMETHING HAPPEN</p>
+              <h2>Events</h2>
               <p>
-                Save a draft while you plan. Publish when it is ready for the
-                club.
+                From first idea to the club calendar. Draft, preview, publish.
               </p>
             </div>
-            <button id="new-event">New event</button>
+            <button id="new-event">
+              <span aria-hidden="true">＋ </span>New event
+            </button>
           </div>
+          <nav class="event-views" aria-label="Event collection">
+            <button id="active-events" aria-pressed="true">
+              Active <span id="active-event-count">0</span>
+            </button>
+            <button id="archived-events" aria-pressed="false">
+              Archived <span id="archived-event-count">0</span>
+            </button>
+          </nav>
           <p id="event-status" role="status" aria-live="polite"></p>
           <div class="event-workspace">
-            <aside>
+            <aside class="event-library" aria-label="Event library">
               <label
                 >Find an event<input
                   id="event-search"
@@ -208,107 +223,124 @@
               <div id="event-list"></div>
             </aside>
             <div>
-              <p id="event-empty">
-                Choose an event to edit, or create a new one.
-              </p>
-              <form id="event-form" hidden>
-                <h3 id="event-heading" tabindex="-1">New event</h3>
-                <p id="event-state" class="hint"></p>
-                <label
-                  >Event title<input name="title" maxlength="160" required
-                /></label>
-                <label
-                  >Type<select name="category" required>
-                    <option>Club event</option>
-                  </select></label
-                >
-                <details>
-                  <summary>Manage event types</summary>
-                  <p class="hint">
-                    Shared by all admins. Use an existing type when possible.
-                  </p>
-                  <label
-                    >New type name<input
-                      id="new-type-name"
-                      maxlength="80" /></label
-                  ><button id="add-type" type="button" class="secondary">
-                    Add type
-                  </button>
-                  <p id="type-status" role="status"></p>
-                </details>
+              <div id="event-empty" class="empty-state">
+                <span class="empty-symbol" aria-hidden="true">✳</span>
+                <h3>A place for your next idea.</h3>
+                <p>Choose an event to edit, or create a new one.</p>
                 <p class="hint">
-                  All times are Central. Leave the time blank if it is not
-                  confirmed.
+                  Archived events stay here for whenever you need them again.
                 </p>
-                <div class="event-fields">
-                  <label>Date<input name="date" type="date" /></label>
-                  <label
-                    >Start time<input name="startTime" type="time"
-                  /></label>
-                  <label
-                    >End date (optional)<input name="endDate" type="date"
-                  /></label>
-                  <label
-                    >End time (optional)<input name="endTime" type="time"
-                  /></label>
+              </div>
+              <form id="event-form" hidden>
+                <div class="editor-heading">
+                  <h3 id="event-heading" tabindex="-1">New event</h3>
+                  <p id="event-state" class="hint"></p>
                 </div>
-                <label
-                  >Location<input
-                    name="location"
-                    maxlength="300"
-                    placeholder="Campus, room, or online"
-                /></label>
-                <label
-                  >Online meeting link (optional)<input
-                    name="meetingUrl"
-                    type="url"
-                    maxlength="2000"
-                    placeholder="https://…"
-                /></label>
-                <label
-                  >Description<textarea
-                    name="summary"
-                    maxlength="3000"
-                    rows="5"
-                  ></textarea>
-                </label>
-                <label
-                  >Who is this for?<textarea
-                    name="targetAudience"
-                    maxlength="1000"
-                    rows="2"
-                  ></textarea>
-                </label>
-                <label
-                  >Learning outcomes<textarea
-                    name="learningOutcomes"
-                    rows="5"
-                    placeholder="One outcome per line"
-                  ></textarea>
-                </label>
-                <label
-                  >Agenda<textarea
-                    name="agenda"
-                    rows="4"
-                    placeholder="One item per line"
-                  ></textarea>
-                </label>
-                <label
-                  >What to bring or prepare<textarea
-                    name="preparation"
-                    rows="3"
-                    placeholder="One item per line"
-                  ></textarea>
-                </label>
-                <label class="checkbox"
-                  ><input
-                    name="registrationOpen"
-                    type="checkbox"
-                    checked
-                  />Accept RSVPs</label
-                >
-                <fieldset class="image-manager">
-                  <legend>Event images</legend>
+                <fieldset class="editor-section">
+                  <legend><span>01</span> The essentials</legend>
+                  <label
+                    >Event title<input name="title" maxlength="160" required
+                  /></label>
+                  <label
+                    >Type<select name="category" required>
+                      <option>Workshop</option>
+                    </select></label
+                  >
+                  <details>
+                    <summary>Manage event types</summary>
+                    <p class="hint">
+                      Workshop, Meeting, Talk, or Hackathon covers most events.
+                      Only add a shared group when none of these fits.
+                    </p>
+                    <label
+                      >New type name<input
+                        id="new-type-name"
+                        maxlength="80" /></label
+                    ><button id="add-type" type="button" class="secondary">
+                      Add type
+                    </button>
+                    <p id="type-status" role="status"></p>
+                  </details>
+                </fieldset>
+                <fieldset class="editor-section">
+                  <legend><span>02</span> When &amp; where</legend>
+                  <p class="hint">
+                    All times are Central. Leave the time blank if it is not
+                    confirmed.
+                  </p>
+                  <div class="event-fields">
+                    <label>Date<input name="date" type="date" /></label>
+                    <label
+                      >Start time<input name="startTime" type="time"
+                    /></label>
+                    <label
+                      >End date (optional)<input name="endDate" type="date"
+                    /></label>
+                    <label
+                      >End time (optional)<input name="endTime" type="time"
+                    /></label>
+                  </div>
+                  <label
+                    >Location<input
+                      name="location"
+                      maxlength="300"
+                      placeholder="Campus, room, or online"
+                  /></label>
+                  <label
+                    >Online meeting link (optional)<input
+                      name="meetingUrl"
+                      type="url"
+                      maxlength="2000"
+                      placeholder="https://…"
+                  /></label>
+                  <label class="checkbox"
+                    ><input
+                      name="registrationOpen"
+                      type="checkbox"
+                      checked
+                    />Accept RSVPs</label
+                  >
+                </fieldset>
+                <fieldset class="editor-section">
+                  <legend><span>03</span> Tell the story</legend>
+                  <label
+                    >Description<textarea
+                      name="summary"
+                      maxlength="3000"
+                      rows="5"
+                    ></textarea>
+                  </label>
+                  <label
+                    >Who is this for?<textarea
+                      name="targetAudience"
+                      maxlength="1000"
+                      rows="2"
+                    ></textarea>
+                  </label>
+                  <label
+                    >Learning outcomes<textarea
+                      name="learningOutcomes"
+                      rows="5"
+                      placeholder="One outcome per line"
+                    ></textarea>
+                  </label>
+                  <label
+                    >Agenda<textarea
+                      name="agenda"
+                      rows="4"
+                      placeholder="One item per line"
+                    ></textarea>
+                  </label>
+                  <label
+                    >What to bring or prepare<textarea
+                      name="preparation"
+                      rows="3"
+                      placeholder="One item per line"
+                    ></textarea>
+                  </label>
+                </fieldset>
+                <fieldset class="image-manager editor-section">
+                  <legend><span>04</span> Event images</legend>
                   <p class="hint">
                     Up to three JPG, PNG, or WebP images, under 2 MB each.
                     Images stay private until the event is published.
@@ -323,7 +355,7 @@
                   <div id="event-images"></div>
                   <p id="image-status" role="status"></p>
                 </fieldset>
-                <div class="event-actions">
+                <div class="event-actions primary-actions">
                   <button
                     type="submit"
                     name="action"
@@ -344,7 +376,7 @@
                     Publish event
                   </button>
                 </div>
-                <div class="event-actions">
+                <div class="event-actions secondary-actions">
                   <button type="button" id="duplicate-event" class="secondary">
                     Duplicate event
                   </button>
@@ -359,6 +391,17 @@
                   <a id="view-event" target="_blank" rel="noopener" hidden
                     >View on website ↗</a
                   >
+                  <button
+                    type="button"
+                    id="archive-event"
+                    class="secondary"
+                    hidden
+                  >
+                    Archive event
+                  </button>
+                  <button type="button" id="restore-event" hidden>
+                    Restore as draft
+                  </button>
                 </div>
               </form>
               <article

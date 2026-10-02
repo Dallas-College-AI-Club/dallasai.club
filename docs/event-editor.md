@@ -21,13 +21,17 @@ entire event or only its changes are unpublished.
 Choose a shared **Type** from the dropdown. **Manage event types → Add type**
 adds a grouping for all officers. Case and extra spaces do not create duplicates.
 The server rejects unregistered free-text types.
+The standard groups are **Workshop, Meeting, Talk, and Hackathon**. Older club
+and project meetings map to Meeting; conversations and presentations to Talk;
+skills sessions, project workshops, and user testing to Workshop. Event details
+and original history remain intact. Adding an old label reuses its standard group.
 
 **Upload event images** accepts up to three still JPG, PNG, or WebP images, each
 under 2 MB and 25 megapixels. Images are decoded, resized to fit 1800 pixels,
 converted to WebP, and stripped of metadata. Add an image description before
 publishing. Removing an image from a draft does not alter the published event.
 Images remain private until referenced by a published event, and become private
-again on unpublish. Stored files remain available for edit history.
+again on unpublish or archive. Stored files remain available for edit history.
 
 - **Save draft** keeps changes private. A date is optional until publication.
 - **Preview** opens the actual public website in a private desktop/mobile preview,
@@ -40,6 +44,13 @@ again on unpublish. Stored files remain available for edit history.
 - **Unpublish** removes the event from the public calendar and prevents new
   registrations. Draft content, previous RSVPs, and edit history are retained.
 - **Duplicate event** starts a separate draft with the current details.
+- **Archive event** moves a saved event into **Archived** and removes it from
+  the public calendar. Save any current edits first. Content, images, RSVPs,
+  and revision history are retained. Archived events remain editable; saving
+  changes keeps them archived and private.
+- **Restore as draft** returns an archived event to **Active**, with the same
+  event ID and saved content. It remains private until **Publish event** is
+  selected. Existing RSVP records stay associated with the event.
 
 Public pages refresh events when opened, when returning to the tab, and every
 minute. Saving a draft of a published event leaves the public version intact.
@@ -52,6 +63,12 @@ Answers** is intended to remain a private draft with blank date, time, and
 location until those details are decided. No workshop email is sent.
 
 ## Deployment and operations
+
+Apply `008_event_archive.sql` after migrations 006 and 007 and before deploying
+the archive interface. It adds `archived_at`, prevents an archived row from
+having published content, and permits archive/restore revision history. It
+does not delete or automatically archive any events. Keep this migration on
+rollback; any replacement API must also enforce the archived-state restriction.
 
 Apply `007_office_tools.sql` before deploying the office enhancements. It adds
 shared event types, image metadata and the question submission kind. It leaves
@@ -113,7 +130,8 @@ with `npx playwright install chromium`, then run
 The browser audit enters the supplied workshop through the actual editor
 against an isolated test database, checks draft persistence and blank-date
 preview, publishes only locally, and verifies safe display, RSVP input retention,
-conflict recovery, closed registration, unpublishing, mobile layouts, and
-sign-out/sign-in. Unit tests cover transactional history, validation, public
+conflict recovery, closed registration, archive/edit/restore/republish with
+retained images and RSVPs, unpublishing, all new fonts/themes/layouts at desktop
+and mobile widths, and sign-out/sign-in. Unit tests cover transactional history, validation, public
 versus private data, authorization, Central daylight-saving changes, and RSVPs.
 Live checks must not publish synthetic test events or send emails.

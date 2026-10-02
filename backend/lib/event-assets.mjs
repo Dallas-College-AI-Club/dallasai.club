@@ -5,14 +5,12 @@ import { put, get, del } from '@vercel/blob';
 import { RequestError } from './errors.mjs';
 import { uuid } from './validation.mjs';
 import { originalEvents, liveEvents } from './events.mjs';
+import { coreEventTypes, eventType } from './event-types.mjs';
 
 export async function eventTypes(db, originals) {
   originals ??= await originalEvents();
   const names = [
-    'Club event',
-    'Club meeting',
-    'Workshop',
-    'Conversation',
+    ...coreEventTypes,
     ...originals.map((e) => e.category),
     ...(
       await db.query(
@@ -25,20 +23,24 @@ export async function eventTypes(db, originals) {
   ];
   const unique = new Map();
   for (const value of names) {
-    const name = String(value || '')
-      .trim()
-      .replace(/\s+/g, ' ');
+    const name = eventType(value);
     if (name && !unique.has(name.toLowerCase()))
       unique.set(name.toLowerCase(), name);
   }
-  return [...unique.values()].sort((a, b) => a.localeCompare(b));
+  return [
+    ...coreEventTypes,
+    ...[...unique.values()]
+      .filter((name) => !coreEventTypes.includes(name))
+      .sort((a, b) => a.localeCompare(b)),
+  ];
 }
 export async function addEventType(db, value, actor, originals) {
   if (typeof value !== 'string')
     throw new RequestError(400, 'Enter an event type.');
-  const name = value.trim().replace(/\s+/g, ' ');
-  if (!name || name.length > 80 || /[\x00-\x1f<>]/.test(name))
+  const raw = value.trim().replace(/\s+/g, ' ');
+  if (!raw || raw.length > 80 || /[\x00-\x1f<>]/.test(raw))
     throw new RequestError(400, 'Use a name of up to 80 characters.');
+  const name = eventType(raw);
   const existing = (await eventTypes(db, originals)).find(
     (t) => t.toLowerCase() === name.toLowerCase(),
   );
@@ -55,9 +57,7 @@ export async function addEventType(db, value, actor, originals) {
 }
 export async function validateEventAssets(db, event, originals) {
   const types = await eventTypes(db, originals);
-  const name = String(event?.category || 'Club event')
-    .trim()
-    .replace(/\s+/g, ' ');
+  const name = eventType(event?.category);
   const category = types.find((t) => t.toLowerCase() === name.toLowerCase());
   if (!category)
     throw new RequestError(

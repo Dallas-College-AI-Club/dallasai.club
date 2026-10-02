@@ -1,7 +1,7 @@
 const choices = {
-  theme: ['garden', 'blue', 'ink'],
-  font: ['sans', 'serif', 'mono'],
-  layout: ['comfortable', 'compact', 'wide'],
+  theme: ['studio', 'midnight', 'clay'],
+  font: ['geist', 'dm', 'space'],
+  layout: ['desk', 'gallery', 'focus'],
 };
 export function mountPreferences() {
   let saved = {};

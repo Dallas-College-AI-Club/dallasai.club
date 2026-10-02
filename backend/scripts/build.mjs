@@ -39,6 +39,11 @@ await cp(
   path.join(root, 'admin/style.css'),
   path.join(root, 'public/admin/style.css'),
 );
+await cp(
+  path.join(root, 'admin/assets'),
+  path.join(root, 'public/admin/assets'),
+  { recursive: true },
+);
 await build({
   entryPoints: [path.join(root, 'admin/index.js')],
   bundle: true,

@@ -1,5 +1,6 @@
 import { readFile } from 'node:fs/promises';
 import { RequestError } from './errors.mjs';
+import { normalizeEventType } from './event-types.mjs';
 import {
   draftContent,
   publicContent,
@@ -17,16 +18,19 @@ export async function originalEvents() {
 export function mergeEvents(originals, rows) {
   const events = new Map(originals.map((event) => [event.id, event]));
   for (const row of rows) {
-    if (row.published) events.set(row.id, row.published);
+    if (row.published && !row.archived_at) events.set(row.id, row.published);
     else events.delete(row.id);
   }
-  return [...events.values()].sort((a, b) => a.date.localeCompare(b.date));
+  return [...events.values()]
+    .map(normalizeEventType)
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 export async function liveEvents(db, originals) {
   originals ??= await originalEvents();
   return mergeEvents(
     originals,
-    (await db.query('SELECT id,published FROM club_forms.events')).rows,
+    (await db.query('SELECT id,published,archived_at FROM club_forms.events'))
+      .rows,
   );
 }
 export async function editorEvents(db, originals) {
@@ -42,33 +46,42 @@ export async function editorEvents(db, originals) {
         published_revision: 0,
         updated_at: null,
         updated_by: '',
+        archived_at: null,
       },
     ]),
   );
   for (const row of (await db.query('SELECT * FROM club_forms.events')).rows)
     rows.set(row.id, row);
-  return [...rows.values()].sort((a, b) =>
-    (b.draft.date || '').localeCompare(a.draft.date || ''),
-  );
+  return [...rows.values()]
+    .map((row) => ({
+      ...row,
+      draft: normalizeEventType(row.draft),
+      published: normalizeEventType(row.published),
+    }))
+    .sort((a, b) => (b.draft.date || '').localeCompare(a.draft.date || ''));
 }
 export async function saveEvent(db, body, actor, originals) {
   if (
-    !['draft', 'publish', 'unpublish'].includes(body.action) ||
+    !['draft', 'publish', 'unpublish', 'archive', 'restore'].includes(
+      body.action,
+    ) ||
     !eventIdPattern.test(body.id || '') ||
     !Number.isSafeInteger(body.revision) ||
     body.revision < 0
   )
     throw new RequestError(400, 'Reload the event and try again.');
-  const draft =
-    body.action === 'unpublish'
-      ? null
-      : draftContent(body.event, body.action === 'publish');
+  const draft = ['unpublish', 'archive', 'restore'].includes(body.action)
+    ? null
+    : draftContent(normalizeEventType(body.event), body.action === 'publish');
   const published =
     body.action === 'publish' ? publicContent(body.id, draft) : null;
   originals ??= await originalEvents();
   const original = originals.find((event) => event.id === body.id);
   return db.transaction(async (tx) => {
-    if (body.revision === 0 && (original || body.action !== 'unpublish')) {
+    if (
+      body.revision === 0 &&
+      (original || ['draft', 'publish'].includes(body.action))
+    ) {
       await tx.query(
         `INSERT INTO club_forms.events(id,draft,published,updated_by) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO NOTHING`,
         [
@@ -90,7 +103,20 @@ export async function saveEvent(db, body, actor, originals) {
         409,
         'Another admin updated this event. Your edits are still here. Copy them, then reopen the event to review the latest version.',
       );
-    const nextDraft = draft || current.draft;
+    if (
+      current.archived_at &&
+      ['publish', 'unpublish', 'archive'].includes(body.action)
+    )
+      throw new RequestError(
+        409,
+        'This event is archived. Restore it as a draft before publishing.',
+      );
+    if (!current.archived_at && body.action === 'restore')
+      throw new RequestError(
+        409,
+        'This event is already active. Reload the event.',
+      );
+    const nextDraft = draft || normalizeEventType(current.draft);
     const nextLive = body.action === 'draft' ? current.published : published;
     const revision = current.revision + 1;
     const row = (
@@ -98,6 +124,7 @@ export async function saveEvent(db, body, actor, originals) {
         `UPDATE club_forms.events SET draft=$2,published=$3,revision=$4,
        published_revision=CASE WHEN $5='publish' THEN $4 ELSE published_revision END,
        published_at=CASE WHEN $5='publish' THEN now() ELSE published_at END,
+       archived_at=CASE WHEN $5='archive' THEN now() WHEN $5='restore' THEN NULL ELSE archived_at END,
        updated_at=now(),updated_by=$6 WHERE id=$1 RETURNING *`,
         [
           body.id,
@@ -116,7 +143,14 @@ export async function saveEvent(db, body, actor, originals) {
         revision,
         body.action,
         actor,
-        JSON.stringify({ draft: nextDraft, published: nextLive }),
+        JSON.stringify({
+          draft: nextDraft,
+          published: nextLive,
+          archived_at: row.archived_at,
+          ...(body.action === 'archive'
+            ? { previousPublished: current.published }
+            : {}),
+        }),
       ],
     );
     return row;

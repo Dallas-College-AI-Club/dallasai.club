@@ -344,15 +344,15 @@ try {
   );
   assert.equal(await admin.evaluate(() => window.testAlerts.length), 1);
   await admin.getByText('Appearance', { exact: true }).click();
-  for (const theme of ['garden', 'blue', 'ink']) {
+  for (const theme of ['studio', 'midnight', 'clay']) {
     await admin.locator('#office-theme').selectOption(theme);
     await admin.screenshot({
       path: path.join(screens, 'office-' + theme + '.png'),
       fullPage: true,
     });
   }
-  await admin.locator('#office-font').selectOption('mono');
-  await admin.locator('#office-layout').selectOption('compact');
+  await admin.locator('#office-font').selectOption('space');
+  await admin.locator('#office-layout').selectOption('focus');
   await admin.screenshot({
     path: path.join(screens, 'admin-desktop.png'),
     fullPage: true,

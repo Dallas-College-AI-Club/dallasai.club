@@ -6,7 +6,7 @@ const node = (tag, text, className) => {
 };
 const blank = () => ({
   title: '',
-  category: 'Club event',
+  category: 'Workshop',
   date: '',
   startTime: '',
   endDate: '',
@@ -29,9 +29,10 @@ export function mountEventEditor(api) {
     current = null,
     saved = '',
     busy = false,
-    generation = 0;
+    generation = 0,
+    showArchived = false;
   let images = [],
-    types = ['Club event'],
+    types = ['Workshop', 'Meeting', 'Talk', 'Hackathon'],
     previewData = null;
   const frame = q('#site-preview-frame'),
     dialog = q('#site-preview-dialog');
@@ -119,14 +120,25 @@ export function mountEventEditor(api) {
   const canLeave = () =>
     !busy && (!dirty() || confirm('Discard your unsaved event changes?'));
   const state = (row) =>
-    !row.published
-      ? 'Draft · not visible on the website'
-      : row.revision === row.published_revision
-        ? 'Published'
-        : 'Published · draft changes waiting';
+    row.archived_at
+      ? 'Archived · hidden from the website. You can edit and save here, or restore as a draft.'
+      : !row.published
+        ? 'Draft · not visible on the website'
+        : row.revision === row.published_revision
+          ? 'Published'
+          : 'Published · draft changes waiting';
   function list() {
+    q('#active-events').setAttribute('aria-pressed', String(!showArchived));
+    q('#archived-events').setAttribute('aria-pressed', String(showArchived));
+    q('#active-event-count').textContent = rows.filter(
+      (r) => !r.archived_at,
+    ).length;
+    q('#archived-event-count').textContent = rows.filter(
+      (r) => r.archived_at,
+    ).length;
     const search = q('#event-search').value.toLowerCase().trim();
     const matches = rows
+      .filter((r) => Boolean(r.archived_at) === showArchived)
       .filter((r) => r.draft.title.toLowerCase().includes(search))
       .sort(
         (a, b) =>
@@ -137,10 +149,14 @@ export function mountEventEditor(api) {
     const listItems = [];
     let previousGroup = '';
     for (const row of matches) {
-      const isDraft = !row.published || row.revision !== row.published_revision;
-      const group = isDraft
-        ? 'Drafts & unpublished changes'
-        : 'Published events';
+      const isDraft =
+        !row.archived_at &&
+        (!row.published || row.revision !== row.published_revision);
+      const group = row.archived_at
+        ? 'Archived events'
+        : isDraft
+          ? 'Drafts & unpublished changes'
+          : 'Published events';
       if (group !== previousGroup) {
         listItems.push(node('h3', group, 'event-list-group'));
         previousGroup = group;
@@ -154,11 +170,13 @@ export function mountEventEditor(api) {
         node('span', row.draft.date || 'Date to be decided'),
         node(
           'small',
-          isDraft
-            ? 'DRAFT · ' +
+          row.archived_at
+            ? 'Archived · kept for later'
+            : isDraft
+              ? 'DRAFT · ' +
                 (!row.published ? 'Not published' : 'Changes not published')
-            : 'Published',
-          isDraft ? 'draft-badge' : '',
+              : 'Published',
+          row.archived_at ? 'archived-badge' : isDraft ? 'draft-badge' : '',
         ),
       );
       button.onclick = () => {
@@ -168,10 +186,21 @@ export function mountEventEditor(api) {
     }
     q('#event-list').replaceChildren(...listItems);
     if (!matches.length)
-      q('#event-list').append(node('p', 'No matching events.'));
+      q('#event-list').append(
+        node(
+          'p',
+          search
+            ? 'No matching events.'
+            : showArchived
+              ? 'No archived events yet.'
+              : 'No active events yet.',
+          'hint',
+        ),
+      );
   }
   function edit(row) {
     current = row;
+    showArchived = Boolean(row.archived_at);
     form.hidden = false;
     q('#event-empty').hidden = true;
     q('#event-preview').hidden = true;
@@ -185,14 +214,22 @@ export function mountEventEditor(api) {
       else input.value = Array.isArray(value) ? value.join('\n') : value || '';
     }
     saved = JSON.stringify(values());
-    q('#event-heading').textContent =
-      row.revision || row.published ? 'Edit event' : 'New event';
+    q('#event-heading').textContent = row.archived_at
+      ? 'Edit archived event'
+      : row.revision || row.published
+        ? 'Edit event'
+        : 'New event';
     q('#event-state').textContent = state(row);
-    q('#event-state').className =
-      !row.published || row.revision !== row.published_revision
+    q('#event-state').className = row.archived_at
+      ? 'archived-notice'
+      : !row.published || row.revision !== row.published_revision
         ? 'draft-notice'
         : 'published-notice';
     q('#unpublish-event').hidden = !row.published;
+    q('#archive-event').hidden =
+      Boolean(row.archived_at) || (!row.revision && !row.published);
+    q('#restore-event').hidden = !row.archived_at;
+    form.querySelector('[value="publish"]').hidden = Boolean(row.archived_at);
     q('#view-event').hidden = !row.published;
     q('#view-event').href =
       'https://dallasai.club/club.html?mode=events&event=' +
@@ -217,9 +254,9 @@ export function mountEventEditor(api) {
       const data = await api('/api/events?admin=1');
       if (version !== generation) return;
       rows = data.events;
-      types = data.types || ['Club event'];
+      types = data.types || ['Workshop', 'Meeting', 'Talk', 'Hackathon'];
       typeOptions(
-        form.elements.category.value || current?.draft.category || 'Club event',
+        form.elements.category.value || current?.draft.category || 'Workshop',
       );
       list();
       say();
@@ -277,9 +314,15 @@ export function mountEventEditor(api) {
         say(
           action === 'publish'
             ? 'Published. The website will show this event on its next refresh.'
-            : action === 'unpublish'
-              ? 'Unpublished. Your draft and existing RSVPs are kept.'
-              : 'Draft saved. The website has not changed.',
+            : action === 'archive'
+              ? 'Archived. Content, images, and RSVPs are kept. You can edit this event here or restore it as a draft.'
+              : action === 'restore'
+                ? 'Restored as a draft. Review your details, then publish when ready.'
+                : action === 'unpublish'
+                  ? 'Unpublished. Your draft and existing RSVPs are kept.'
+                  : data.event.archived_at
+                    ? 'Changes saved. This event is still archived and private.'
+                    : 'Draft saved. The website has not changed.',
         );
       }
     } catch (e) {
@@ -311,6 +354,37 @@ export function mountEventEditor(api) {
     )
       save('unpublish');
   };
+  q('#archive-event').onclick = () => {
+    if (busy || !current || current.archived_at) return;
+    if (dirty())
+      return say(
+        'Save your draft before archiving so your latest edits are kept.',
+      );
+    if (
+      confirm(
+        'Archive this event? It will be hidden from the website. Its content, images, and RSVPs will be kept, and you can edit or restore it later.',
+      )
+    )
+      save('archive');
+  };
+  q('#restore-event').onclick = () => {
+    if (busy || !current?.archived_at) return;
+    if (dirty()) return say('Save your changes before restoring this event.');
+    save('restore');
+  };
+  function changeCollection(archived) {
+    if (showArchived === archived || !canLeave()) return;
+    showArchived = archived;
+    current = null;
+    saved = '';
+    form.hidden = true;
+    q('#event-empty').hidden = false;
+    q('#event-search').value = '';
+    list();
+    say();
+  }
+  q('#active-events').onclick = () => changeCollection(false);
+  q('#archived-events').onclick = () => changeCollection(true);
   q('#reload-events').onclick = async () => {
     if (!canLeave()) return;
     const id = current?.id;
@@ -390,6 +464,7 @@ export function mountEventEditor(api) {
     clear() {
       generation++;
       current = null;
+      showArchived = false;
       rows = [];
       images = [];
       renderImages();

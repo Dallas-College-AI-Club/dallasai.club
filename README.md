@@ -59,7 +59,7 @@ The browser requests an anonymous player token, saves it on the device, then sen
 
 The private local values are in `%LOCALAPPDATA%\dallasai-club-website\secrets.env.vercel`, outside Git and OneDrive. Neon Auth is unchanged. Database administration tools are in [leaderboard-setup.zip](archive/leaderboard-setup.zip); `backend/002_request_limits.sql` defines the API request limits.
 
-Use Vercel project **ai-c64d/dallasai-leaderboard**, Framework **Other**. Deploy from the `backend/` folder as the project root; the Vercel Root Directory setting is unset for this CLI workflow. `backend/package.json` declares Node.js **22**. Build settings are in `backend/vercel.json`; dependencies are pinned in the lockfile. From `backend/`, `vercel --prod --scope ai-c64d` deploys an update after review. This project is deployed through the CLI; automatic Git deployments are not connected.
+Use Vercel project **ai-c64d/dallasai-leaderboard**, Framework **Other**. Deploy from the `backend/` folder as the project root; the Vercel Root Directory setting is unset for this CLI workflow. `backend/package.json` declares Node.js **24**, and CI reads its Node.js version from that file. Keep Vercel's **Settings → Build and Deployment → Node.js Version** set to **24.x** to match; a different version produces an override warning. Build settings are in `backend/vercel.json`; dependencies are pinned in the lockfile. From `backend/`, `vercel --prod --scope ai-c64d` deploys an update after review. This project is deployed through the CLI; automatic Git deployments are not connected.
 
 ## Forms and club administration
 

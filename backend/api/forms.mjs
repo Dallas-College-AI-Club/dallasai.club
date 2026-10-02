@@ -12,6 +12,8 @@ export const confirmations = {
     'Your contribution has been received. A club officer will review it.',
   workshop:
     'Your workshop request has been saved. A club officer will review it.',
+  question:
+    'Your question has been saved in the club inbox. An officer can reply to the email address you provided.',
 };
 export default async function handler(req, res) {
   try {
@@ -23,7 +25,9 @@ export default async function handler(req, res) {
       return send(res, 200, {
         message: 'Thank you. Your request has been received.',
       });
-    const events = body.kind === 'rsvp' ? await liveEvents(db) : [];
+    const events = ['rsvp', 'question'].includes(body.kind)
+      ? await liveEvents(db)
+      : [];
     await submit(db, body, events);
     // Success is returned only after the database transaction commits.
     send(res, 200, { message: confirmations[body.kind] });

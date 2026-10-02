@@ -14,8 +14,26 @@ Central time, location, meeting link, description, audience, learning outcomes,
 agenda, and preparation. Each learning outcome or agenda item goes on its own
 line; agenda lines can include a duration, module, and activity.
 
+Drafts and events with unpublished changes appear in a separate section at the
+top of the list, with a visible DRAFT label. The form also explains whether the
+entire event or only its changes are unpublished.
+
+Choose a shared **Type** from the dropdown. **Manage event types → Add type**
+adds a grouping for all officers. Case and extra spaces do not create duplicates.
+The server rejects unregistered free-text types.
+
+**Upload event images** accepts up to three still JPG, PNG, or WebP images, each
+under 2 MB and 25 megapixels. Images are decoded, resized to fit 1800 pixels,
+converted to WebP, and stripped of metadata. Add an image description before
+publishing. Removing an image from a draft does not alter the published event.
+Images remain private until referenced by a published event, and become private
+again on unpublish. Stored files remain available for edit history.
+
 - **Save draft** keeps changes private. A date is optional until publication.
-- **Preview** displays the current form without saving or publishing it.
+- **Preview** opens the actual public website in a private desktop/mobile preview,
+  including unsaved text and images. Nothing is saved or published; forms and
+  navigation are disabled inside the preview. Draft content is passed only between
+  the officer's browser windows, without putting it in a public URL or API.
 - **Publish event** updates the public calendar, event search, Latest, and RSVP
   eligibility. A date is required. Times are optional.
 - Clear **Accept RSVPs** and publish to close new registrations.
@@ -34,6 +52,11 @@ Answers** is intended to remain a private draft with blank date, time, and
 location until those details are decided. No workshop email is sent.
 
 ## Deployment and operations
+
+Apply `007_office_tools.sql` before deploying the office enhancements. It adds
+shared event types, image metadata and the question submission kind. It leaves
+existing events, submissions, accounts and history intact. The existing private
+Blob store is reused; no public bucket or new secrets are needed.
 
 The public site is Hugo on GitHub Pages. The admin interface, event API, forms,
 and leaderboard are in the existing Vercel project

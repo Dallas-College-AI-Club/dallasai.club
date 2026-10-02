@@ -30,6 +30,14 @@ let db;
 before(async () => {
   db = new PGlite();
   await db.exec('CREATE SCHEMA club_forms');
+  for (const file of [
+    '003_club_forms.sql',
+    '005_screen_confirmations.sql',
+    '007_office_tools.sql',
+  ])
+    await db.exec(
+      await readFile(new URL('../' + file, import.meta.url), 'utf8'),
+    );
   await db.exec(
     await readFile(new URL('../006_event_editor.sql', import.meta.url), 'utf8'),
   );

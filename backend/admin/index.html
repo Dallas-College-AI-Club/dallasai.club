@@ -14,7 +14,8 @@
       ><span>Club office</span><button id="signout" hidden>Sign out</button>
     </header>
     <main>
-      <section id="login">
+      <p id="session-loading" role="status">Checking your sign-in…</p>
+      <section id="login" hidden>
         <p class="eyebrow">FOR CLUB OFFICERS</p>
         <h1>A small place to keep things moving.</h1>
         <p>Enter your club officer email. We will send you a sign-in code.</p>
@@ -55,6 +56,7 @@
         </form>
         <p class="hint">
           Access is limited to approved club officers. No password is needed.
+          Stay signed in for 3 days on this browser.
         </p>
       </section>
       <section id="office" hidden>
@@ -65,6 +67,33 @@
           </div>
         </div>
         <p id="identity"></p>
+        <details class="office-preferences">
+          <summary>Appearance</summary>
+          <p class="hint">Personal choices for this office on this browser.</p>
+          <div class="preference-fields">
+            <label
+              >Theme<select id="office-theme">
+                <option value="garden">Garden</option>
+                <option value="blue">Blue</option>
+                <option value="ink">Ink</option>
+              </select></label
+            >
+            <label
+              >Font<select id="office-font">
+                <option value="sans">Clear sans serif</option>
+                <option value="serif">Book serif</option>
+                <option value="mono">Monospace</option>
+              </select></label
+            >
+            <label
+              >Layout<select id="office-layout">
+                <option value="comfortable">Comfortable</option>
+                <option value="compact">Compact</option>
+                <option value="wide">Wide workspace</option>
+              </select></label
+            >
+          </div>
+        </details>
         <nav class="office-tabs" aria-label="Club office">
           <button id="inbox-tab" aria-pressed="true">
             Members &amp; messages
@@ -77,16 +106,57 @@
             <button id="refresh">Refresh</button>
           </div>
           <div id="counts" class="counts"></div>
+          <details class="office-preferences">
+            <summary>How people submit to the inbox</summary>
+            <p>
+              <a
+                href="https://dallasai.club/club.html?mode=contribute"
+                target="_blank"
+                rel="noopener"
+                >Submit to The AI Review ↗</a
+              >
+              accepts draft text and private attachments. An officer reviews
+              each submission before publication.
+            </p>
+            <p>
+              <a
+                href="https://dallasai.club/club.html?mode=events"
+                target="_blank"
+                rel="noopener"
+                >The events page ↗</a
+              >
+              has RSVP forms, a workshop request dialog, and an “Ask about this
+              event” question dialog. “Ask the club” in the website footer
+              accepts general questions.
+            </p>
+            <p>
+              Successful submissions show a confirmation in the form. Use the
+              sender’s email link below to reply. The AI Review subscription
+              list records requests for future updates; broadcasts are not
+              enabled.
+            </p>
+          </details>
           <p id="configuration" class="notice" hidden></p>
+          <div class="inbox-alerts">
+            <p id="inbox-alert" role="status" aria-live="polite"></p>
+            <button id="enable-alerts" class="secondary">
+              Enable browser alerts
+            </button>
+            <p id="notification-status" class="hint">
+              New counts update automatically. Browser alerts work while this
+              office tab is open. Email alerts are not connected.
+            </p>
+          </div>
           <form id="filters" class="filters">
             <label
               >Type<select name="kind">
                 <option value="">All submissions</option>
                 <option value="join">Club signups</option>
-                <option value="subscribe">Newsletter</option>
-                <option value="rsvp">Event RSVPs</option>
-                <option value="contribution">Contributions</option>
+                <option value="subscribe">The AI Review</option>
+                <option value="rsvp">Event RSVPs (upcoming only)</option>
+                <option value="contribution">AI Review submissions</option>
                 <option value="workshop">Workshop requests</option>
+                <option value="question">Questions</option>
               </select></label
             ><label
               >Review status<select name="status">
@@ -95,11 +165,10 @@
                 <option value="reviewed">Reviewed</option>
                 <option value="closed">Closed</option>
               </select></label
-            ><label
-              >Search<input
-                name="search"
-                type="search"
-                placeholder="Name or email" /></label
+            ><label id="event-filter-label" hidden
+              >Event<select name="eventId" aria-label="Event">
+                <option value="">All upcoming events</option>
+              </select></label
             ><button type="submit">Apply</button>
           </form>
           <div class="toolbar">
@@ -149,11 +218,24 @@
                   >Event title<input name="title" maxlength="160" required
                 /></label>
                 <label
-                  >Type<input
-                    name="category"
-                    maxlength="80"
-                    placeholder="Workshop, conversation, club meeting…"
-                /></label>
+                  >Type<select name="category" required>
+                    <option>Club event</option>
+                  </select></label
+                >
+                <details>
+                  <summary>Manage event types</summary>
+                  <p class="hint">
+                    Shared by all admins. Use an existing type when possible.
+                  </p>
+                  <label
+                    >New type name<input
+                      id="new-type-name"
+                      maxlength="80" /></label
+                  ><button id="add-type" type="button" class="secondary">
+                    Add type
+                  </button>
+                  <p id="type-status" role="status"></p>
+                </details>
                 <p class="hint">
                   All times are Central. Leave the time blank if it is not
                   confirmed.
@@ -225,6 +307,22 @@
                     checked
                   />Accept RSVPs</label
                 >
+                <fieldset class="image-manager">
+                  <legend>Event images</legend>
+                  <p class="hint">
+                    Up to three JPG, PNG, or WebP images, under 2 MB each.
+                    Images stay private until the event is published.
+                  </p>
+                  <label
+                    >Upload event images<input
+                      id="event-image-upload"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      multiple
+                  /></label>
+                  <div id="event-images"></div>
+                  <p id="image-status" role="status"></p>
+                </fieldset>
                 <div class="event-actions">
                   <button
                     type="submit"
@@ -275,6 +373,26 @@
         </section>
       </section>
       <p id="status" role="status" aria-live="polite"></p>
+      <dialog id="site-preview-dialog" aria-labelledby="site-preview-title">
+        <div class="heading">
+          <h2 id="site-preview-title">Website preview · draft</h2>
+          <button id="close-site-preview">Close preview</button>
+        </div>
+        <p id="preview-note">
+          Private preview of your current edits. Nothing is published. Forms are
+          disabled.
+        </p>
+        <div class="event-actions">
+          <button id="preview-desktop" class="secondary">Desktop</button
+          ><button id="preview-mobile" class="secondary">Mobile</button>
+        </div>
+        <iframe
+          id="site-preview-frame"
+          data-site-origin="https://dallasai.club"
+          title="Event on the club website"
+          referrerpolicy="no-referrer"
+        ></iframe>
+      </dialog>
     </main>
     <script type="module" src="/admin/index.js"></script>
   </body>

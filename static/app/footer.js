@@ -1,13 +1,20 @@
 import { COPYRIGHT, SOCIAL_LINKS } from '../content/club.js';
+import { questionDialog } from './questions.js';
 
 const footer = document.querySelector('.site-footer');
 if (footer) {
   footer.innerHTML = /* HTML */ `<div class="footer-main">
-      <a class="footer-brand" href="index.html" aria-label="Dallas College AI Club — welcome">
+      <a
+        class="footer-brand"
+        href="index.html"
+        aria-label="Dallas College AI Club — welcome"
+      >
         <img src="assets/club-logo.png" alt="" width="46" height="46" />
         <span>Dallas College<strong>AI Club</strong></span>
       </a>
-      <p class="footer-thought">Different perspectives. <em>Shared possibilities.</em></p>
+      <p class="footer-thought">
+        Different perspectives. <em>Shared possibilities.</em>
+      </p>
       <nav aria-label="Follow the club"></nav>
     </div>
     <div class="footer-baseline">
@@ -28,11 +35,20 @@ if (footer) {
     const name = document.createElement('span');
     name.textContent = label;
     link.append(name);
-    link.insertAdjacentHTML('beforeend', '<span class="footer-arrow" aria-hidden="true">↗</span>');
+    link.insertAdjacentHTML(
+      'beforeend',
+      '<span class="footer-arrow" aria-hidden="true">↗</span>',
+    );
     link.href = href;
     link.target = '_blank';
     link.rel = 'noreferrer';
     return link;
   });
   footer.querySelector('nav').replaceChildren(...links);
+  const questions = questionDialog(),
+    ask = document.createElement('button');
+  ask.className = 'outline-link';
+  ask.textContent = 'Ask the club';
+  ask.onclick = () => questions.open();
+  footer.querySelector('nav').append(ask);
 }

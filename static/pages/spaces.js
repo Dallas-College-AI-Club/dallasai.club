@@ -25,21 +25,37 @@ export function renderSpace(root, id, { open }) {
     root.innerHTML =
       spaceHeader(
         'Projects',
-        /* HTML */ `<a class="outline-link" href="${JOIN_URL}" target="_blank" rel="noreferrer"
+        /* HTML */ `<a
+          class="outline-link"
+          href="${JOIN_URL}"
+          target="_blank"
+          rel="noreferrer"
           >Build with us ↗</a
         >`,
       ) +
-      /* HTML */ `<section class="project-feature" id="success-coach" tabindex="-1">
+      /* HTML */ `<section
+          class="project-feature"
+          id="success-coach"
+          tabindex="-1"
+        >
           ${replayMarkup()}
           <div class="project-feature-copy">
             <span class="tag">01 / WORKING DEMO</span>
             <h2>Major</h2>
             <p>
-              Meet Major, the club’s college planning assistant. Explore degree requirements and
-              organize questions before meeting with your Success Coach.
+              Meet Major, the club’s college planning assistant. Explore degree
+              requirements and organize questions before meeting with your
+              Success Coach.
             </p>
-            <p>Major helps you prepare. Your Success Coach helps finalize your plan.</p>
-            <a class="solid-link" href="${PROJECT_URL}" target="_blank" rel="noreferrer"
+            <p>
+              Major helps you prepare. Your Success Coach helps finalize your
+              plan.
+            </p>
+            <a
+              class="solid-link"
+              href="${PROJECT_URL}"
+              target="_blank"
+              rel="noreferrer"
               >Try the live demo ↗</a
             >
           </div>
@@ -70,7 +86,11 @@ export function renderSpace(root, id, { open }) {
       spaceHeader('Subscribe') +
       /* HTML */ `<div class="subscribe-layout">
         <section>
-          <h2>Stay in the loop with The AI Review.</h2><p>Leave your email for future newsletter updates. For now, read new articles on the website or follow our RSS feed.</p>
+          <h2>Stay in the loop with The AI Review.</h2>
+          <p>
+            Leave your email for future updates from The AI Review. For now,
+            read new articles on the website or follow our RSS feed.
+          </p>
           <form id="subscribe-form" class="club-form">
             <label for="subscriber-email">Email address</label
             ><input
@@ -80,21 +100,29 @@ export function renderSpace(root, id, { open }) {
               autocomplete="email"
               required
               placeholder="you@example.com"
-            />${formFooter('Subscribe →','I would like to receive new articles from The AI Review. I can unsubscribe at any time.')}
+            />${formFooter('Subscribe →', 'I would like to receive new articles from The AI Review. I can unsubscribe at any time.')}
           </form>
         </section>
         <aside class="subscribe-alternative">
           <h2>Follow the club in Teams</h2>
           <p>Join the conversation and get club announcements in Teams.</p>
-          <a class="outline-link" href="${JOIN_URL}" target="_blank" rel="noreferrer"
+          <a
+            class="outline-link"
+            href="${JOIN_URL}"
+            target="_blank"
+            rel="noreferrer"
             >Open Teams ↗</a
           >
           <p><a href="review-feed.xml">Follow the RSS feed ↗</a></p>
         </aside>
       </div>`;
-    dispose = mountForm(root.querySelector('#subscribe-form'), { kind:'subscribe' });
+    dispose = mountForm(root.querySelector('#subscribe-form'), {
+      kind: 'subscribe',
+    });
   }
-  root.querySelectorAll('[data-space]').forEach((b) => (b.onclick = () => open(b.dataset.space)));
+  root
+    .querySelectorAll('[data-space]')
+    .forEach((b) => (b.onclick = () => open(b.dataset.space)));
   root
     .querySelectorAll('[data-article]')
     .forEach((b) => (b.onclick = () => open('article', b.dataset.article)));

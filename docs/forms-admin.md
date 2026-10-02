@@ -1,10 +1,21 @@
 # Forms and the club office
 
-Hugo serves the public website on GitHub Pages. The existing Vercel backend stores club signups, newsletter subscription requests, RSVPs, contributions, and workshop requests in Neon. A successful form shows an on-screen confirmation only after the database transaction commits. The form preserves its content if saving fails. Duplicate membership/subscription requests and RSVPs do not create extra records.
+Hugo serves the public website on GitHub Pages. The Vercel backend stores club signups, The AI Review subscription requests, RSVPs, AI Review submissions, workshop requests, and questions in Neon. A successful form shows an on-screen confirmation only after the database transaction commits. The form preserves its content if saving fails. Duplicate membership/subscription requests and RSVPs do not create extra records.
 
 ## How officers learn about a signup
 
-Open the protected backend `/admin/` page. Every new record, including trusted database imports, appears with review status **New**. Counts and the inbox refresh every minute while the page is visible; Refresh updates immediately. Officers can filter, search, review or close submissions, download private attachments, and export up to 10,000 matching records. Administrative updates, downloads, and exports are logged.
+Open the protected backend `/admin/` page. New submissions appear with review status **New**. Counts and the inbox refresh every minute; Refresh updates immediately. Officers can filter by submission type and review status, review or close submissions, download private attachments, and export up to 10,000 matching records. Name/email search is not shown. The Event RSVPs view, counts and CSV exports include only currently published upcoming events; an Event dropdown selects one. Past RSVP records remain stored. Administrative updates, downloads, and exports are logged.
+
+**Enable browser alerts** requests browser permission and shows a generic alert when the new count increases. The officer must keep the office tab open; browser throttling can delay background checks. New counts and an on-screen notice also update without notification permission. Browser alerts are optional and stop at sign-out. Email alerts remain disconnected; the UI states this explicitly. Neon login-code delivery is a separate service and does not send inbox alerts.
+
+**Appearance** changes only this office on the current browser: Garden, Blue, or Ink themes; sans serif, serif, or monospace fonts; comfortable, compact, or wide layouts. These preferences do not change the public website.
+
+## How people submit
+
+- **The AI Review → Contribute an article** opens the submission page with a title, draft text and optional private attachments. Submit for review saves it under **AI Review submissions** and shows confirmation beside the form. It does not automatically publish an article.
+- **Ask about this event** opens a question dialog, carries the event context into the inbox and confirms receipt within the dialog. **Ask the club** in the footer opens the same dialog for a general question.
+- **Request a workshop** opens the workshop request dialog. Confirmation appears within it.
+- Join, The AI Review subscription requests, and upcoming-event RSVPs show confirmation next to their forms. Errors preserve the person's entered text.
 
 There are no email alerts, emailed confirmation links, or newsletter broadcasts in this release. Newsletter requests record consent for future updates; email ownership is not verified and `email_verified` remains false. They must not be represented as verified subscribers or automatically enrolled in a future mailing service. The public page explains that newsletters are not currently being sent. People can contact the club to withdraw a request or cancel an RSVP.
 
@@ -44,7 +55,7 @@ The leaderboard's existing `DATABASE_URL` and `SESSION_SECRET` remain unchanged.
 2. For an already provisioned database, apply migration 005 once before deploying this revision. It disables the old email-queue trigger and makes new records active by default. Existing data and unused email tables are retained; no email worker or webhook endpoint is deployed.
 3. Save private settings and provision officer accounts. Keep preview admin access limited to the designated tester. Use isolated test data and remove only the records created by a test.
 4. From `backend/`, run `npm ci --include=dev --ignore-scripts`, `npm test`, and `npm run build`. The build generates the admin bundle and trusted event registry. Rebuild/redeploy the backend when event registrations change.
-5. Deploy a Vercel preview with the correct admin origin. Check all five forms, real database saves, password login/change/signout, unauthorized access, and private uploads/downloads.
+5. Apply `007_office_tools.sql` for question intake and event assets. Deploy a protected Vercel preview with the correct admin origin. Check all six forms, real database saves, email-code login/signout, unauthorized access, and private uploads/downloads.
 6. After review, deploy the Vercel backend and then publish the website. The backend is deployed through the CLI; pushing the website alone does not update it. The public form endpoint is configured in `data/club.json`.
 
 For local development, build the backend and run `npm run dev` at `127.0.0.1:4175`. Set `AUTH_BASE_URL=http://127.0.0.1:4175` and Hugo's `params.formsAPIURL=http://127.0.0.1:4175/api/forms`. Serve the frontend at `127.0.0.1:4174`. A daily authenticated maintenance task expires request-limit and obsolete webhook records; it sends no messages.

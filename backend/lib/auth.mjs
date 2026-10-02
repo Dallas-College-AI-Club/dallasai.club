@@ -4,6 +4,7 @@ import { fromNodeHeaders } from 'better-auth/node';
 import pg from 'pg';
 import { emailList } from './admin-accounts.mjs';
 import { RequestError } from './errors.mjs';
+import { ADMIN_SESSION_SECONDS } from './admin-session.mjs';
 import { neonSession } from './neon-auth.mjs';
 let auth;
 export const isAdmin = (email) =>
@@ -26,7 +27,8 @@ export function authOptions(pool) {
     user: { modelName: 'club_admin_user', changeEmail: { enabled: false } },
     session: {
       modelName: 'club_admin_session',
-      expiresIn: 28800,
+      expiresIn: ADMIN_SESSION_SECONDS,
+      disableSessionRefresh: true,
       updateAge: 3600,
       cookieCache: { enabled: false },
     },

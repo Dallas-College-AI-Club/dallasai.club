@@ -11,11 +11,18 @@ const user = {
   email: 'officer@example.com',
   emailVerified: true,
   role: 'admin',
+  createdAt: new Date().toISOString(),
+  updatedAt: new Date().toISOString(),
 };
 test('Neon authorization rechecks the upstream session, provisioned admin role, and current officer allowlist', async (t) => {
   let data = {
     user,
-    session: { id: 'session-one', expiresAt: '2099-01-01T00:00:00Z' },
+    session: {
+      id: 'session-one',
+      updatedAt: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      expiresAt: '2099-01-01T00:00:00Z',
+    },
   };
   const requests = [];
   t.mock.method(globalThis, 'fetch', async (url, options) => {
@@ -184,4 +191,155 @@ test('Neon proxy preserves separate logout cookies and forces upstream session v
   assert.ok(requests[0].includes('disableCookieCache=true'));
   assert.ok(Array.isArray(response.headers['Set-Cookie']));
   assert.ok(response.headers['Set-Cookie'].length >= 2);
+});
+
+test('returning officers keep access before 72 hours; renewed upstream sessions cannot extend club access', async (t) => {
+  const now = Date.now();
+  let age = 71 * 3600000;
+  t.mock.method(globalThis, 'fetch', async () =>
+    Response.json({
+      user,
+      session: {
+        id: 'three-day-session',
+        updatedAt: new Date().toISOString(),
+        createdAt: new Date(now - age).toISOString(),
+        expiresAt: new Date(now + 7 * 86400000).toISOString(),
+      },
+    }),
+  );
+  const req = {
+    headers: { cookie: '__Secure-neon-auth.session_token=test-session' },
+  };
+  assert.equal((await requireAdmin(req)).email, user.email);
+  age = 72 * 3600000;
+  await assert.rejects(requireAdmin(req), (e) => e.status === 401);
+  const response = {
+    headers: {},
+    setHeader(k, v) {
+      this.headers[k] = v;
+    },
+    end(value) {
+      this.body = value;
+    },
+  };
+  await proxyNeonAuth(
+    { ...req, url: '/api/auth/get-session', method: 'GET' },
+    response,
+  );
+  assert.equal(response.body, 'null');
+  assert.ok(
+    response.headers['Set-Cookie'].every((value) =>
+      value.includes('Max-Age=0'),
+    ),
+  );
+});
+
+test('code sign-in persists the session cookie for three days and does not extend the cache cookie', async (t) => {
+  const now = Date.now();
+  t.mock.method(globalThis, 'fetch', async (url) => {
+    if (String(url).includes('/get-session'))
+      return Response.json({
+        user,
+        session: {
+          id: 'new-session',
+          updatedAt: new Date().toISOString(),
+          createdAt: new Date(now).toISOString(),
+          expiresAt: new Date(now + 7 * 86400000).toISOString(),
+        },
+      });
+    return Response.json(
+      { user, token: 'test-token' },
+      {
+        headers: {
+          'Set-Cookie':
+            '__Secure-neon-auth.session_token=test-token; Path=/; Max-Age=604800; HttpOnly; Secure; SameSite=Lax',
+        },
+      },
+    );
+  });
+  const response = {
+    headers: {},
+    setHeader(k, v) {
+      this.headers[k] = v;
+    },
+    end(value) {
+      this.body = value;
+    },
+  };
+  await proxyNeonAuth(
+    {
+      url: '/api/auth/sign-in/email-otp',
+      method: 'POST',
+      headers: {
+        origin: process.env.AUTH_BASE_URL,
+        'content-type': 'application/json',
+      },
+      body: { email: user.email, otp: '123456' },
+    },
+    response,
+    { rateLimit: async () => {} },
+  );
+  const token = response.headers['Set-Cookie'].find((value) =>
+    value.startsWith('__Secure-neon-auth.session_token='),
+  );
+  assert.match(token, /Max-Age=259200/);
+  assert.match(token, /Expires=/);
+  assert.match(token, /HttpOnly; Secure/);
+  const cache = response.headers['Set-Cookie'].find((value) =>
+    value.startsWith('__Secure-neon-auth.local.session_data='),
+  );
+  assert.ok(Number(cache.match(/Max-Age=(\d+)/)[1]) <= 300);
+});
+
+test('session refresh returns the original deadline and caps renewed cookies to the remaining time', async (t) => {
+  const now = Date.now();
+  const createdAt = new Date(now - 2 * 86400000).toISOString();
+  t.mock.method(globalThis, 'fetch', async () =>
+    Response.json(
+      {
+        user,
+        session: {
+          id: 'renewed-session',
+          updatedAt: new Date().toISOString(),
+          createdAt,
+          expiresAt: new Date(now + 7 * 86400000).toISOString(),
+        },
+      },
+      {
+        headers: {
+          'Set-Cookie':
+            '__Secure-neon-auth.session_token=test-token; Path=/; Max-Age=604800; HttpOnly; Secure; SameSite=Lax',
+        },
+      },
+    ),
+  );
+  const response = {
+    headers: {},
+    setHeader(k, v) {
+      this.headers[k] = v;
+    },
+    end(value) {
+      this.body = value;
+    },
+  };
+  await proxyNeonAuth(
+    {
+      url: '/api/auth/get-session',
+      method: 'GET',
+      headers: { cookie: '__Secure-neon-auth.session_token=test-token' },
+    },
+    response,
+  );
+  const remaining = Number(
+    response.headers['Set-Cookie']
+      .find((value) => value.startsWith('__Secure-neon-auth.session_token='))
+      .match(/Max-Age=(\d+)/)[1],
+  );
+  assert.ok(remaining >= 86395 && remaining <= 86400);
+  assert.ok(
+    Math.abs(
+      Date.parse(JSON.parse(response.body).session.expiresAt) -
+        (now + 86400000),
+    ) < 1000,
+  );
 });

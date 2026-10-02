@@ -720,6 +720,11 @@ body .club-nav nav.primary-nav a:focus-visible {
   backdrop-filter: blur(7px);
 }
 .section-switcher form {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 12px 0;
+  background: #f8f8f4;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -791,7 +796,8 @@ body .club-nav nav.primary-nav a:focus-visible {
 }
 body .club-nav {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--accent) 28%, transparent) transparent;
+  scrollbar-color: color-mix(in srgb, var(--accent) 28%, transparent)
+    transparent;
 }
 body .club-nav .club-brand {
   padding-bottom: 23px;
@@ -875,9 +881,12 @@ body .club-utilities {
     transition: none;
   }
 }
-body:is([data-space='play'], [data-space='ride'], [data-space='snake']) .club-nav,
-body:is([data-space='play'], [data-space='ride'], [data-space='snake']) .nav-toggle,
-body:is([data-space='play'], [data-space='ride'], [data-space='snake']) .nav-backdrop {
+body:is([data-space='play'], [data-space='ride'], [data-space='snake'])
+  .club-nav,
+body:is([data-space='play'], [data-space='ride'], [data-space='snake'])
+  .nav-toggle,
+body:is([data-space='play'], [data-space='ride'], [data-space='snake'])
+  .nav-backdrop {
   display: none !important;
 }
 .club-utilities .arcade-library-link {

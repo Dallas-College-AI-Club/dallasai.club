@@ -86,8 +86,8 @@ export function renderSpace(root, id, { open }) {
       spaceHeader('Subscribe') +
       /* HTML */ `<div class="subscribe-layout">
         <section>
-          <h2>Stay in the loop with The AI Review.</h2>
-          <p>
+          <h2 data-form-intro>Stay in the loop with The AI Review.</h2>
+          <p data-form-intro>
             Leave your email for future updates from The AI Review. For now,
             read new articles on the website or follow our RSS feed.
           </p>
@@ -118,6 +118,7 @@ export function renderSpace(root, id, { open }) {
       </div>`;
     dispose = mountForm(root.querySelector('#subscribe-form'), {
       kind: 'subscribe',
+      doneURL: 'club.html?mode=journal',
     });
   }
   root

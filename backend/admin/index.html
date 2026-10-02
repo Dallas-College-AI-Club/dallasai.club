@@ -11,18 +11,29 @@
       rel="icon"
       type="image/png"
       href="/admin/assets/club-office-logo.png"
+      media="(prefers-color-scheme: light)"
+    />
+    <link
+      rel="icon"
+      type="image/png"
+      href="/admin/assets/club-office-logo-dark.png"
+      media="(prefers-color-scheme: dark)"
     />
   </head>
   <body>
     <header class="app-header">
       <a class="brand" href="https://dallasai.club"
-        ><img
-          class="office-logo"
-          src="/admin/assets/club-office-logo.png"
-          width="88"
-          height="88"
-          alt=""
-        />
+        ><picture
+          ><source
+            srcset="/admin/assets/club-office-logo-dark.png"
+            media="(prefers-color-scheme: dark)" />
+          <img
+            class="office-logo"
+            src="/admin/assets/club-office-logo.png"
+            width="88"
+            height="88"
+            alt=""
+        /></picture>
         <span>Dallas College AI Club</span></a
       >
       <span class="workspace-label">/ &nbsp; Club office</span
@@ -119,10 +130,29 @@
               accepts general questions.
             </p>
             <p>
-              Successful submissions show a confirmation in the form. Use the
-              sender’s email link below to reply. The AI Review subscription
-              list records requests for future updates; broadcasts are not
-              enabled.
+              Successful submissions open a confirmation screen with a Close or
+              Done button. Use the sender’s email link below to reply. The AI
+              Review subscription list records requests for future updates;
+              broadcasts are not enabled.
+            </p>
+          </details>
+          <details class="office-preferences">
+            <summary>What do the inbox statuses mean?</summary>
+            <p>
+              Received in club inbox means the submission is stored in the
+              club’s Neon database, not just on this device.
+            </p>
+            <p>
+              <strong>New:</strong> waiting for an officer to review.
+              <strong>Reviewed:</strong> an officer has looked at it; follow-up
+              may still be needed. <strong>Closed:</strong> no further action is
+              planned.
+            </p>
+            <p>
+              Mark reviewed and Mark closed only change the status. Neither
+              sends a reply, deletes a record, unsubscribes anyone, or publishes
+              a contribution. You can change the status later. Use the sender’s
+              email link to reply.
             </p>
           </details>
           <p id="configuration" class="notice" hidden></p>
@@ -141,7 +171,7 @@
               >Type<select name="kind">
                 <option value="">All submissions</option>
                 <option value="join">Club signups</option>
-                <option value="subscribe">The AI Review</option>
+                <option value="subscribe">The AI Review subscription</option>
                 <option value="rsvp">Event RSVPs (upcoming only)</option>
                 <option value="contribution">AI Review submissions</option>
                 <option value="workshop">Workshop requests</option>

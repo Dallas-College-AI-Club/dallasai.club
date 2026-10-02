@@ -4,7 +4,7 @@ export function questionDialog() {
   dialog.className = 'workshop-dialog';
   const headingId = 'question-heading-' + crypto.randomUUID();
   dialog.setAttribute('aria-labelledby', headingId);
-  dialog.innerHTML = `<button class="dialog-close" aria-label="Close question form">×</button><h2 id="${headingId}">Ask the club</h2><p>Your question goes to the club inbox. An officer can reply using your email address.</p><form class="club-form">${identityFields()}<label>Subject<input name="subject" maxlength="160" required></label><label>Your question<textarea name="message" maxlength="5000" rows="5" required></textarea></label>${formFooter('Send question')}</form>`;
+  dialog.innerHTML = `<div class="dialog-toolbar"><button type="button" class="dialog-close" aria-label="Close question form">×</button></div><h2 id="${headingId}">Ask the club</h2><p>Your question goes to the club inbox. An officer can reply using your email address.</p><form class="club-form">${identityFields()}<label>Subject<input name="subject" maxlength="160" required></label><label>Your question<textarea name="message" maxlength="5000" rows="5" required></textarea></label>${formFooter('Send question')}</form>`;
   let stop = () => {};
   dialog.addEventListener('close', () => {
     stop();

@@ -86,9 +86,16 @@ export function eventsMarkup() {
       id="workshop-dialog"
       aria-labelledby="workshop-heading"
     >
-      <button class="dialog-close" aria-label="Close workshop information">
-        ×</button
-      ><span class="tag">SHAPE WHAT WE LEARN</span>
+      <div class="dialog-toolbar">
+        <button
+          type="button"
+          class="dialog-close"
+          aria-label="Close workshop information"
+        >
+          ×
+        </button>
+      </div>
+      <span class="tag">SHAPE WHAT WE LEARN</span>
       <h2 id="workshop-heading">What would you like to try?</h2>
       <form id="workshop-form" class="club-form">
         ${identityFields()}
@@ -229,6 +236,10 @@ export function mountEvents(root) {
       stopRSVP = mountForm(q('#event-rsvp'), {
         kind: 'rsvp',
         extra: { eventId: selected.id },
+        onDone: () => {
+          q('#event-detail').scrollIntoView({ block: 'start' });
+          q('#event-detail').focus({ preventScroll: true });
+        },
       });
       q('#event-rsvp').dataset.eventId = selected.id;
     } else if (!privatePreview && !past) {

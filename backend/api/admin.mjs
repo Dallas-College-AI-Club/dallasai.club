@@ -7,15 +7,12 @@ import { RequestError } from '../lib/errors.mjs';
 import { kinds, uuid } from '../lib/validation.mjs';
 import { liveEvents } from '../lib/events.mjs';
 import { upcomingEvents, inboxFilter } from '../lib/inbox.mjs';
-export function csvCell(value) {
-  const text = String(value ?? '');
-  return (
-    '"' +
-    (/^[\s]*[=+\-@\t\r]/.test(text) ? "'" : '') +
-    text.replaceAll('"', '""') +
-    '"'
-  );
-}
+import { submissionsCSV } from '../lib/submission-export.mjs';
+import {
+  submissionActivity,
+  addSubmissionComment,
+} from '../lib/submission-activity.mjs';
+export { csvCell } from '../lib/submission-export.mjs';
 export function adminHandler({
   authorize = requireAdmin,
   getDatabase = database,
@@ -28,6 +25,16 @@ export function adminHandler({
       const db = getDatabase();
       const url = new URL(req.url, 'https://admin.invalid');
       if (req.method === 'GET') {
+        if (url.searchParams.has('history'))
+          return send(
+            res,
+            200,
+            await submissionActivity(
+              db,
+              url.searchParams.get('history'),
+              url.searchParams.get('before'),
+            ),
+          );
         if (url.searchParams.has('attachment')) {
           const id = url.searchParams.get('attachment');
           if (!uuid.test(id))
@@ -72,7 +79,7 @@ export function adminHandler({
         if (url.searchParams.get('export') === 'csv') {
           const rows = (
             await db.query(
-              `SELECT kind,email,name,state,review_status,created_at,data FROM club_forms.entries e ${where} ORDER BY created_at DESC LIMIT 10000`,
+              `SELECT id,kind,email,name,state,review_status,created_at,data FROM club_forms.entries e ${where} ORDER BY created_at DESC LIMIT 10000`,
               filters,
             )
           ).rows;
@@ -86,24 +93,7 @@ export function adminHandler({
             'Content-Disposition',
             'attachment; filename="club-submissions.csv"',
           );
-          res.end(
-            [
-              'Type,Email,Name,State,Review status,Received,Details',
-              ...rows.map((row) =>
-                [
-                  row.kind,
-                  row.email,
-                  row.name,
-                  row.state,
-                  row.review_status,
-                  new Date(row.created_at).toISOString(),
-                  JSON.stringify(row.data),
-                ]
-                  .map(csvCell)
-                  .join(','),
-              ),
-            ].join('\r\n'),
-          );
+          res.end(submissionsCSV(rows));
           return;
         }
         const result = await db.query(
@@ -133,7 +123,11 @@ export function adminHandler({
       if (req.method !== 'POST')
         throw new RequestError(405, 'Method not allowed.');
       adminOrigin(req);
-      const body = await jsonBody(req, 2048);
+      const body = await jsonBody(req, 32768);
+      if (body.action === 'comment') {
+        const comment = await addSubmissionComment(db, body, user.email);
+        return send(res, 200, { comment });
+      }
       if (
         body.action !== 'review' ||
         !uuid.test(body.id || '') ||

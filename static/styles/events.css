@@ -251,7 +251,7 @@
   overflow: auto;
   border: 1px solid #d4ddcd;
   border-radius: 20px;
-  padding: 45px 28px 30px;
+  padding: 0 28px 30px;
   background: #f9faf3;
   color: #294235;
   box-shadow: 0 30px 100px #0a231850;
@@ -270,10 +270,18 @@
   font-size: 16px;
   line-height: 1.65;
 }
+.dialog-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 -28px 12px;
+  padding: 8px;
+  background: #f9faf3;
+  border-bottom: 1px solid #d4ddcd;
+}
 .dialog-close {
-  position: absolute;
-  top: 8px;
-  right: 8px;
   width: 44px;
   height: 44px;
   border: 0;

@@ -1,3 +1,4 @@
+import { mountEventActivity, activityTime } from './event-activity.js';
 const node = (tag, text, className) => {
   const el = document.createElement(tag);
   if (text !== undefined) el.textContent = text;
@@ -25,6 +26,7 @@ const blank = () => ({
 export function mountEventEditor(api) {
   const q = (s) => document.querySelector(s);
   const form = q('#event-form');
+  const activity = mountEventActivity(api);
   let rows = [],
     current = null,
     saved = '',
@@ -182,6 +184,8 @@ export function mountEventEditor(api) {
       button.onclick = () => {
         if (canLeave()) edit(row);
       };
+      if (activityTime(row.updated_at))
+        button.append(node('span', 'Updated ' + activityTime(row.updated_at)));
       listItems.push(button);
     }
     q('#event-list').replaceChildren(...listItems);
@@ -220,6 +224,7 @@ export function mountEventEditor(api) {
         ? 'Edit event'
         : 'New event';
     q('#event-state').textContent = state(row);
+    activity.show(row);
     q('#event-state').className = row.archived_at
       ? 'archived-notice'
       : !row.published || row.revision !== row.published_revision
@@ -376,6 +381,7 @@ export function mountEventEditor(api) {
     if (showArchived === archived || !canLeave()) return;
     showArchived = archived;
     current = null;
+    activity.clear();
     saved = '';
     form.hidden = true;
     q('#event-empty').hidden = false;
@@ -464,6 +470,7 @@ export function mountEventEditor(api) {
     clear() {
       generation++;
       current = null;
+      activity.clear();
       showArchived = false;
       rows = [];
       images = [];

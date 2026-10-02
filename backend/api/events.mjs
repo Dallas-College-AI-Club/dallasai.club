@@ -9,7 +9,12 @@ import {
   serveEventImage,
 } from '../lib/event-assets.mjs';
 import { RequestError } from '../lib/errors.mjs';
-import { liveEvents, editorEvents, saveEvent } from '../lib/events.mjs';
+import {
+  liveEvents,
+  editorEvents,
+  saveEvent,
+  eventActivity,
+} from '../lib/events.mjs';
 import {
   publicContent,
   draftContent,
@@ -36,7 +41,11 @@ export function eventHandler({
           originals,
           storage,
         );
-      if (req.method === 'GET' && !url.searchParams.has('admin')) {
+      if (
+        req.method === 'GET' &&
+        !url.searchParams.has('admin') &&
+        !url.searchParams.has('history')
+      ) {
         res.setHeader('Access-Control-Allow-Origin', '*');
         return send(res, 200, {
           events: await liveEvents(getDatabase(), originals),
@@ -45,6 +54,16 @@ export function eventHandler({
       if (!['GET', 'POST'].includes(req.method))
         throw new RequestError(405, 'Method not allowed.');
       const user = await authorize(req);
+      if (req.method === 'GET' && url.searchParams.has('history'))
+        return send(
+          res,
+          200,
+          await eventActivity(
+            getDatabase(),
+            url.searchParams.get('history'),
+            url.searchParams.get('before'),
+          ),
+        );
       if (req.method === 'GET')
         return send(res, 200, {
           events: await editorEvents(getDatabase(), originals),

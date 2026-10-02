@@ -132,6 +132,26 @@ test('password login checks the hash; tampered cookies and removed officers lose
     /authorized/,
   );
 });
+test('legacy fallback uses a persistent three-day session without rolling renewal', async () => {
+  const response = await post('/sign-in/email', { email, password });
+  assert.equal(response.status, 200);
+  const token = response.headers
+    .getSetCookie()
+    .find((value) => value.startsWith('club-admin.session_token='));
+  assert.match(token, /Max-Age=259200/i);
+  const sessions = (
+    await db.query('SELECT "createdAt", "expiresAt" FROM club_admin_session')
+  ).rows;
+  assert.ok(sessions.length > 0);
+  for (const session of sessions) {
+    const duration =
+      new Date(session.expiresAt).getTime() -
+      new Date(session.createdAt).getTime();
+    assert.ok(Math.abs(duration - 259200000) < 1000);
+  }
+  assert.equal(authOptions({}).session.disableSessionRefresh, true);
+});
+
 test('an officer can change a password and revoke other sessions; the old password stops working', async () => {
   const first = await post('/sign-in/email', { email, password });
   const second = await post('/sign-in/email', { email, password });

@@ -4,6 +4,11 @@ import {
   handleAuthProxyRequest,
   validateCookieConfig,
 } from '@neondatabase/auth/server';
+import {
+  remainingAdminSession,
+  persistentAdminCookie,
+  expiredAdminCookies,
+} from './admin-session.mjs';
 import { RequestError } from './errors.mjs';
 import { jsonBody, limit, send } from './http.mjs';
 import { database } from './db.mjs';
@@ -46,7 +51,7 @@ export async function neonSession(req) {
       503,
       'Could not verify your sign-in. Please try again.',
     );
-  return result.data;
+  return remainingAdminSession(result.data) > 0 ? result.data : null;
 }
 
 export async function proxyNeonAuth(
@@ -118,7 +123,28 @@ export async function proxyNeonAuth(
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  const cookies = response.headers.getSetCookie();
+  let payload = await response.text();
+  let remaining;
+  if (path === 'get-session' && response.ok) {
+    const data = JSON.parse(payload);
+    remaining = remainingAdminSession(data);
+    if (!remaining) {
+      res.setHeader('Set-Cookie', expiredAdminCookies());
+      res.end('null');
+      return;
+    }
+    // The browser sees the same fixed deadline that protects admin API calls.
+    payload = JSON.stringify({
+      ...data,
+      session: {
+        ...data.session,
+        expiresAt: new Date(Date.now() + remaining * 1000).toISOString(),
+      },
+    });
+  }
+  const cookies = response.headers
+    .getSetCookie()
+    .map((header) => persistentAdminCookie(header, remaining));
   if (cookies.length) res.setHeader('Set-Cookie', cookies);
-  res.end(await response.text());
+  res.end(payload);
 }

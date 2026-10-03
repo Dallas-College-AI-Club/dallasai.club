@@ -16,6 +16,7 @@ const labels = {
 };
 export function contactHistory(api, onChange = () => {}) {
   const drafts = new Map();
+  const profileDrafts = new Map();
   const dialog = node('dialog', undefined, 'contact-dialog');
   dialog.setAttribute('aria-labelledby', 'contact-heading');
   const close = node('button', 'Close', 'secondary'),
@@ -55,7 +56,15 @@ export function contactHistory(api, onChange = () => {}) {
   retry.hidden = true;
   retry.onclick = () => load();
   paging.append(prev, next);
-  dialog.append(toolbar, intro, searchForm, status, retry, content, paging);
+  dialog.append(
+    toolbar,
+    intro,
+    searchForm,
+    status,
+    retry,
+    content,
+    paging,
+  );
   document.body.append(dialog);
   let generation = 0,
     email = '',
@@ -306,11 +315,14 @@ export function contactHistory(api, onChange = () => {}) {
           ...body,
         });
         if (!fresh()) return;
+        if (result.edited || result.purged || result.deleted)
+          for (const address of contact.emails)
+            profileDrafts.delete(address);
         if (result.purged || result.deleted) email = '';
         else email = result.email;
         if (result.purged)
           for (const address of contact.emails) drafts.delete(address);
-        if (result.merged) {
+        if (result.merged || result.edited) {
           const combined = [
             drafts.get(result.email),
             ...contact.emails.map((address) => drafts.get(address)),
@@ -513,10 +525,25 @@ export function contactHistory(api, onChange = () => {}) {
     };
     edit.onclick = () => {
       details.replaceChildren(
-        contactProfile(contact, save, () => {
-          details.replaceChildren();
-          edit.focus();
-        }),
+        contactProfile(
+          contact,
+          save,
+          () => {
+            for (const address of contact.emails)
+              profileDrafts.delete(address);
+            details.replaceChildren();
+            edit.focus();
+          },
+          profileDrafts.get(contact.email) ||
+            contact.emails
+              .map((address) => profileDrafts.get(address))
+              .find(Boolean),
+          (draft) => {
+            for (const address of contact.emails)
+              profileDrafts.delete(address);
+            if (draft) profileDrafts.set(contact.email, draft);
+          },
+        ),
       );
       details.querySelector('input')?.focus();
     };
@@ -548,7 +575,7 @@ export function contactHistory(api, onChange = () => {}) {
     load();
   };
   window.addEventListener('beforeunload', (event) => {
-    if (drafts.size) {
+    if (drafts.size || profileDrafts.size) {
       event.preventDefault();
       event.returnValue = '';
     }
@@ -556,8 +583,10 @@ export function contactHistory(api, onChange = () => {}) {
   return {
     canLeave() {
       return (
-        !drafts.size ||
-        confirm('Discard your unsaved contact notes and sign out?')
+        (!drafts.size && !profileDrafts.size) ||
+        confirm(
+          'Discard your unsaved contact changes and notes and sign out?',
+        )
       );
     },
     open(address = '') {
@@ -570,6 +599,7 @@ export function contactHistory(api, onChange = () => {}) {
     clear() {
       generation++;
       drafts.clear();
+      profileDrafts.clear();
       if (dialog.open) dialog.close();
       content.replaceChildren();
       search.value = '';

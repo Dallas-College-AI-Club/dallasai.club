@@ -10,20 +10,26 @@ const button = (text, action) => {
   el.onclick = action;
   return el;
 };
-export function contactProfile(contact, save, cancel) {
+export function contactProfile(
+  contact,
+  save,
+  cancel,
+  draft,
+  remember = () => {},
+) {
   const panel = node('section', undefined, 'contact-profile');
   const form = node('form'),
     nameLabel = node('label', 'Contact name'),
     name = node('input'),
     emailLabel = node('label', 'Primary email'),
     email = node('input');
-  name.value = contact.name;
+  name.value = draft?.name ?? contact.name;
   name.maxLength = 100;
   nameLabel.append(name);
   email.type = 'email';
   email.required = true;
   email.maxLength = 254;
-  email.value = contact.email;
+  email.value = draft?.primaryEmail ?? contact.email;
   emailLabel.append(email);
   const actions = node('div', undefined, 'survey-response-actions'),
     submit = node('button', 'Save contact changes');
@@ -124,6 +130,9 @@ export function contactProfile(contact, save, cancel) {
   const dirty = () =>
     name.value !== contact.name || email.value !== contact.email;
   function sync() {
+    remember(
+      dirty() ? { name: name.value, primaryEmail: email.value } : null,
+    );
     for (const row of removeButtons)
       row.button.disabled = row.used || dirty();
     hint.textContent = dirty()

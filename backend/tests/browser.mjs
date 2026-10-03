@@ -1,5 +1,5 @@
 import { confirmations } from '../api/forms.mjs';
-import { chromium } from '@playwright/test';
+import { chromium, expect } from '@playwright/test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
@@ -426,7 +426,8 @@ try {
     events: [{ id: 'future', title: 'Upcoming workshop', date: '2099-01-01' }],
   };
   const activity = [];
-  let failComment = false;
+  let failComment = false,
+    slowReview = null;
   const postedComments = [];
   await admin.route('**/api/admin*', async (route) => {
     if (new URL(route.request().url()).searchParams.has('history'))
@@ -466,9 +467,22 @@ try {
         comment: null,
       });
     }
+    const params = new URL(route.request().url()).searchParams;
+    if (slowReview && params.get('status') === 'reviewed') {
+      const hold = slowReview;
+      slowReview = null;
+      hold.arrived();
+      await hold.response;
+    }
+    const entries = fixture.entries.filter(
+      (entry) =>
+        (!params.get('status') ||
+          entry.review_status === params.get('status')) &&
+        (!params.get('kind') || entry.kind === params.get('kind')),
+    );
     await route.fulfill({
       contentType: 'application/json',
-      body: JSON.stringify(fixture),
+      body: JSON.stringify({ ...fixture, entries }),
     });
   });
   await admin.goto(origin + '/admin/');
@@ -482,6 +496,21 @@ try {
   await admin.getByRole('button', { name: 'Sign in', exact: true }).click();
   await admin.getByRole('heading', { name: 'Your club inbox' }).waitFor();
   testSignedIn = true;
+  await expect(admin.locator('[data-inbox-status="new"]')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  assert.equal(await admin.locator('select[name="status"]').count(), 0);
+  await admin
+    .getByText('How people submit to the inbox', { exact: true })
+    .click();
+  assert.equal(await admin.locator('.submission-sources li').count(), 7);
+  for (const target of ['join', 'subscribe', 'contribute', 'events', 'about'])
+    assert.ok(
+      await admin
+        .locator('.submission-sources a[href$="mode=' + target + '"]')
+        .count(),
+    );
   await admin
     .locator('#counts')
     .getByText('The AI Review subscription', { exact: true })
@@ -506,25 +535,39 @@ try {
   await admin.getByText('Submission details', { exact: true }).click();
   assert.equal(await admin.locator('.entry img').count(), 0);
   await admin.getByRole('button', { name: 'Mark reviewed' }).click();
+  await expect(admin.locator('#entries .entry')).toHaveCount(0);
+  await admin.locator('[data-inbox-status="reviewed"]').click();
   await admin.locator('.badge').filter({ hasText: 'reviewed' }).waitFor();
-  await admin.getByRole('button', { name: 'Mark closed', exact: true }).click();
-  await admin.locator('.badge').filter({ hasText: 'closed' }).waitFor();
+  await admin
+    .getByRole('button', { name: 'Archive submission', exact: true })
+    .click();
+  await expect(admin.locator('#entries .entry')).toHaveCount(0);
+  await admin.locator('[data-inbox-status="closed"]').click();
+  await admin.locator('.badge').filter({ hasText: 'archived' }).waitFor();
+  await expect(admin.locator('#export')).toHaveAttribute(
+    'href',
+    /status=closed/,
+  );
+  await admin.getByText('Activity & comments', { exact: true }).click();
   await admin.getByRole('button', { name: 'Mark new', exact: true }).click();
+  await expect(admin.locator('#entries .entry')).toHaveCount(0);
+  await admin.locator('[data-inbox-status="new"]').click();
   await admin.locator('.badge').filter({ hasText: 'new' }).waitFor();
   await admin.getByText('Activity & comments', { exact: true }).click();
-  await admin.getByText('Marked reviewed', { exact: true }).waitFor();
-  await admin.getByText('Marked closed', { exact: true }).waitFor();
   await admin
-    .getByLabel('Add a private comment', { exact: true })
+    .getByText('Visible to all authorized club admins.', { exact: false })
+    .waitFor();
+  await admin.getByText('Marked reviewed', { exact: true }).waitFor();
+  await admin.getByText('Archived submission', { exact: true }).waitFor();
+  await admin
+    .getByLabel('Add a comment', { exact: true })
     .fill('Follow up tomorrow. <img src=x onerror=alert(1)>');
   await admin.getByRole('button', { name: 'Refresh', exact: true }).click();
   await admin.waitForFunction(
     () => !document.querySelector('#refresh').disabled,
   );
   assert.equal(
-    await admin
-      .getByLabel('Add a private comment', { exact: true })
-      .inputValue(),
+    await admin.getByLabel('Add a comment', { exact: true }).inputValue(),
     'Follow up tomorrow. <img src=x onerror=alert(1)>',
   );
   failComment = true;
@@ -549,10 +592,36 @@ try {
       '5:00:00 PM CDT',
     ),
   );
-  await admin.getByRole('button', { name: 'Mark closed', exact: true }).click();
-  await admin.locator('.badge').filter({ hasText: 'closed' }).waitFor();
+  await admin
+    .getByRole('button', { name: 'Archive submission', exact: true })
+    .click();
+  await expect(admin.locator('#entries .entry')).toHaveCount(0);
+  await admin.locator('[data-inbox-status="closed"]').click();
+  await admin.locator('.badge').filter({ hasText: 'archived' }).waitFor();
+  await expect(admin.locator('#export')).toHaveAttribute(
+    'href',
+    /status=closed/,
+  );
+  await admin.getByText('Activity & comments', { exact: true }).click();
   await admin.locator('.officer-comment').waitFor();
 
+  let arrived, release;
+  const pendingRequest = new Promise((resolve) => {
+    arrived = resolve;
+  });
+  slowReview = {
+    arrived,
+    response: new Promise((resolve) => {
+      release = resolve;
+    }),
+  };
+  await admin.locator('[data-inbox-status="reviewed"]').click();
+  await pendingRequest;
+  await admin.locator('[data-inbox-status="new"]').click();
+  release();
+  await expect(admin.locator('#export')).toHaveAttribute('href', /status=new/);
+  await expect(admin.locator('#entries .entry')).toHaveCount(0);
+  await expect(admin.locator('#entries')).toHaveAttribute('aria-busy', 'false');
   await admin
     .getByRole('button', { name: 'Enable browser alerts', exact: true })
     .click();
@@ -594,6 +663,13 @@ try {
       .getAttribute('aria-pressed'),
     'false',
   );
+  await expect(admin.locator('#entries .entry')).toHaveCount(0);
+  await admin.goto(origin + '/admin/#entry=' + fixture.entries[0].id);
+  await expect(admin.locator('[data-inbox-status="closed"]')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await admin.locator('.badge').filter({ hasText: 'archived' }).waitFor();
   await admin.emulateMedia({ colorScheme: 'dark' });
   await admin.waitForFunction(() =>
     document
@@ -619,7 +695,7 @@ try {
     path: path.join(screens, 'admin-desktop.png'),
     fullPage: true,
   });
-  await admin.setViewportSize({ width: 390, height: 844 });
+  await admin.setViewportSize({ width: 320, height: 844 });
   assert.ok(
     await admin.evaluate(
       () => document.documentElement.scrollWidth <= innerWidth,

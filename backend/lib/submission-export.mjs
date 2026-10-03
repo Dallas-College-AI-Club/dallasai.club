@@ -76,7 +76,7 @@ export function submissionsCSV(rows) {
           row.email,
           row.name,
           row.state === 'active' ? 'Received in club inbox' : row.state,
-          { new: 'New', reviewed: 'Reviewed', closed: 'Closed' }[
+          { new: 'New', reviewed: 'Reviewed', closed: 'Archived' }[
             row.review_status
           ] || row.review_status,
           received.format(new Date(row.created_at)),

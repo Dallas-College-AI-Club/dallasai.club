@@ -2,7 +2,7 @@ import { activityTime } from './event-activity.js';
 const actions = {
   'review:new': 'Marked new',
   'review:reviewed': 'Marked reviewed',
-  'review:closed': 'Marked closed',
+  'review:closed': 'Archived submission',
   'download-attachment': 'Downloaded an attachment',
   'comment-added': 'Added a comment',
 };
@@ -18,7 +18,7 @@ export function submissionActivity(entry, api, drafts) {
   panel.append(
     node(
       'p',
-      'Private to club officers. Status changes, comments, and attachment downloads are recorded here. Times are Central.',
+      'Visible to all authorized club admins. Status changes, comments, and attachment downloads are recorded here. Times are Central.',
       'hint',
     ),
   );
@@ -90,7 +90,7 @@ export function submissionActivity(entry, api, drafts) {
   });
   more.onclick = () => load();
   const form = node('form', undefined, 'comment-form');
-  const label = node('label', 'Add a private comment');
+  const label = node('label', 'Add a comment');
   const input = node('textarea');
   input.rows = 3;
   input.maxLength = 5000;
@@ -129,7 +129,7 @@ export function submissionActivity(entry, api, drafts) {
       drafts.delete(entry.id);
       input.value = '';
       saved.textContent =
-        'Comment saved with this entry. Visible only to club officers.';
+        'Comment saved with this entry. Visible to all authorized club admins.';
       await load(true);
     } catch (error) {
       if (panel.isConnected)

@@ -300,6 +300,7 @@ try {
     (await (await fetch(origin + '/api/events')).json()).events.length,
     0,
   );
+  await page.setViewportSize({ width: 1440, height: 1250 });
   await page.getByRole('button', { name: 'Preview', exact: true }).click();
   await page
     .frameLocator('#site-preview-frame')
@@ -313,6 +314,55 @@ try {
       .count(),
     0,
   );
+  const preview = page.frameLocator('#site-preview-frame');
+  assert.ok(await preview.locator('.event-calendar').isVisible());
+  assert.match(
+    await preview.locator('#calendar-agenda').textContent(),
+    /no date yet/,
+  );
+  assert.doesNotMatch(
+    await preview.locator('#calendar-month').textContent(),
+    /undefined|NaN/,
+  );
+  await preview
+    .locator('.events-layout')
+    .evaluate((el) =>
+      el.scrollIntoView({ block: 'start', behavior: 'instant' }),
+    );
+  await page.evaluate(async () => {
+    await Promise.all(
+      document
+        .getAnimations()
+        .filter((a) => a.effect.getTiming().iterations !== Infinity)
+        .map((a) => a.finished.catch(() => {})),
+    );
+  });
+  await preview.locator('.events-layout').evaluate(async (el) => {
+    await Promise.all(
+      el.ownerDocument
+        .getAnimations()
+        .filter((a) => a.effect.getTiming().iterations !== Infinity)
+        .map((a) => a.finished.catch(() => {})),
+    );
+  });
+  const calendarBefore = await preview.locator('.event-calendar').boundingBox();
+  const panelBefore = await preview.locator('#event-detail').boundingBox();
+  assert.ok(panelBefore.x > calendarBefore.x + calendarBefore.width - 2);
+  await preview
+    .locator('#event-detail')
+    .evaluate((el) => (el.scrollTop = el.scrollHeight));
+  const calendarAfter = await preview.locator('.event-calendar').boundingBox();
+  assert.deepEqual(calendarAfter, calendarBefore);
+  const gallery = preview.locator('.event-gallery');
+  assert.equal(
+    await gallery.evaluate((el) => el === el.parentElement.lastElementChild),
+    true,
+  );
+  const previewImage = await gallery.locator('img').boundingBox();
+  assert.ok(previewImage.height <= 220 && previewImage.width <= 320);
+  await page
+    .locator('#site-preview-dialog')
+    .screenshot({ path: path.join(screens, 'preview-calendar-and-image.png') });
   await page.getByRole('button', { name: 'Mobile', exact: true }).click();
   await page
     .frameLocator('#site-preview-frame')
@@ -388,6 +438,14 @@ try {
   await publicPage
     .getByText(workshop.learningOutcomes[9], { exact: true })
     .waitFor();
+  assert.ok(await publicPage.locator('.event-calendar').isVisible());
+  assert.equal(
+    await publicPage
+      .locator('.event-gallery')
+      .evaluate((el) => el === el.parentElement.lastElementChild),
+    true,
+  );
+  await publicPage.locator('.event-gallery img').scrollIntoViewIfNeeded();
   await publicPage.waitForFunction(
     () => document.querySelector('.event-gallery img')?.naturalWidth > 0,
   );

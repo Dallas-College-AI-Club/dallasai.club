@@ -35,13 +35,15 @@ const events = [
 const authorize = (req) => {
   if (req.headers['x-test-admin'] === 'yes')
     return { email: 'admin@example.com' };
+  if (req.headers['x-test-admin'] === 'second')
+    return { email: 'second-admin@example.com' };
   throw new RequestError(401, 'Sign in');
 };
 const request = (route, body, admin = true) =>
   fetch(origin + route, {
     method: body ? 'POST' : 'GET',
     headers: {
-      ...(admin ? { 'x-test-admin': 'yes' } : {}),
+      ...(admin ? { 'x-test-admin': admin === true ? 'yes' : admin } : {}),
       ...(body ? { 'Content-Type': 'application/json', Origin: origin } : {}),
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
@@ -530,7 +532,7 @@ test('reviewing, closing and reopening keep the submission and only change its r
   assert.deepEqual(actions, ['review:reviewed', 'review:closed', 'review:new']);
 });
 
-test('private comments persist author, time and text separately; retries do not duplicate comments or history', async () => {
+test('admin comments persist author, time and text separately; retries do not duplicate comments or history', async () => {
   const row = await submit(
     db,
     entry('question', { subject: 'Question', message: 'Hello' }),
@@ -709,5 +711,111 @@ test('comment and audit writes roll back together if activity recording fails', 
   assert.equal(
     (await db.query('SELECT * FROM club_forms.entry_comments')).rows.length,
     0,
+  );
+});
+
+test('comments are shared between authorized admins with each author preserved', async () => {
+  const row = await submit(
+    db,
+    entry('question', { subject: 'Shared follow-up', message: 'Hello' }),
+    events,
+  );
+  await request('/api/admin', {
+    action: 'comment',
+    id: row.id,
+    commentId: randomUUID(),
+    comment: 'First admin note',
+  });
+  const secondView = await (
+    await request('/api/admin?history=' + row.id, null, 'second')
+  ).json();
+  assert.equal(secondView.activity[0].comment, 'First admin note');
+  assert.equal(secondView.activity[0].actor, 'admin@example.com');
+  await request(
+    '/api/admin',
+    {
+      action: 'comment',
+      id: row.id,
+      commentId: randomUUID(),
+      comment: 'Second admin reply',
+    },
+    'second',
+  );
+  const firstView = await (
+    await request('/api/admin?history=' + row.id)
+  ).json();
+  assert.deepEqual(
+    firstView.activity.map((item) => [item.actor, item.comment]),
+    [
+      ['second-admin@example.com', 'Second admin reply'],
+      ['admin@example.com', 'First admin note'],
+    ],
+  );
+  assert.equal(
+    (await request('/api/admin?history=' + row.id, null, false)).status,
+    401,
+  );
+});
+
+test('status sections and their exports isolate archived submissions and allow restoration', async () => {
+  const records = {};
+  for (const state of ['new', 'reviewed', 'closed']) {
+    const record = await submit(
+      db,
+      entry('question', {
+        subject: state + ' question',
+        message: state + ' body',
+      }),
+      events,
+    );
+    await request('/api/admin', {
+      action: 'review',
+      id: record.id,
+      status: state,
+    });
+    records[state] = record;
+  }
+  for (const state of ['new', 'reviewed', 'closed']) {
+    const view = await (await request('/api/admin?status=' + state)).json();
+    assert.deepEqual(
+      view.entries.map((item) => item.id),
+      [records[state].id],
+    );
+    const exported = parseCSV(
+      await (
+        await request('/api/admin?status=' + state + '&export=csv')
+      ).text(),
+    );
+    assert.equal(exported.length, 1);
+    assert.equal(exported[0]['Subject / title'], state + ' question');
+    assert.equal(
+      exported[0]['Review status'],
+      state === 'closed' ? 'Archived' : state === 'new' ? 'New' : 'Reviewed',
+    );
+  }
+  await request('/api/admin', {
+    action: 'comment',
+    id: records.closed.id,
+    commentId: randomUUID(),
+    comment: 'Keep this with the archived entry',
+  });
+  await request('/api/admin', {
+    action: 'review',
+    id: records.closed.id,
+    status: 'new',
+  });
+  assert.equal(
+    (await (await request('/api/admin?status=closed')).json()).entries.length,
+    0,
+  );
+  const restored = await (await request('/api/admin?status=new')).json();
+  assert.equal(restored.entries.length, 2);
+  const history = await (
+    await request('/api/admin?history=' + records.closed.id)
+  ).json();
+  assert.ok(
+    history.activity.some(
+      (item) => item.comment === 'Keep this with the archived entry',
+    ),
   );
 });

@@ -115,7 +115,10 @@ export function mountEvents(root) {
     new URLSearchParams(location.search).get('preview') === '1' &&
     window.parent !== window;
   const preventPreviewActions = (event) => {
-    if (event.target.closest('button,a,form')) {
+    if (
+      event.target.closest('button,a,form') &&
+      !event.target.closest('.calendar-read,.event-calendar-back')
+    ) {
       event.preventDefault();
       event.stopImmediatePropagation();
     }
@@ -134,13 +137,20 @@ export function mountEvents(root) {
   let fallback =
     splitEvents().upcoming[0] || splitEvents().past[0] || EVENTS[0];
   let selected = EVENTS.find((e) => e.id === requested) || fallback;
+  let previewEvent = null;
   let [year, month] = parts(selected || { date: new Date().toISOString() });
   month--;
   const monthEvents = () =>
-    EVENTS.filter((e) => {
-      const p = parts(e);
-      return p[0] === year && p[1] === month + 1;
-    }).sort((a, b) => a.date.localeCompare(b.date));
+    (previewEvent
+      ? [...EVENTS.filter((e) => e.id !== previewEvent.id), previewEvent]
+      : EVENTS
+    )
+      .filter((e) => {
+        if (!e.date) return false;
+        const p = parts(e);
+        return p[0] === year && p[1] === month + 1;
+      })
+      .sort((a, b) => a.date.localeCompare(b.date));
   const syncUrl = () => {
     if (privatePreview) return;
     const url = new URL(location.href);
@@ -193,7 +203,6 @@ export function mountEvents(root) {
         >
       </div>
       <h2>${escapeHTML(selected.title)}</h2>
-      ${selected.images?.length ? '<div class="event-gallery">' + selected.images.map((image) => '<figure><img loading="lazy" src="' + escapeHTML(privatePreview && /^data:image\/webp;base64,[A-Za-z0-9+/=]+$/.test(image.previewSrc || '') ? image.previewSrc : EVENTS_API_URL + '?image=' + encodeURIComponent(image.id)) + '" alt="' + escapeHTML(image.alt) + '"></figure>').join('') + '</div>' : ''}
       ${selected.targetAudience ? '<h3>Who is this for?</h3><p>' + escapeHTML(selected.targetAudience) + '</p>' : ''}
       ${selected.learningOutcomes?.length ? '<h3>Learning outcomes</h3><ul>' + selected.learningOutcomes.map((x) => '<li>' + escapeHTML(x) + '</li>').join('') + '</ul>' : ''}
       ${selected.summary ? /* HTML */ `<p class="event-description">${escapeHTML(selected.summary)}</p>` : ''}${
@@ -248,6 +257,10 @@ export function mountEvents(root) {
         '<p>RSVPs are closed for this event.</p>',
       );
     }
+    panel.insertAdjacentHTML(
+      'beforeend',
+      `${selected.images?.length ? '<div class="event-gallery">' + selected.images.map((image) => '<figure><img loading="lazy" src="' + escapeHTML(privatePreview && /^data:image\/webp;base64,[A-Za-z0-9+/=]+$/.test(image.previewSrc || '') ? image.previewSrc : EVENTS_API_URL + '?image=' + encodeURIComponent(image.id)) + '" alt="' + escapeHTML(image.alt) + '"></figure>').join('') + '</div>' : ''}`,
+    );
     q('.event-calendar-back').onclick = () => {
       q('.event-calendar').scrollIntoView({ block: 'start' });
       q(`[data-event="${selected.id}"]`)?.focus({ preventScroll: true });
@@ -447,13 +460,21 @@ export function mountEvents(root) {
       !Array.isArray(content.preparation)
     )
       return;
-    selected = content;
-    q('.event-calendar').hidden = true;
-    q('.events-layout').classList.add('private-event-preview');
+    selected = previewEvent = content;
+    const today = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Chicago',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+    [year, month] = parts(content.date ? content : { date: today });
+    month--;
     q('#workshop-request').hidden = true;
-    detail();
-    q('.event-calendar-back').hidden = true;
-    q('#event-detail').scrollIntoView({ block: 'start' });
+    q('#calendar-prev').disabled = q('#calendar-next').disabled = true;
+    draw();
+    if (!content.date)
+      q('#calendar-agenda').innerHTML = '<p>This draft has no date yet.</p>';
+    q('.events-layout').scrollIntoView({ block: 'start' });
   };
   if (privatePreview) {
     window.addEventListener('message', previewMessage);

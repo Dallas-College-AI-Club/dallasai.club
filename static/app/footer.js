@@ -1,8 +1,10 @@
 import { COPYRIGHT, SOCIAL_LINKS } from '../content/club.js';
 import { questionDialog } from './questions.js';
+import { coladdeMark, installColadde } from './coladde.js';
 
 const footer = document.querySelector('.site-footer');
 if (footer) {
+  installColadde();
   footer.innerHTML = /* HTML */ `<div class="footer-main">
       <a
         class="footer-brand"
@@ -12,9 +14,12 @@ if (footer) {
         <img src="assets/club-logo.png" alt="" width="46" height="46" />
         <span>Dallas College<strong>AI Club</strong></span>
       </a>
-      <p class="footer-thought">
-        Different perspectives. <em>Shared possibilities.</em>
-      </p>
+      <div class="footer-thought">
+        ${coladdeMark()}
+        <p class="footer-tagline">
+          Different perspectives. <em>Shared possibilities.</em>
+        </p>
+      </div>
       <nav aria-label="Follow the club"></nav>
     </div>
     <div class="footer-baseline">

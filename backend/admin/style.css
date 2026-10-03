@@ -622,7 +622,7 @@ input::file-selector-button {
 }
 .filters {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
   align-items: end;
   gap: 14px;
   margin: 12px 0 20px;
@@ -916,4 +916,48 @@ input::file-selector-button {
 }
 .comment-form p {
   margin: 0;
+}
+
+.inbox-views {
+  max-width: 100%;
+}
+.inbox-views button {
+  min-height: 44px;
+  padding-inline: 12px;
+}
+@media (max-width: 400px) {
+  .inbox-views {
+    width: 100%;
+  }
+  .inbox-views button {
+    flex: 1;
+    justify-content: center;
+    font-size: 12px;
+    padding-inline: 8px;
+  }
+}
+
+.submission-sources {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px 28px;
+}
+.submission-sources li {
+  min-width: 0;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+.submission-sources a {
+  font-weight: 600;
+}
+.submission-sources p {
+  margin: 6px 0 0;
+  color: var(--muted);
+}
+@media (max-width: 700px) {
+  .submission-sources {
+    grid-template-columns: 1fr;
+  }
 }

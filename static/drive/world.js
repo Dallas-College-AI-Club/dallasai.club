@@ -583,11 +583,17 @@ export class DriveWorld extends MeshPrimitives {
     document.addEventListener('visibilitychange', () => {
       if (document.hidden) release();
     });
-    document.addEventListener('club:search', (e) => {
-      const open = e.detail?.open === true;
-      if (open) release();
-      this.setSearchOpen(open);
-    });
+    const openOverlays = new Set();
+    for (const type of ['club:search', 'club:coladde']) {
+      document.addEventListener(type, (e) => {
+        const open = e.detail?.open === true;
+        if (open) {
+          release();
+          openOverlays.add(type);
+        } else openOverlays.delete(type);
+        this.setSearchOpen(openOverlays.size > 0);
+      });
+    }
     this.canvas.addEventListener('pointerdown', (e) => {
       if (!this.active || this.searchOpen || drag || e.button !== 0) return;
       drag = { id: e.pointerId, x: e.clientX, y: e.clientY };

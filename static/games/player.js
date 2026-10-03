@@ -1,3 +1,4 @@
+import { coladdeMark } from '../app/coladde.js';
 import { gameById } from './registry.js';
 import { savedGame, saveGame } from '../storage/games.js';
 import { bulletinAt, clubBulletins } from './news.js';
@@ -28,7 +29,7 @@ export function mountGame(root, id, { open }) {
     /* HTML */ `<div class="game-titlebar">
         <div>
           <a href="club.html?mode=play" class="all-games" data-library>← All games</a>
-          <h1>${game.title}</h1>
+          <h1>${game.title}${snake ? coladdeMark('snake') : ''}</h1>
         </div>
         <div class="game-score">
           <span>YOUR SCORE</span><strong id="game-score-value">0</strong
@@ -71,6 +72,7 @@ export function mountGame(root, id, { open }) {
         <div class="reward-toast" id="game-reward" role="status" aria-live="polite"></div>
         <section id="game-instructions" class="game-instructions-panel" hidden>
           <p></p>
+          ${!snake ? coladdeMark('ride') : ''}
           <button class="panel-close" id="game-help-close" aria-label="Close instructions">
             ×
           </button>

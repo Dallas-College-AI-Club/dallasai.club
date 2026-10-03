@@ -17,6 +17,7 @@ const labels = {
 let offset = 0,
   signedIn = false,
   loading = false,
+  reloadPending = false,
   sessionGeneration = 0;
 let lastNewCount = null,
   lastReceived = 0;
@@ -76,7 +77,10 @@ function filters() {
     ['offset', String(offset)],
   ]);
   const entry = new URLSearchParams(location.hash.slice(1)).get('entry');
-  if (entry) params.set('id', entry);
+  if (entry) {
+    params.set('id', entry);
+    params.delete('status');
+  }
   return params;
 }
 function renderEntry(entry) {
@@ -84,7 +88,11 @@ function renderEntry(entry) {
   card.id = 'entry-' + entry.id;
   const top = node('div', undefined, 'entry-top');
   top.append(
-    node('span', entry.review_status, 'badge ' + entry.review_status),
+    node(
+      'span',
+      entry.review_status === 'closed' ? 'archived' : entry.review_status,
+      'badge ' + entry.review_status,
+    ),
     node('span', labels[entry.kind]),
     node('span', activityTime(entry.created_at)),
   );
@@ -118,7 +126,7 @@ function renderEntry(entry) {
   const actions = node('div', undefined, 'entry-actions');
   for (const [value, label] of [
     ['reviewed', 'Mark reviewed'],
-    ['closed', 'Mark closed'],
+    ['closed', 'Archive submission'],
     ['new', 'Mark new'],
   ])
     if (value !== entry.review_status) {
@@ -132,6 +140,12 @@ function renderEntry(entry) {
             status: value,
           });
           await load();
+          status(
+            value === 'closed'
+              ? 'Submission moved to Archived. Comments and history are kept.'
+              : 'Submission moved to ' +
+                  (value === 'new' ? 'New.' : 'Reviewed.'),
+          );
         } catch (e) {
           status(e.message);
           b.disabled = false;
@@ -143,13 +157,26 @@ function renderEntry(entry) {
   return card;
 }
 async function load({ background = false } = {}) {
-  if (loading) return;
+  if (loading) {
+    reloadPending ||= !background;
+    return;
+  }
   loading = true;
-  const generation = sessionGeneration;
+  const generation = sessionGeneration,
+    requestedFilters = filters().toString();
+  q('#entries').setAttribute('aria-busy', 'true');
   q('#refresh').disabled = true;
   try {
-    const data = await api('/api/admin?' + filters());
+    const data = await api('/api/admin?' + requestedFilters);
     if (generation !== sessionGeneration) return;
+    if (filters().toString() !== requestedFilters) {
+      reloadPending = true;
+      return;
+    }
+    const linkedId = new URLSearchParams(location.hash.slice(1)).get('entry');
+    const linkedEntry =
+      linkedId && data.entries.find((entry) => entry.id === linkedId);
+    if (linkedEntry) selectInboxStatus(linkedEntry.review_status);
     signedIn = true;
     q('#session-loading').hidden = true;
     q('#login').hidden = true;
@@ -247,7 +274,39 @@ async function load({ background = false } = {}) {
   } finally {
     loading = false;
     q('#refresh').disabled = false;
+    q('#entries').setAttribute('aria-busy', 'false');
+    if (reloadPending) {
+      reloadPending = false;
+      load();
+    }
   }
+}
+function selectInboxStatus(value) {
+  q('#filters [name="status"]').value = value;
+  document.querySelectorAll('[data-inbox-status]').forEach((button) => {
+    button.setAttribute(
+      'aria-pressed',
+      String(button.dataset.inboxStatus === value),
+    );
+  });
+  q('#inbox-view-note').textContent = {
+    new: 'New submissions awaiting review.',
+    reviewed: 'Reviewed submissions. Archive them when follow-up is complete.',
+    closed:
+      'Archived submissions. Comments and history are kept. Mark an entry new or reviewed to restore it.',
+  }[value];
+}
+for (const button of document.querySelectorAll('[data-inbox-status]')) {
+  button.onclick = () => {
+    if (button.getAttribute('aria-pressed') === 'true') return;
+    selectInboxStatus(button.dataset.inboxStatus);
+    offset = 0;
+    if (location.hash !== '#events')
+      history.replaceState({}, '', location.pathname);
+    status();
+    q('#entries').replaceChildren(node('p', 'Loading submissions…'));
+    load();
+  };
 }
 let pendingEmail = '',
   resendAt = 0,
@@ -363,19 +422,30 @@ q('#signout').onclick = async () => {
   }
 };
 const editor = mountEventEditor(api);
-function showPane(name) {
-  if (name !== 'events' && !editor.canLeave()) return;
+function showPane(name, keepHash = false) {
+  if (name !== 'events' && !editor.canLeave()) return false;
   q('#inbox-pane').hidden = name === 'events';
   q('#events-pane').hidden = name !== 'events';
   q('#inbox-tab').setAttribute('aria-pressed', String(name !== 'events'));
   q('#events-tab').setAttribute('aria-pressed', String(name === 'events'));
-  history.replaceState(
-    {},
-    '',
-    name === 'events' ? '#events' : location.pathname,
-  );
+  if (!keepHash)
+    history.replaceState(
+      {},
+      '',
+      name === 'events' ? '#events' : location.pathname,
+    );
   if (name === 'events') editor.show();
 }
+window.addEventListener('hashchange', () => {
+  if (!signedIn || !new URLSearchParams(location.hash.slice(1)).get('entry'))
+    return;
+  if (showPane('inbox', true) === false) return;
+  offset = 0;
+  q('#filters [name="kind"]').value = '';
+  q('#filters [name="eventId"]').value = '';
+  q('#event-filter-label').hidden = true;
+  load();
+});
 q('#events-tab').onclick = () => showPane('events');
 q('#inbox-tab').onclick = () => showPane('inbox');
 q('#refresh').onclick = () => {

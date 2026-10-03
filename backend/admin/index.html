@@ -108,32 +108,112 @@
           <div id="counts" class="counts"></div>
           <details class="office-preferences">
             <summary>How people submit to the inbox</summary>
-            <p>
-              <a
-                href="https://dallasai.club/club.html?mode=contribute"
-                target="_blank"
-                rel="noopener"
-                >Submit to The AI Review ↗</a
-              >
-              accepts draft text and private attachments. An officer reviews
-              each submission before publication.
-            </p>
-            <p>
-              <a
-                href="https://dallasai.club/club.html?mode=events"
-                target="_blank"
-                rel="noopener"
-                >The events page ↗</a
-              >
-              has RSVP forms, a workshop request dialog, and an “Ask about this
-              event” question dialog. “Ask the club” in the website footer
-              accepts general questions.
-            </p>
+            <ul class="submission-sources">
+              <li>
+                <a
+                  href="https://dallasai.club/club.html?mode=join"
+                  target="_blank"
+                  rel="noopener"
+                  >Club signup ↗</a
+                >
+                <p>
+                  “Join the club” in the website menu opens the registration
+                  form. Entries appear under Club signups.
+                </p>
+              </li>
+              <li>
+                <a
+                  href="https://dallasai.club/club.html?mode=subscribe"
+                  target="_blank"
+                  rel="noopener"
+                  >The AI Review subscription ↗</a
+                >
+                <p>
+                  Subscribe links in the menu, The AI Review, and the signup
+                  page open the email form. Entries appear under The AI Review
+                  subscription.
+                </p>
+              </li>
+              <li>
+                <a
+                  href="https://dallasai.club/club.html?mode=contribute"
+                  target="_blank"
+                  rel="noopener"
+                  >Submit to The AI Review ↗</a
+                >
+                <p>
+                  “Contribute an article,” “Start a draft,” and “Develop an
+                  article of your own” open the contribution form. Text and
+                  attachments appear under AI Review submissions for an editor
+                  to review.
+                </p>
+              </li>
+              <li>
+                <a
+                  href="https://dallasai.club/club.html?mode=events"
+                  target="_blank"
+                  rel="noopener"
+                  >Event RSVP ↗</a
+                >
+                <p>
+                  Select an upcoming event with registration open and submit its
+                  RSVP form. Entries appear under Event RSVPs (upcoming only);
+                  use the event filter to choose an event.
+                </p>
+              </li>
+              <li>
+                <a
+                  href="https://dallasai.club/club.html?mode=events"
+                  target="_blank"
+                  rel="noopener"
+                  >Request a workshop ↗</a
+                >
+                <p>
+                  “Request a workshop” on Events opens a popup form. Entries
+                  appear under Workshop requests.
+                </p>
+              </li>
+              <li>
+                <a
+                  href="https://dallasai.club/club.html?mode=events"
+                  target="_blank"
+                  rel="noopener"
+                  >Ask about an event ↗</a
+                >
+                <p>
+                  Select an event, then “Ask about this event.” The popup sends
+                  a question linked to that event to Questions.
+                </p>
+              </li>
+              <li>
+                <a
+                  href="https://dallasai.club/club.html?mode=about"
+                  target="_blank"
+                  rel="noopener"
+                  >Ask the club ↗</a
+                >
+                <p>
+                  “Ask the club” in the public website footer opens the general
+                  question popup. Entries appear under Questions.
+                </p>
+              </li>
+            </ul>
             <p>
               Successful submissions open a confirmation screen with a Close or
-              Done button. Use the sender’s email link below to reply. The AI
-              Review subscription list records requests for future updates;
+              Done button. Use the sender’s email link in the inbox to reply.
+              Subscription requests are saved for future updates; email
               broadcasts are not enabled.
+            </p>
+            <p>
+              Other website actions: game scores go to
+              <a
+                href="https://dallasai.club/club.html?mode=rankings"
+                target="_blank"
+                rel="noopener"
+                >Rankings ↗</a
+              >. Teams links open the club community. Saving a writing draft or
+              choosing “Save to my plans” keeps that choice on the visitor’s
+              device; it does not submit an inbox entry.
             </p>
           </details>
           <details class="office-preferences">
@@ -145,14 +225,14 @@
             <p>
               <strong>New:</strong> waiting for an officer to review.
               <strong>Reviewed:</strong> an officer has looked at it; follow-up
-              may still be needed. <strong>Closed:</strong> no further action is
-              planned.
+              may still be needed. <strong>Archived:</strong> no further action
+              is planned.
             </p>
             <p>
-              Mark reviewed and Mark closed only change the status. Neither
-              sends a reply, deletes a record, unsubscribes anyone, or publishes
-              a contribution. You can change the status later. Use the sender’s
-              email link to reply.
+              Mark reviewed and Archive submission move entries between these
+              sections. Neither sends a reply, deletes a record, unsubscribes
+              anyone, or publishes a contribution. You can change the status
+              later. Use the sender’s email link to reply.
             </p>
           </details>
           <p id="configuration" class="notice" hidden></p>
@@ -166,7 +246,37 @@
               office tab is open. Email alerts are not connected.
             </p>
           </div>
+          <nav class="event-views inbox-views" aria-label="Submission status">
+            <button
+              type="button"
+              data-inbox-status="new"
+              aria-pressed="true"
+              aria-controls="entries"
+            >
+              New
+            </button>
+            <button
+              type="button"
+              data-inbox-status="reviewed"
+              aria-pressed="false"
+              aria-controls="entries"
+            >
+              Reviewed
+            </button>
+            <button
+              type="button"
+              data-inbox-status="closed"
+              aria-pressed="false"
+              aria-controls="entries"
+            >
+              Archived
+            </button>
+          </nav>
+          <p id="inbox-view-note" class="hint">
+            New submissions awaiting review.
+          </p>
           <form id="filters" class="filters">
+            <input type="hidden" name="status" value="new" />
             <label
               >Type<select name="kind">
                 <option value="">All submissions</option>
@@ -176,13 +286,6 @@
                 <option value="contribution">AI Review submissions</option>
                 <option value="workshop">Workshop requests</option>
                 <option value="question">Questions</option>
-              </select></label
-            ><label
-              >Review status<select name="status">
-                <option value="">All statuses</option>
-                <option value="new">New</option>
-                <option value="reviewed">Reviewed</option>
-                <option value="closed">Closed</option>
               </select></label
             ><label id="event-filter-label" hidden
               >Event<select name="eventId" aria-label="Event">
@@ -194,8 +297,8 @@
             <a id="export" href="/api/admin?export=csv">Export filtered CSV</a>
           </div>
           <p class="hint">
-            New submissions appear here. This inbox refreshes every minute while
-            open. CSV exports include up to 10,000 matching records.
+            This inbox refreshes every minute while open. CSV exports include up
+            to 10,000 matching records.
           </p>
           <div id="entries"></div>
           <nav class="pagination" aria-label="Submission pages">

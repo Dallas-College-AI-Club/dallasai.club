@@ -1,4 +1,6 @@
 import { mountRespondents } from './survey-respondents.js';
+import { mountSurveyBuilder } from './survey-builder.js';
+import { responseSections } from '../surveys/results-ui.js';
 function node(tag, text, className) {
   const el = document.createElement(tag);
   if (text !== undefined) el.textContent = text;
@@ -18,9 +20,24 @@ export function mountCustomSurveys(root, api) {
         node('h2', 'Custom surveys'),
         node(
           'p',
-          'Manage respondents and read their shared responses. Only assigned respondents can answer this survey.',
+          'Create surveys, manage respondents, and read submitted results.',
         ),
       );
+      const create = node('button', 'Create custom survey');
+      const edit = (id) => {
+        generation++;
+        mountSurveyBuilder(
+          root,
+          api,
+          async (next) => {
+            if (next) selected = next;
+            await load();
+          },
+          id,
+        );
+      };
+      create.onclick = () => edit();
+      root.append(create);
       if (!surveys.length) {
         root.append(node('p', 'No custom surveys have been opened yet.'));
         return;
@@ -62,6 +79,54 @@ export function mountCustomSurveys(root, api) {
             ),
           );
           const survey = surveys.find((s) => s.id === selected);
+          if (survey.definition) {
+            content.firstChild.textContent =
+              'Saved responses · read-only. Each new submission replaces the respondent’s previous response.';
+            if (survey.status === 'draft') {
+              const resume = node('button', 'Continue editing draft');
+              resume.onclick = () => edit(survey.id);
+              content.append(resume);
+            }
+            const permissions = survey.definition.permissions;
+            content.append(
+              node(
+                'p',
+                `Preview: ${permissions.preview === 'link' ? 'anyone with preview link' : 'verified respondents'} · Answering: ${permissions.answer === 'verified' ? 'any verified email' : 'approved respondents'} · Results: ${permissions.results === 'admins' ? 'admins only' : 'admins and respondents'}`,
+                'hint',
+              ),
+            );
+            if (survey.status === 'open') {
+              const close = node('button', 'Close survey', 'secondary'),
+                closeNote = node('p');
+              close.onclick = () => {
+                close.disabled = true;
+                closeNote.textContent =
+                  'Closing stops previews and new answers. Saved results remain available.';
+                const confirm = node('button', 'Confirm close', 'secondary');
+                confirm.onclick = async () => {
+                  confirm.disabled = true;
+                  try {
+                    const { survey: latest } = await api(
+                      '/api/custom-surveys?action=draft&id=' + survey.id,
+                    );
+                    await api('/api/custom-surveys?action=draft-change', {
+                      id: survey.id,
+                      action: 'close',
+                      definition: latest.definition,
+                      expectedRevision: latest.edit_revision,
+                      requestId: crypto.randomUUID(),
+                    });
+                    await load();
+                  } catch (error) {
+                    closeNote.textContent = error.message;
+                    confirm.disabled = false;
+                  }
+                };
+                content.insertBefore(confirm, closeNote);
+              };
+              content.append(close, closeNote);
+            }
+          }
           content.append(
             node(
               'p',
@@ -72,9 +137,9 @@ export function mountCustomSurveys(root, api) {
                 ' Central.',
             ),
           );
-          if (survey.privateLink) {
+          if (survey.privateLink || survey.previewLink) {
             const link = node('a', 'Open private survey ↗');
-            link.href = survey.privateLink;
+            if (survey.privateLink) link.href = survey.privateLink;
             link.target = '_blank';
             link.rel = 'noopener noreferrer';
             const copy = node('button', 'Copy private link', 'secondary'),
@@ -84,14 +149,15 @@ export function mountCustomSurveys(root, api) {
               try {
                 await navigator.clipboard.writeText(survey.privateLink);
                 notice.textContent =
-                  'Private link copied. Share it with the assigned advisors.';
+                  'Answering link copied. Share it with the intended respondents.';
               } catch {
                 notice.textContent =
                   'Copy this private link: ' + survey.privateLink;
               }
             };
             const preview = node('a', 'Preview questions ↗');
-            preview.href = survey.privateLink + '&preview=1';
+            preview.href =
+              survey.previewLink || survey.privateLink + '&preview=1';
             preview.target = '_blank';
             preview.rel = 'noopener noreferrer';
             const copyPreview = node(
@@ -103,13 +169,14 @@ export function mountCustomSurveys(root, api) {
               try {
                 await navigator.clipboard.writeText(preview.href);
                 notice.textContent =
-                  'Preview link copied. Questions are visible without sign-in; answering requires advisor verification.';
+                  'Preview link copied. Answer controls are disabled.';
               } catch {
                 notice.textContent = 'Copy this preview link: ' + preview.href;
               }
             };
             const actions = node('div', undefined, 'entry-actions');
-            actions.append(preview, copyPreview, link, copy);
+            actions.append(preview, copyPreview);
+            if (survey.privateLink) actions.append(link, copy);
             content.append(actions, notice);
           }
           const respondents = node(
@@ -120,59 +187,37 @@ export function mountCustomSurveys(root, api) {
           content.append(respondents);
           await mountRespondents(respondents, selected, api, load);
           if (current !== generation || request !== requestGeneration) return;
-          const grid = node('div', undefined, 'custom-survey-comparison');
-          const ids = [
-            ...new Set(
-              data.results.flatMap((r) => (r.responses || []).map((a) => a.id)),
-            ),
-          ];
-          for (const result of data.results) {
-            const column = node('article', undefined, 'entry');
-            column.append(node('h3', result.display_name));
-            if (!result.active)
-              column.append(
+          if (survey.definition) {
+            const { survey: detail } = await api(
+              '/api/custom-surveys?action=draft&id=' +
+                encodeURIComponent(selected),
+            );
+            if (current !== generation || request !== requestGeneration) return;
+            const history = node('details');
+            history.append(node('summary', 'Survey activity'));
+            for (const entry of detail.activity)
+              history.append(
                 node(
                   'p',
-                  'Removed respondent · saved responses retained',
-                  'hint',
+                  `${new Date(entry.created_at).toLocaleString('en-US', { timeZone: 'America/Chicago' })} Central · ${entry.actor_email} · ${{ draft_saved: 'Saved draft', published: 'Published survey', closed: 'Closed survey' }[entry.action]}`,
                 ),
               );
-            column.append(
-              node(
-                'p',
-                result.revision
-                  ? `Revision ${result.revision} · ${new Date(result.submitted_at).toLocaleString('en-US', { timeZone: 'America/Chicago' })} Central`
-                  : 'No shared responses yet.',
-              ),
-            );
-            for (const id of ids) {
-              const answer = (result.responses || []).find((a) => a.id === id),
-                reference =
-                  answer ||
-                  data.results
-                    .flatMap((r) => r.responses || [])
-                    .find((a) => a.id === id);
-              const block = node('section', undefined, 'custom-survey-answer');
-              block.append(node('h4', reference.title));
-              block.append(node('p', answer?.text || 'No shared response.'));
-              if (answer?.mode === 'narrative')
-                block.append(node('p', 'Shared wording only', 'hint'));
-              if (
-                answer?.mode === 'structured' &&
-                answer.answer?.mode === 'value'
-              )
-                block.append(
-                  node(
-                    'p',
-                    `Dial position: ${answer.answer.value} of 100.`,
-                    'hint',
-                  ),
-                );
-              column.append(block);
-            }
-            grid.append(column);
+            content.append(history);
           }
-          content.append(grid);
+          content.append(
+            node('h3', 'Submitted responses'),
+            responseSections(data.results, {
+              definition: data.resultsDefinition,
+            }),
+          );
+          if (data.results.some((r) => !r.active && r.responses?.length)) {
+            const archived = node(
+              'a',
+              'View archived responses in Inbox → Archived → Questions',
+            );
+            archived.href = '#archived-survey-questions';
+            content.append(archived);
+          }
         } catch (error) {
           if (current === generation && request === requestGeneration)
             content.replaceChildren(node('p', error.message));
@@ -188,6 +233,10 @@ export function mountCustomSurveys(root, api) {
   }
   return {
     load,
+    show(id) {
+      selected = id;
+      return load();
+    },
     clear() {
       generation++;
       selected = '';

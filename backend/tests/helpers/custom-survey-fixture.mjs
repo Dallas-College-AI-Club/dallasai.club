@@ -14,6 +14,7 @@ export async function fixture() {
     '010_event_surveys.sql',
     '011_custom_surveys.sql',
     '012_survey_respondents.sql',
+    '013_survey_builder.sql',
   ])
     await db.exec(
       await readFile(new URL('../../' + name, import.meta.url), 'utf8'),

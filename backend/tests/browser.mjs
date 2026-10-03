@@ -512,19 +512,20 @@ try {
   await admin.getByRole('button', { name: 'Mark new', exact: true }).click();
   await admin.locator('.badge').filter({ hasText: 'new' }).waitFor();
   await admin.getByText('Activity & comments', { exact: true }).click();
+  await admin
+    .getByText('Visible to all authorized club admins.', { exact: false })
+    .waitFor();
   await admin.getByText('Marked reviewed', { exact: true }).waitFor();
   await admin.getByText('Marked closed', { exact: true }).waitFor();
   await admin
-    .getByLabel('Add a private comment', { exact: true })
+    .getByLabel('Add a comment', { exact: true })
     .fill('Follow up tomorrow. <img src=x onerror=alert(1)>');
   await admin.getByRole('button', { name: 'Refresh', exact: true }).click();
   await admin.waitForFunction(
     () => !document.querySelector('#refresh').disabled,
   );
   assert.equal(
-    await admin
-      .getByLabel('Add a private comment', { exact: true })
-      .inputValue(),
+    await admin.getByLabel('Add a comment', { exact: true }).inputValue(),
     'Follow up tomorrow. <img src=x onerror=alert(1)>',
   );
   failComment = true;

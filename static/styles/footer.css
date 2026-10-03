@@ -43,9 +43,12 @@
   padding-left: 28px;
   border-left: 1px solid var(--line, #e4dcc02b);
   font:
-    24px/1.15 'Instrument Serif',
+    13px/1.4 'Instrument Serif',
     Georgia,
     serif;
+}
+.site-footer .footer-tagline {
+  margin-top: 4px;
 }
 .footer-thought em {
   display: block;
@@ -115,7 +118,10 @@ body[data-space='summary'] .site-footer {
     grid-template-columns: 1fr auto;
   }
   .site-footer .footer-thought {
-    display: none;
+    grid-column: 1 / -1;
+    grid-row: 2;
+    padding-left: 0;
+    border-left: 0;
   }
 }
 @media (max-width: 480px) {

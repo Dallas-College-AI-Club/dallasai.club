@@ -1,3 +1,4 @@
+import { coladdeMark } from '../app/coladde.js';
 import { JOIN_URL } from '../content/club.js';
 import { GAMES } from './registry.js';
 import { readArcade } from '../storage/games.js';
@@ -72,7 +73,8 @@ export function mountHub(root, { open }) {
           <p>Bring your ideas, your curiosity, and whatever skills you have.</p>
         </div>
         <a href="${JOIN_URL}" target="_blank" rel="noreferrer">Join the club ↗</a>
-      </aside>`;
+      </aside>
+      <div class="coladde-maker-stamp">${coladdeMark('arcade')}</div>`;
   root.querySelector('[data-rankings]').onclick = (e) => {
     if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
     e.preventDefault();

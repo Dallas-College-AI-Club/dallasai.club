@@ -1,0 +1,122 @@
+body button.coladde-mark,
+.arcade-page button.coladde-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 4px 8px;
+  margin: 0;
+  border: 0;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font:
+    500 11px/1.2 'DM Sans',
+    sans-serif;
+  letter-spacing: 0.11em;
+  text-transform: lowercase;
+  cursor: help;
+  box-shadow: none;
+}
+body button.coladde-mark:hover {
+  color: var(--ink, #eef0de);
+  background: color-mix(in srgb, currentColor 6%, transparent);
+}
+body button.coladde-mark:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+body button.coladde-wordmark {
+  justify-content: start;
+  padding: 0;
+  font:
+    40px/1.1 'Instrument Serif',
+    Georgia,
+    serif;
+  letter-spacing: -0.035em;
+}
+.coladde-reveal {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  box-sizing: border-box;
+  width: min(310px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  padding: 22px;
+  border: 1px solid #ccd7ca;
+  border-radius: 16px;
+  background: #f8faf3;
+  color: #294238;
+  box-shadow: 0 12px 45px #0b262a35;
+  font:
+    15px/1.6 'DM Sans',
+    sans-serif;
+  z-index: 1000;
+}
+.coladde-reveal[hidden] {
+  display: none !important;
+}
+.coladde-label {
+  font:
+    29px 'Instrument Serif',
+    Georgia,
+    serif;
+  letter-spacing: -0.025em;
+}
+.coladde-reveal p {
+  margin: 12px 0 0;
+}
+.coladde-reveal b {
+  font-weight: 600;
+  color: #376653;
+}
+.coladde-reveal .coladde-bonus {
+  padding-top: 12px;
+  border-top: 1px solid #d8e1d2;
+  font-size: 11px;
+  color: #4c6655;
+}
+.coladde-reveal .coladde-close {
+  position: absolute;
+  top: 7px;
+  right: 7px;
+  width: 44px;
+  height: 44px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: 23px sans-serif;
+  cursor: pointer;
+}
+.coladde-reveal .coladde-close:focus-visible {
+  outline: 2px solid #376653;
+  outline-offset: -4px;
+  border-radius: 8px;
+}
+.coladde-maker-stamp {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 8px;
+  color: #9eafa6;
+}
+.console-bottom .coladde-mark {
+  flex: 0 0 auto;
+}
+.game-titlebar h1 .coladde-mark {
+  margin-left: 12px;
+  vertical-align: middle;
+  color: #a5bbae;
+}
+.drive-panel-body .coladde-mark {
+  color: #adc5b1;
+  margin-top: 10px;
+}
+@media print {
+  .coladde-reveal,
+  .coladde-egg {
+    display: none !important;
+  }
+}

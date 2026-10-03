@@ -35,13 +35,15 @@ const events = [
 const authorize = (req) => {
   if (req.headers['x-test-admin'] === 'yes')
     return { email: 'admin@example.com' };
+  if (req.headers['x-test-admin'] === 'second')
+    return { email: 'second-admin@example.com' };
   throw new RequestError(401, 'Sign in');
 };
 const request = (route, body, admin = true) =>
   fetch(origin + route, {
     method: body ? 'POST' : 'GET',
     headers: {
-      ...(admin ? { 'x-test-admin': 'yes' } : {}),
+      ...(admin ? { 'x-test-admin': admin === true ? 'yes' : admin } : {}),
       ...(body ? { 'Content-Type': 'application/json', Origin: origin } : {}),
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
@@ -530,7 +532,7 @@ test('reviewing, closing and reopening keep the submission and only change its r
   assert.deepEqual(actions, ['review:reviewed', 'review:closed', 'review:new']);
 });
 
-test('private comments persist author, time and text separately; retries do not duplicate comments or history', async () => {
+test('admin comments persist author, time and text separately; retries do not duplicate comments or history', async () => {
   const row = await submit(
     db,
     entry('question', { subject: 'Question', message: 'Hello' }),
@@ -709,5 +711,48 @@ test('comment and audit writes roll back together if activity recording fails', 
   assert.equal(
     (await db.query('SELECT * FROM club_forms.entry_comments')).rows.length,
     0,
+  );
+});
+
+test('comments are shared between authorized admins with each author preserved', async () => {
+  const row = await submit(
+    db,
+    entry('question', { subject: 'Shared follow-up', message: 'Hello' }),
+    events,
+  );
+  await request('/api/admin', {
+    action: 'comment',
+    id: row.id,
+    commentId: randomUUID(),
+    comment: 'First admin note',
+  });
+  const secondView = await (
+    await request('/api/admin?history=' + row.id, null, 'second')
+  ).json();
+  assert.equal(secondView.activity[0].comment, 'First admin note');
+  assert.equal(secondView.activity[0].actor, 'admin@example.com');
+  await request(
+    '/api/admin',
+    {
+      action: 'comment',
+      id: row.id,
+      commentId: randomUUID(),
+      comment: 'Second admin reply',
+    },
+    'second',
+  );
+  const firstView = await (
+    await request('/api/admin?history=' + row.id)
+  ).json();
+  assert.deepEqual(
+    firstView.activity.map((item) => [item.actor, item.comment]),
+    [
+      ['second-admin@example.com', 'Second admin reply'],
+      ['admin@example.com', 'First admin note'],
+    ],
+  );
+  assert.equal(
+    (await request('/api/admin?history=' + row.id, null, false)).status,
+    401,
   );
 });

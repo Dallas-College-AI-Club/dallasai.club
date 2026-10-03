@@ -1,3 +1,4 @@
+import { closeColadde } from './coladde.js';
 import { readRun, visitSavedPage } from '../storage/drive.js';
 import { routeFromUrl } from './routes.js';
 import { JOIN_URL } from '../content/club.js';
@@ -92,6 +93,7 @@ function updateGameEntry() {
   $('.arcade-library-link').hidden = next === 'play';
 }
 function renderView(next, article = null, push = true, route = {}) {
+  closeColadde();
   next = normalize(next);
   if (!names[next]) next = 'summary';
   cleanup();

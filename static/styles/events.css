@@ -487,19 +487,22 @@
 }
 .event-gallery {
   display: grid;
-  gap: 16px;
-  margin: 20px 0;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 12px;
+  margin: 24px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
 }
 .event-gallery figure {
   margin: 0;
+  max-width: 320px;
 }
 .event-gallery img {
   display: block;
   width: 100%;
-  max-height: 600px;
+  aspect-ratio: 16 / 10;
+  max-height: 220px;
   object-fit: contain;
+  object-position: left center;
   border-radius: 12px;
-}
-.events-layout.private-event-preview {
-  grid-template-columns: minmax(0, 1fr);
 }

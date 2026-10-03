@@ -1452,6 +1452,37 @@ input::file-selector-button {
 .contact-dialog h2 {
   overflow-wrap: anywhere;
 }
+.contact-profile form > label {
+  display: block;
+  margin-block: 16px;
+}
+.contact-alias-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  padding-block: 14px;
+}
+.contact-alias-row > div:first-child {
+  flex: 1 1 240px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.contact-alias-row > .contact-confirmation {
+  flex-basis: 100%;
+}
+.contact-alias-responses {
+  flex-basis: 100%;
+}
+.contact-alias-responses a {
+  display: block;
+  padding-block: 8px;
+  overflow-wrap: anywhere;
+}
+.contact-alias-row p {
+  margin-block: 8px 0;
+}
 .contact-choice {
   display: flex;
   flex-direction: column;

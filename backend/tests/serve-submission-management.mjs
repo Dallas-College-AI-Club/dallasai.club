@@ -19,6 +19,7 @@ for (const file of [
   '014_event_response_management.sql',
   '015_contact_identity_management.sql',
   '016_submission_management.sql',
+  '017_contact_profile_editing.sql',
 ])
   await db.exec(
     await readFile(new URL('../' + file, import.meta.url), 'utf8'),

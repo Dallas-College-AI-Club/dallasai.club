@@ -14,7 +14,6 @@ const labels = {
   join: 'Club signups',
   subscribe: 'The AI Review subscription',
   rsvp: 'Event RSVPs (upcoming only)',
-  'rsvp-past': 'Event RSVPs (past)',
   contribution: 'AI Review submissions',
   workshop: 'Workshop requests',
   question: 'Questions',

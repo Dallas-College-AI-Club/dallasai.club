@@ -122,6 +122,20 @@ Search for and select the contact to keep, then review **Confirm merge**. Its
 primary email is retained. Both email addresses find the same combined history,
 including future submissions. Original submission emails, answers and notes are
 preserved. Contacts with the same name are never automatically merged.
+The directory shows one primary address per person; other addresses are listed
+separately inside that person's history. **Edit contact** lets an admin correct
+the displayed name and choose an existing or new primary email. Future form
+submissions keep the admin-edited name. An address owned by a different contact
+must be merged first. Changing the primary address preserves all saved responses
+and their original addresses.
+
+The same editor lists linked addresses and offers **Remove unused address** with
+a confirmation. Addresses tied to submissions, notes or private survey membership
+cannot be removed until those records are corrected or removed. This prevents
+cleanup from silently discarding history. Unsubmitted profile edits and follow-up
+notes survive closing the contact dialog; Cancel discards profile edits explicitly.
+Apply `backend/017_contact_profile_editing.sql` after migration 016 before deploying
+these profile controls. Identity changes and alias cleanup are recorded in history.
 A contact shows the names used, submitted
 messages, Inbox comments, response-management activity and officer follow-up notes.
 Notes carry the authenticated author and database timestamp. Retrying a saved note

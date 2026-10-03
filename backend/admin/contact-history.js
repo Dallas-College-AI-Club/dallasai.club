@@ -1,4 +1,5 @@
 import { activityTime } from './event-activity.js';
+import { contactProfile } from './contact-profile.js';
 const node = (tag, text, cls) => {
   const el = document.createElement(tag);
   if (text !== undefined) el.textContent = text;
@@ -7,7 +8,7 @@ const node = (tag, text, cls) => {
 };
 const labels = {
   join: 'Club signup',
-  subscribe: 'Newsletter subscription',
+  subscribe: 'The AI Review subscription',
   rsvp: 'Event RSVP',
   question: 'Question',
   workshop: 'Workshop request',
@@ -15,6 +16,7 @@ const labels = {
 };
 export function contactHistory(api, onChange = () => {}) {
   const drafts = new Map();
+  const profileDrafts = new Map();
   const dialog = node('dialog', undefined, 'contact-dialog');
   dialog.setAttribute('aria-labelledby', 'contact-heading');
   const close = node('button', 'Close', 'secondary'),
@@ -291,6 +293,7 @@ export function contactHistory(api, onChange = () => {}) {
       ),
       restore = node('button', 'Restore contact', 'secondary'),
       merge = node('button', 'Merge with another contact', 'secondary'),
+      edit = node('button', 'Edit contact', 'secondary'),
       details = node('div', undefined, 'contact-confirmation');
     const actionButton = (text, fn, cls = 'secondary') => {
       const el = node('button', text, cls);
@@ -302,6 +305,7 @@ export function contactHistory(api, onChange = () => {}) {
     async function save(body, message) {
       if (!fresh()) return;
       const controls = [...panel.querySelectorAll('button, input')];
+      const disabled = controls.map((control) => control.disabled);
       controls.forEach((el) => (el.disabled = true));
       status.textContent = 'Saving contact changes…';
       try {
@@ -311,11 +315,14 @@ export function contactHistory(api, onChange = () => {}) {
           ...body,
         });
         if (!fresh()) return;
+        if (result.edited || result.purged || result.deleted)
+          for (const address of contact.emails)
+            profileDrafts.delete(address);
         if (result.purged || result.deleted) email = '';
         else email = result.email;
         if (result.purged)
           for (const address of contact.emails) drafts.delete(address);
-        if (result.merged) {
+        if (result.merged || result.edited) {
           const combined = [
             drafts.get(result.email),
             ...contact.emails.map((address) => drafts.get(address)),
@@ -340,7 +347,7 @@ export function contactHistory(api, onChange = () => {}) {
       } catch (error) {
         if (fresh()) {
           status.textContent = error.message;
-          controls.forEach((el) => (el.disabled = false));
+          controls.forEach((el, index) => (el.disabled = disabled[index]));
         }
       }
     }
@@ -516,6 +523,32 @@ export function contactHistory(api, onChange = () => {}) {
         }
       };
     };
+    edit.onclick = () => {
+      details.replaceChildren(
+        contactProfile(
+          contact,
+          save,
+          () => {
+            for (const address of contact.emails)
+              profileDrafts.delete(address);
+            details.replaceChildren();
+            edit.focus();
+          },
+          profileDrafts.get(contact.email) ||
+            contact.emails
+              .map((address) => profileDrafts.get(address))
+              .find(Boolean),
+          (draft) => {
+            for (const address of contact.emails)
+              profileDrafts.delete(address);
+            if (draft) profileDrafts.set(contact.email, draft);
+          },
+          () => dialog.close(),
+        ),
+      );
+      details.querySelector('input')?.focus();
+    };
+    if (!contact.deleted_at) actions.append(edit);
     actions.append(test);
     if (!contact.deleted_at) actions.append(merge);
     if (contact.deleted_at) actions.append(restore);
@@ -543,7 +576,7 @@ export function contactHistory(api, onChange = () => {}) {
     load();
   };
   window.addEventListener('beforeunload', (event) => {
-    if (drafts.size) {
+    if (drafts.size || profileDrafts.size) {
       event.preventDefault();
       event.returnValue = '';
     }
@@ -551,8 +584,10 @@ export function contactHistory(api, onChange = () => {}) {
   return {
     canLeave() {
       return (
-        !drafts.size ||
-        confirm('Discard your unsaved contact notes and sign out?')
+        (!drafts.size && !profileDrafts.size) ||
+        confirm(
+          'Discard your unsaved contact changes and notes and sign out?',
+        )
       );
     },
     open(address = '') {
@@ -565,6 +600,7 @@ export function contactHistory(api, onChange = () => {}) {
     clear() {
       generation++;
       drafts.clear();
+      profileDrafts.clear();
       if (dialog.open) dialog.close();
       content.replaceChildren();
       search.value = '';

@@ -30,6 +30,7 @@ for (const file of [
   '010_event_surveys.sql',
   '014_event_response_management.sql',
   '015_contact_identity_management.sql',
+  '016_submission_management.sql',
 ])
   await db.exec(await readFile(new URL('../' + file, import.meta.url), 'utf8'));
 await db.exec(
@@ -395,16 +396,14 @@ try {
   await page.getByRole('button', { name: 'Close RSVP', exact: true }).click();
   await admin.locator('#inbox-tab').click();
   await admin.locator('#refresh').click();
-  await admin
-    .getByRole('heading', { name: 'Browser survey test', exact: true })
-    .waitFor();
+  await admin.locator('#entry-' + entryId + ' > summary').click();
   assert.match(
     await admin.locator('#entries').textContent(),
     /Potential social survey · TBD/,
   );
   assert.doesNotMatch(await admin.locator('#entries').textContent(), /Chess/);
   await admin.getByRole('button', { name: 'View survey answers' }).click();
-  await admin.locator('.survey-response').waitFor();
+  await admin.locator('#survey-results .survey-response').waitFor();
   assert.match(
     await admin.locator('#survey-results').textContent(),
     /Other: Chess/,
@@ -419,7 +418,7 @@ try {
   );
   assert.equal(await admin.locator('#survey-results img').count(), 0);
   await admin.reload();
-  await admin.locator('.survey-response').waitFor();
+  await admin.locator('#survey-results .survey-response').waitFor();
   await admin.screenshot({
     path: path.join(screens, 'survey-results-desktop.png'),
     fullPage: true,
@@ -436,33 +435,33 @@ try {
     fullPage: true,
   });
   await admin.locator('#survey-view').selectOption('active');
-  await admin.locator('.survey-response').waitFor();
+  await admin.locator('#survey-results .survey-response').waitFor();
   assert.equal(
-    await admin.locator('.survey-response').getAttribute('open'),
+    await admin.locator('#survey-results .survey-response').getAttribute('open'),
     null,
   );
-  await admin.locator('.survey-response > summary').click();
+  await admin.locator('#survey-results .survey-response > summary').click();
   await admin.getByRole('button', { name: '☆ Star', exact: true }).click();
   await admin.getByText('Response starred.', { exact: true }).waitFor();
   await admin.locator('#survey-starred').check();
-  await admin.locator('.survey-response').waitFor();
-  await admin.locator('.survey-response > summary').click();
+  await admin.locator('#survey-results .survey-response').waitFor();
+  await admin.locator('#survey-results .survey-response > summary').click();
   await admin.getByRole('button', { name: 'Archive', exact: true }).click();
   await admin
     .getByText('Response archived. Find it under Archived to restore it.', {
       exact: true,
     })
     .waitFor();
-  assert.equal(await admin.locator('.survey-response').count(), 0);
+  assert.equal(await admin.locator('#survey-results .survey-response').count(), 0);
   await admin.locator('#survey-view').selectOption('archived');
-  await admin.locator('.survey-response > summary').click();
+  await admin.locator('#survey-results .survey-response > summary').click();
   await admin.getByRole('button', { name: 'Restore', exact: true }).click();
   await admin
     .getByText('Response restored to Active.', { exact: true })
     .waitFor();
   await admin.locator('#survey-view').selectOption('active');
   await admin.locator('#survey-search').fill('MKim23@Student');
-  await admin.locator('.survey-response').waitFor();
+  await admin.locator('#survey-results .survey-response').waitFor();
   await admin
     .getByRole('button', { name: 'Compile event summary', exact: true })
     .click();
@@ -580,7 +579,7 @@ try {
   assert.equal(await admin.locator('.survey-report').textContent(), '');
   await admin.setViewportSize({ width: 320, height: 820 });
 
-  await admin.locator('.survey-response > summary').click();
+  await admin.locator('#survey-results .survey-response > summary').click();
   await admin
     .getByRole('button', { name: 'Contact history', exact: true })
     .click();
@@ -590,7 +589,7 @@ try {
   await admin.getByRole('button', { name: 'Save note', exact: true }).click();
   await admin.getByText('Follow-up note saved.', { exact: true }).waitFor();
   assert.match(
-    await admin.locator('.contact-dialog').textContent(),
+    await admin.locator('.contact-dialog:not(.submission-dialog)').textContent(),
     /Called to confirm/,
   );
   assert.equal(
@@ -603,7 +602,7 @@ try {
   );
   assert.equal(
     await admin
-      .locator('.contact-dialog')
+      .locator('.contact-dialog:not(.submission-dialog)')
       .evaluate((el) => el.scrollWidth <= el.clientWidth),
     true,
   );
@@ -621,7 +620,7 @@ try {
       [id, email, name],
     );
   }
-  const contacts = admin.locator('.contact-dialog');
+  const contacts = admin.locator('.contact-dialog:not(.submission-dialog)');
   await contacts
     .getByRole('button', { name: 'Merge with another contact', exact: true })
     .click();
@@ -744,7 +743,7 @@ try {
     .getByLabel('Show contacts', { exact: true })
     .selectOption('active');
   await admin
-    .locator('.contact-dialog')
+    .locator('.contact-dialog:not(.submission-dialog)')
     .getByRole('button', { name: 'Close', exact: true })
     .click();
   await admin.locator('#survey-search').fill('no-such-person');
@@ -754,7 +753,7 @@ try {
       { exact: true },
     )
     .waitFor();
-  assert.equal(await admin.locator('.survey-response').count(), 0);
+  assert.equal(await admin.locator('#survey-results .survey-response').count(), 0);
   await admin
     .getByRole('button', { name: 'Contacts & follow-up', exact: true })
     .click();
@@ -763,7 +762,7 @@ try {
     .click();
   await admin.locator('.contact-choice').waitFor();
   await admin
-    .locator('.contact-dialog')
+    .locator('.contact-dialog:not(.submission-dialog)')
     .getByRole('button', { name: 'Close', exact: true })
     .click();
   const anonymous = await fetch(origin + '/api/surveys');

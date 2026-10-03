@@ -44,7 +44,10 @@ export async function mountRespondents(root, surveyId, api, onChanged) {
         },
       };
       try {
-        await api('/api/custom-surveys?action=member-change', pending.body);
+        await api(
+          '/api/custom-surveys?action=member-change',
+          pending.body,
+        );
         if (!root.isConnected) return;
         pending = null;
         await onChanged();

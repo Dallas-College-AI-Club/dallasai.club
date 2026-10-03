@@ -50,7 +50,13 @@ export function mountSurveyBuilder(root, api, onDone, id) {
     if ((await save(action)) && action !== 'publish') render();
   });
   retry.hidden = true;
-  const steps = ['Template', 'Audience', 'Questions', 'Preview', 'Publish'];
+  const steps = [
+    'Template',
+    'Audience',
+    'Questions',
+    'Preview',
+    'Publish',
+  ];
   async function initialize() {
     if (id) {
       root.replaceChildren(node('p', 'Loading survey draft…'));
@@ -217,7 +223,10 @@ export function mountSurveyBuilder(root, api, onDone, id) {
             definition.template = value;
             if (!definition.questions.length && value === 'feedback')
               definition.questions = [
-                newQuestion('How would you rate your experience?', 'scale'),
+                newQuestion(
+                  'How would you rate your experience?',
+                  'scale',
+                ),
                 newQuestion('What worked well?'),
                 newQuestion('What would you improve?'),
               ];
@@ -432,7 +441,11 @@ export function mountSurveyBuilder(root, api, onDone, id) {
         ),
       );
       for (const q of definition.questions) {
-        const card = node('section', undefined, 'builder-preview-question');
+        const card = node(
+          'section',
+          undefined,
+          'builder-preview-question',
+        );
         card.append(
           node('strong', q.title || 'Untitled question'),
           node('p', q.description),
@@ -536,7 +549,9 @@ export function mountSurveyBuilder(root, api, onDone, id) {
     const actions = node('div', undefined, 'entry-actions');
     if (step) actions.append(button('← Back', () => go(step - 1)));
     if (step < 4)
-      actions.append(button('Save and continue →', () => go(step + 1), ''));
+      actions.append(
+        button('Save and continue →', () => go(step + 1), ''),
+      );
     actions.append(
       button('Save draft and leave', async () => {
         if (await save()) onDone(surveyId);

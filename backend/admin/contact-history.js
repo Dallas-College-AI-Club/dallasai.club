@@ -54,7 +54,15 @@ export function contactHistory(api, onChange = () => {}) {
   retry.hidden = true;
   retry.onclick = () => load();
   paging.append(prev, next);
-  dialog.append(toolbar, intro, searchForm, status, retry, content, paging);
+  dialog.append(
+    toolbar,
+    intro,
+    searchForm,
+    status,
+    retry,
+    content,
+    paging,
+  );
   document.body.append(dialog);
   let generation = 0,
     email = '',
@@ -356,7 +364,9 @@ export function contactHistory(api, onChange = () => {}) {
           save(
             {
               ...body,
-              ...(requireEmail ? { confirmEmail: input.value.trim() } : {}),
+              ...(requireEmail
+                ? { confirmEmail: input.value.trim() }
+                : {}),
             },
             message,
           );
@@ -392,7 +402,9 @@ export function contactHistory(api, onChange = () => {}) {
         contact.is_test
           ? 'Deleting this contact will keep their submissions and allow restoration.'
           : 'This applies to every linked email. Deleting a test contact permanently erases its submissions, survey answers, comments, attachments and follow-up notes. Marking it does not delete anything yet.',
-        contact.is_test ? 'Confirm unmark as test' : 'Confirm mark as test',
+        contact.is_test
+          ? 'Confirm unmark as test'
+          : 'Confirm mark as test',
         { action: 'contact-test', value: !contact.is_test },
         contact.is_test
           ? 'Test flag removed.'

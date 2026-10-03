@@ -53,6 +53,96 @@ async function check(name, fn) {
 }
 try {
   await check(
+    'Response edits require discard confirmation and lock during saves',
+    async (page, dialogs, setAccept) => {
+      const entry = fixture.entries.find((row) => row.kind === 'rsvp');
+      await page.locator('#entry-' + entry.id + ' > summary').click();
+      await page
+        .locator('#entry-' + entry.id)
+        .getByRole('button', { name: 'Edit response', exact: true })
+        .click();
+      const dialog = page.locator('.submission-dialog[open]');
+      await dialog
+        .getByLabel('Full name', { exact: true })
+        .fill('Edited office respondent');
+      setAccept(false);
+      await page.keyboard.press('Escape');
+      assert.equal(dialogs.length, 1);
+      await expect(dialog).toBeVisible();
+      let release;
+      const gate = new Promise((resolve) => {
+        release = resolve;
+      });
+      await page.route('**/api/admin', async (route) => {
+        if (route.request().postDataJSON()?.action !== 'edit-submission')
+          return route.continue();
+        await gate;
+        await route.continue();
+      });
+      const requested = page.waitForRequest(
+        (request) =>
+          request.method() === 'POST' &&
+          request.url().endsWith('/api/admin'),
+      );
+      await dialog
+        .getByRole('button', { name: 'Save changes', exact: true })
+        .click();
+      await requested;
+      await expect(
+        dialog.getByLabel('Full name', { exact: true }),
+      ).toBeDisabled();
+      await page.keyboard.press('Escape');
+      await expect(dialog).toBeVisible();
+      release();
+      await expect(dialog).toHaveCount(0);
+      assert.equal(
+        (
+          await fixture.db.query(
+            'SELECT name FROM club_forms.entries WHERE id=$1',
+            [entry.id],
+          )
+        ).rows[0].name,
+        'Edited office respondent',
+      );
+      await page
+        .locator('#entry-' + entry.id)
+        .getByRole('button', { name: 'Edit response', exact: true })
+        .click();
+      await dialog
+        .getByLabel('Full name', { exact: true })
+        .fill('Discard this change');
+      setAccept(true);
+      await dialog
+        .getByRole('button', { name: 'Cancel', exact: true })
+        .click();
+      await expect(dialog).toHaveCount(0);
+    },
+  );
+  await check(
+    'Expired session closes private dialogs and clears records',
+    async (page) => {
+      await page
+        .locator('#inbox-pane')
+        .getByRole('button', { name: 'Contacts & follow-up', exact: true })
+        .click();
+      await page.locator('.contact-choice').first().waitFor();
+      await page.route('**/api/surveys?**', (route) =>
+        route.fulfill({
+          status: 401,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Session expired' }),
+        }),
+      );
+      await page.locator('.contact-choice').first().click();
+      await expect(page.locator('#login')).toBeVisible();
+      await expect(page.locator('dialog[open]')).toHaveCount(0);
+      await expect(page.locator('#entries')).toBeEmpty();
+      await expect(page.locator('#status')).toContainText(
+        'Your session ended',
+      );
+    },
+  );
+  await check(
     'Custom survey create preview publish respondents and close',
     async (page) => {
       await page.locator('#surveys-tab').click();
@@ -128,8 +218,12 @@ try {
       await expect(
         page.getByRole('button', { name: 'Close survey', exact: true }),
       ).toBeEnabled();
-      await page.getByRole('button', { name: /Remove access for/ }).click();
-      await page.getByText('Archived respondents', { exact: true }).click();
+      await page
+        .getByRole('button', { name: /Remove access for/ })
+        .click();
+      await page
+        .getByText('Archived respondents', { exact: true })
+        .click();
       await page
         .getByRole('button', { name: /Restore access for/ })
         .click();
@@ -327,7 +421,9 @@ try {
   await check('Active tabs preserve filters', async (page) => {
     await page.locator('#surveys-tab').click();
     await page.locator('#survey-search').fill('rsvp@example.edu');
-    await expect(page.locator('.survey-response')).toHaveCount(1);
+    await expect(
+      page.locator('#survey-results .survey-response'),
+    ).toHaveCount(1);
     await page.locator('#surveys-tab').click();
     await expect(page.locator('#survey-search')).toHaveValue(
       'rsvp@example.edu',
@@ -359,14 +455,41 @@ try {
     await expect(page.locator('#inbox-pane')).toBeVisible();
   });
   await check(
+    'Cancelled browser navigation retains custom draft and address',
+    async (page, dialogs, setAccept) => {
+      await page.locator('#surveys-tab').click();
+      await page.locator('#custom-surveys-group').click();
+      await page
+        .getByRole('button', { name: 'Create custom survey', exact: true })
+        .click();
+      await page
+        .getByLabel('Survey title', { exact: true })
+        .fill('Keep this browser draft');
+      setAccept(false);
+      await page.evaluate(() => {
+        location.hash = 'survey=some-entry';
+      });
+      await expect(page).toHaveURL(/#surveys$/);
+      await expect(
+        page.getByLabel('Survey title', { exact: true }),
+      ).toHaveValue('Keep this browser draft');
+      await expect(page.locator('#custom-surveys-root')).toBeVisible();
+      assert.equal(dialogs.length, 1);
+    },
+  );
+  await check(
     'Contact notes survive closing and reopening',
     async (page) => {
       await page
         .locator('#inbox-pane')
         .getByRole('button', { name: 'Contacts & follow-up', exact: true })
         .click();
-      const dialog = page.locator('.contact-dialog');
-      await dialog.getByRole('button', { name: /Office rsvp/ }).click();
+      const dialog = page.locator(
+        '.contact-dialog:not(.submission-dialog)',
+      );
+      await dialog
+        .getByRole('button', { name: /rsvp@example.edu/ })
+        .click();
       await dialog
         .getByLabel('Record a follow-up note', { exact: true })
         .fill('Unsaved follow-up that should not disappear');
@@ -377,10 +500,58 @@ try {
         .locator('#inbox-pane')
         .getByRole('button', { name: 'Contacts & follow-up', exact: true })
         .click();
-      await dialog.getByRole('button', { name: /Office rsvp/ }).click();
+      await dialog
+        .getByRole('button', { name: /rsvp@example.edu/ })
+        .click();
       await expect(
         dialog.getByLabel('Record a follow-up note', { exact: true }),
       ).toHaveValue('Unsaved follow-up that should not disappear');
+      await page.setViewportSize({ width: 390, height: 550 });
+      await dialog.evaluate((el) => {
+        el.scrollTop = el.scrollHeight;
+      });
+      const close = dialog.getByRole('button', {
+        name: 'Close',
+        exact: true,
+      });
+      const rect = await close.boundingBox();
+      assert.ok(
+        rect.y >= 0 && rect.y + rect.height <= 550,
+        'Close remains onscreen while contact history scrolls',
+      );
+      await page.screenshot({
+        path: path.join(screens, 'contact-scroll-mobile.png'),
+      });
+      let count = 0;
+      await page.route('**/api/surveys', async (route) => {
+        if (route.request().postDataJSON()?.action !== 'contact-note')
+          return route.continue();
+        if (++count === 1) {
+          await route.fetch();
+          await route.abort('failed');
+        } else await route.continue();
+      });
+      const save = dialog.getByRole('button', {
+        name: 'Save note',
+        exact: true,
+      });
+      await save.click();
+      await expect(dialog).toContainText(
+        'Could not connect to Club Office',
+      );
+      await save.click();
+      await expect(
+        dialog.getByLabel('Record a follow-up note', { exact: true }),
+      ).toHaveValue('');
+      assert.equal(
+        (
+          await fixture.db.query(
+            'SELECT count(*)::int n FROM club_forms.contact_notes WHERE email=$1',
+            ['rsvp@example.edu'],
+          )
+        ).rows[0].n,
+        1,
+      );
     },
   );
   await check('Friendly recovery from a non-JSON error', async (page) => {

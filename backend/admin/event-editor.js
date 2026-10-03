@@ -1,3 +1,4 @@
+import { surveyEditor } from './survey-editor.js';
 import { mountEventActivity, activityTime } from './event-activity.js';
 const node = (tag, text, className) => {
   const el = document.createElement(tag);
@@ -6,6 +7,10 @@ const node = (tag, text, className) => {
   return el;
 };
 const blank = () => ({
+  potential: false,
+  requireEduEmail: false,
+  surveyIntro: '',
+  surveyQuestions: [],
   title: '',
   category: 'Workshop',
   date: '',
@@ -26,6 +31,10 @@ const blank = () => ({
 export function mountEventEditor(api) {
   const q = (s) => document.querySelector(s);
   const form = q('#event-form');
+  const survey = surveyEditor(
+    q('#survey-questions'),
+    q('#add-survey-question'),
+  );
   const activity = mountEventActivity(api);
   let rows = [],
     current = null,
@@ -34,7 +43,7 @@ export function mountEventEditor(api) {
     generation = 0,
     showArchived = false;
   let images = [],
-    types = ['Workshop', 'Meeting', 'Talk', 'Hackathon'],
+    types = ['Workshop', 'Meeting', 'Talk', 'Hackathon', 'Social'],
     previewData = null;
   const frame = q('#site-preview-frame'),
     dialog = q('#site-preview-dialog');
@@ -114,6 +123,9 @@ export function mountEventEditor(api) {
   };
   function values() {
     const content = Object.fromEntries(new FormData(form));
+    content.requireEduEmail = form.elements.requireEduEmail.checked;
+    content.potential = form.elements.potential.checked;
+    content.surveyQuestions = survey.value();
     content.registrationOpen = form.elements.registrationOpen.checked;
     content.images = images.map((image) => ({ ...image }));
     return content;
@@ -210,6 +222,7 @@ export function mountEventEditor(api) {
     q('#event-preview').hidden = true;
     images = (row.draft.images || []).map((image) => ({ ...image }));
     renderImages();
+    survey.set(row.draft.surveyQuestions);
     typeOptions(row.draft.category);
     for (const [key, value] of Object.entries({ ...blank(), ...row.draft })) {
       const input = form.elements.namedItem(key);
@@ -217,6 +230,9 @@ export function mountEventEditor(api) {
       if (input.type === 'checkbox') input.checked = value !== false;
       else input.value = Array.isArray(value) ? value.join('\n') : value || '';
     }
+    if (row.draft.requireEduEmail === undefined)
+      form.elements.requireEduEmail.checked =
+        row.draft.category?.toLowerCase() === 'social';
     saved = JSON.stringify(values());
     q('#event-heading').textContent = row.archived_at
       ? 'Edit archived event'
@@ -259,7 +275,13 @@ export function mountEventEditor(api) {
       const data = await api('/api/events?admin=1');
       if (version !== generation) return;
       rows = data.events;
-      types = data.types || ['Workshop', 'Meeting', 'Talk', 'Hackathon'];
+      types = data.types || [
+        'Workshop',
+        'Meeting',
+        'Talk',
+        'Hackathon',
+        'Social',
+      ];
       typeOptions(
         form.elements.category.value || current?.draft.category || 'Workshop',
       );
@@ -339,6 +361,10 @@ export function mountEventEditor(api) {
       });
     }
   }
+  form.elements.category.onchange = () => {
+    form.elements.requireEduEmail.checked =
+      form.elements.category.value.toLowerCase() === 'social';
+  };
   form.onsubmit = (event) => {
     event.preventDefault();
     save(event.submitter?.value || 'draft');
@@ -410,6 +436,7 @@ export function mountEventEditor(api) {
       });
       types = data.types;
       typeOptions(data.selected);
+      form.elements.category.onchange();
       q('#new-type-name').value = '';
       q('#type-status').textContent = 'Type is available to all admins.';
     } catch (error) {
@@ -478,6 +505,7 @@ export function mountEventEditor(api) {
       if (dialog.open) dialog.close();
       saved = '';
       form.reset();
+      survey.set();
       form.hidden = true;
       q('#event-empty').hidden = false;
       q('#event-list').replaceChildren();

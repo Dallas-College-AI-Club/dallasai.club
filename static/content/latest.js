@@ -1,4 +1,10 @@
-import { splitEvents, eventDate, eventTime, PROJECT_URL, JOIN_URL } from './club.js';
+import {
+  splitEvents,
+  eventDate,
+  eventTime,
+  PROJECT_URL,
+  JOIN_URL,
+} from './club.js';
 import { articles, readingMinutes } from './articles.js';
 import { articleUrl } from './article-links.js';
 import { stationUpdates } from './discovery.js';
@@ -16,11 +22,15 @@ export function selectArticle(articles, now) {
         index,
         published: Date.parse(article.publishedAt || article.date || ''),
       }))
-      .filter((article) => !Number.isFinite(article.published) || article.published <= +now)
+      .filter(
+        (article) =>
+          !Number.isFinite(article.published) || article.published <= +now,
+      )
       .sort(
         (a, b) =>
           (Number.isFinite(b.published) ? b.published : -Infinity) -
-            (Number.isFinite(a.published) ? a.published : -Infinity) || a.index - b.index,
+            (Number.isFinite(a.published) ? a.published : -Infinity) ||
+          a.index - b.index,
       )[0] || null
   );
 }
@@ -29,7 +39,7 @@ export function selectArticle(articles, now) {
 export function buildLatest(now = new Date(), snapshot = PUBLISHED) {
   const next = splitEvents(now, snapshot.events).upcoming[0];
   const article = selectArticle(snapshot.articles || articles, now);
-  const [month, day] = next ? eventDate(next).split(' ') : [];
+  const [month, day = ''] = next ? eventDate(next).split(' ') : [];
   return {
     checkedAt: now.toISOString(),
     event: next
@@ -37,7 +47,7 @@ export function buildLatest(now = new Date(), snapshot = PUBLISHED) {
           id: next.id,
           title: next.title,
           summary: next.summary,
-          category: next.category,
+          category: next.potential ? 'Potential event' : next.category,
           month,
           day,
           when: eventTime(next),
@@ -58,13 +68,18 @@ export function buildLatest(now = new Date(), snapshot = PUBLISHED) {
                 year: 'numeric',
                 timeZone: 'UTC',
               }).format(article.published)
-            : 'Current edition' + (article.isSample ? ' · Editorial sample' : ''),
+            : 'Current edition' +
+              (article.isSample ? ' · Editorial sample' : ''),
         }
       : null,
     projects: stationUpdates('projects', snapshot),
     experiments: stationUpdates('lab', snapshot),
     practiceCount: (snapshot.lab?.LAB_CASES || LAB_CASES).length,
-    games: GAMES.map(({ id, title, description }) => ({ id, title, description })),
+    games: GAMES.map(({ id, title, description }) => ({
+      id,
+      title,
+      description,
+    })),
     recordings: (snapshot.recordings?.RECORDINGS || RECORDINGS).map(
       ({ lang, english, label, src, poster, startPoster }) => ({
         lang,

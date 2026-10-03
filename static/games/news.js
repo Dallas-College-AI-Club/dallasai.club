@@ -9,7 +9,10 @@ export function clubBulletins() {
       ? [
           {
             id: 'event-' + event.id,
-            label: events.upcoming.length ? 'COMING UP · ' + eventDate(event) : 'FROM THE CLUB',
+            label: events.upcoming.length
+              ? (event.potential ? 'POTENTIAL EVENT · ' : 'COMING UP · ') +
+                eventDate(event)
+              : 'FROM THE CLUB',
             title: event.title,
             body: event.summary,
             action: 'View events',

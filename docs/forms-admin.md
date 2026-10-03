@@ -4,7 +4,7 @@ Hugo serves the public website on GitHub Pages. The Vercel backend stores club s
 
 ## How officers learn about a signup
 
-Open the protected backend `/admin/` page. New submissions appear with review status **New**. Counts and the inbox refresh every minute; Refresh updates immediately. Officers can filter by submission type and review status, review or close submissions, download private attachments, and export up to 10,000 matching records. Name/email search is not shown. The Event RSVPs view, counts and CSV exports include only currently published upcoming events; an Event dropdown selects one. Past RSVP records remain stored. Administrative updates, downloads, and exports are logged.
+Open the protected backend `/admin/` page. New submissions appear with review status **New**. Counts and the inbox refresh every minute; Refresh updates immediately. Officers can filter by submission type and review status, review or close submissions, download private attachments, and export up to 10,000 matching records. Name/email search is not shown. The Event RSVPs view, counts and CSV exports include only currently published upcoming events (including potential events with TBD dates); an Event dropdown selects one. Past RSVP records remain stored. Administrative updates, downloads, and exports are logged.
 
 **Enable browser alerts** requests browser permission and shows a generic alert when the new count increases. The officer must keep the office tab open; browser throttling can delay background checks. New counts and an on-screen notice also update without notification permission. The on/off preference is remembered in this browser and synchronized across office tabs. Alerts stop at sign-out or when the office is closed; reopening the office resumes a remembered on preference only when browser permission is still granted. Email alerts remain disconnected; the UI states this explicitly. Neon login-code delivery is a separate service and does not send inbox alerts.
 
@@ -25,7 +25,7 @@ CSV exports have separate Subject / title and Message / body fields, dedicated m
 - **The AI Review → Contribute an article** opens the submission page with a title, draft text and optional private attachments. Submit for review saves it under **AI Review submissions** and replaces the submitted form with a confirmation screen and Done button. It does not automatically publish an article.
 - **Ask about this event** opens a question dialog, carries the event context into the inbox and confirms receipt within the dialog. **Ask the club** in the footer opens the same dialog for a general question.
 - **Request a workshop** opens the workshop request dialog. Confirmation replaces the form, with a Close button. Dialog close controls stay visible while scrolling.
-- Join, The AI Review subscription requests, and upcoming-event RSVPs replace their forms with a focused confirmation screen and Done button. Errors preserve the person's entered text.
+- Join and The AI Review subscription requests replace their forms with a focused confirmation screen and Done button. Event RSVPs open a popup with a Close button after submission. Errors preserve the person's entered text.
 
 There are no email alerts, emailed confirmation links, or newsletter broadcasts in this release. Newsletter requests record consent for future updates; email ownership is not verified and `email_verified` remains false. They must not be represented as verified subscribers or automatically enrolled in a future mailing service. The public page explains that newsletters are not currently being sent. People can contact the club to withdraw a request or cancel an RSVP.
 
@@ -61,11 +61,11 @@ The leaderboard's existing `DATABASE_URL` and `SESSION_SECRET` remain unchanged.
 
 ## Provisioning, testing, and launch
 
-1. Review migrations `003_club_forms.sql`, `004_admin_auth.sql`, and `005_screen_confirmations.sql`. The provisioning script applies all three for a fresh setup and creates restricted roles. It refuses to overwrite existing credentials or roles.
+1. Review migrations `003_club_forms.sql`, `004_admin_auth.sql`, and `005_screen_confirmations.sql`. The provisioning script applies these and migration 010 for a fresh setup and creates restricted roles. It refuses to overwrite existing credentials or roles.
 2. For an already provisioned database, apply migration 005 once before deploying this revision. It disables the old email-queue trigger and makes new records active by default. Existing data and unused email tables are retained; no email worker or webhook endpoint is deployed.
 3. Save private settings and provision officer accounts. Keep preview admin access limited to the designated tester. Use isolated test data and remove only the records created by a test.
 4. From `backend/`, run `npm ci --include=dev --ignore-scripts`, `npm test`, and `npm run build`. The build generates the admin bundle and trusted event registry. Rebuild/redeploy the backend when event registrations change.
-5. Apply `006_event_editor.sql`, `007_office_tools.sql`, and `008_event_archive.sql` in order for events, question intake, and assets. Apply `009_submission_comments.sql` before deploying the activity/comment API. Deploy a protected Vercel preview with the correct admin origin. Check all six forms, real database saves, email-code login/signout, unauthorized access, and private uploads/downloads.
+5. Apply `006_event_editor.sql`, `007_office_tools.sql`, and `008_event_archive.sql` in order for events, question intake, and assets. Apply `009_submission_comments.sql` before deploying the activity/comment API and `010_event_surveys.sql` before deploying surveys. Deploy a protected Vercel preview with the correct admin origin. Check all six forms, real database saves, email-code login/signout, unauthorized access, and private uploads/downloads.
 6. After review, deploy the Vercel backend and then publish the website. The backend is deployed through the CLI; pushing the website alone does not update it. The public form endpoint is configured in `data/club.json`.
 
 For local development, build the backend and run `npm run dev` at `127.0.0.1:4175`. Set `AUTH_BASE_URL=http://127.0.0.1:4175` and Hugo's `params.formsAPIURL=http://127.0.0.1:4175/api/forms`. Serve the frontend at `127.0.0.1:4174`. A daily authenticated maintenance task expires request-limit and obsolete webhook records; it sends no messages.
@@ -77,3 +77,17 @@ Contributions accept up to three files and 2 MB total: PDF, DOCX, TXT, Markdown,
 ## Verification
 
 `npm test` uses PGlite to test transactions, deduplication, validation, private assets, CSV exports, comment attribution/idempotency, activity pagination and auth/session boundaries without sending email. `node tests/browser.mjs` checks all six forms, mobile confirmations, failed submissions, passwordless sign-in UI, saved alert preferences, comments/history, dark/light logos, and safe rendering against synthetic API responses after a Hugo build to `.preview/forms-site`. `node tests/browser-events.mjs` exercises event editing, image preview, publish/archive/restore and preservation of RSVP input against a local test database. `node tests/browser-site.mjs` audits the public site routes and navigation after a normal Hugo build.
+
+## Potential events and RSVP surveys
+
+The office tabs are **Inbox**, **Events**, and **Surveys**. In Events, check **Potential event** to publish an idea while leaving its date blank (shown as **TBD**). It appears below the calendar under Potential events and opens the normal event details. It remains eligible for the upcoming RSVP inbox while published. Scheduled events still require a date.
+
+**Require a college or alumni email ending in .edu** is an event-level setting, enabled by default when an officer chooses **Social**. It can be changed for any event. The public form and server enforce it; ordinary events still accept other valid email addresses. This checks address format, not email ownership.
+
+Name and email are built in. The RSVP survey editor adds up to 20 written-answer, choose-one, or choose-several questions with help text, required answers and an optional Other field. Choice questions allow 2–30 options. Publish changes to make them available; saving a draft leaves the current form unchanged.
+
+Migration 010 stores one immutable question/answer snapshot per RSVP in `club_forms.survey_responses`. Basic RSVP and answers commit in one transaction. A duplicate email/event cannot overwrite answers; the confirmation explains that the original is saved. A changed question version causes an open old form to request reopening before submitting. Contact an officer to change or cancel an existing response.
+
+Inbox shows event, date/TBD, name and email with a link to **View survey answers**. Surveys shows complete responses, filtered by event or RSVP and paginated by 50, including responses to past or archived events. Only authenticated officers can read this API. Question and event snapshots retain their original wording after edits. Surveys currently has no analytics or email notifications.
+
+After building the public and admin sites, `node tests/browser-surveys.mjs` exercises the question editor, TBD publication, conditional email validation, full database persistence, Inbox/Surveys, safe text rendering, reload, mobile layouts and clearing results on sign-out.

@@ -1,0 +1,380 @@
+import { adminHandler } from '../api/admin.mjs';
+import { surveysHandler } from '../api/surveys.mjs';
+import { formsHandler } from '../api/forms.mjs';
+import { chromium } from '@playwright/test';
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import { readFile, mkdir } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { PGlite } from '@electric-sql/pglite';
+import { eventHandler } from '../api/events.mjs';
+import { RequestError } from '../lib/errors.mjs';
+import { submit } from '../lib/submissions.mjs';
+import { liveEvents } from '../lib/events.mjs';
+import sharp from 'sharp';
+const backend = fileURLToPath(new URL('../', import.meta.url));
+const site = path.resolve(backend, '../public');
+const screens = path.resolve(backend, '../.preview/event-checks');
+const workshop = JSON.parse(
+  await readFile(new URL('./fixtures/workshop.json', import.meta.url), 'utf8'),
+);
+await mkdir(screens, { recursive: true });
+const db = new PGlite();
+await db.exec('CREATE SCHEMA club_forms');
+for (const file of [
+  '003_club_forms.sql',
+  '005_screen_confirmations.sql',
+  '007_office_tools.sql',
+  '009_submission_comments.sql',
+  '010_event_surveys.sql',
+])
+  await db.exec(await readFile(new URL('../' + file, import.meta.url), 'utf8'));
+await db.exec(
+  await readFile(new URL('../006_event_editor.sql', import.meta.url), 'utf8'),
+);
+await db.exec(
+  await readFile(new URL('../008_event_archive.sql', import.meta.url), 'utf8'),
+);
+const authorized = (req) => {
+  if (req.headers.cookie?.includes('test-officer=signed-in'))
+    return { email: 'officer@example.com' };
+  throw new RequestError(401, 'Sign in with an authorized club email address.');
+};
+const events = eventHandler({
+  getDatabase: () => db,
+  authorize: authorized,
+  originals: [],
+  storage: {
+    put: async (path, bytes) => {
+      imageFiles.set(path, bytes);
+      return { pathname: path };
+    },
+    del: async (path) => imageFiles.delete(path),
+    get: async (path) => ({
+      statusCode: 200,
+      stream: new Blob([imageFiles.get(path)]).stream(),
+    }),
+  },
+  rateLimit: async () => {},
+});
+const imageFiles = new Map();
+process.env.BLOB_READ_WRITE_TOKEN = 'test-only';
+const adminAPI = adminHandler({
+  authorize: authorized,
+  getDatabase: () => db,
+  getEvents: () => liveEvents(db, []),
+});
+const surveyAPI = surveysHandler({
+  authorize: authorized,
+  getDatabase: () => db,
+});
+const formsAPI = formsHandler({
+  getDatabase: () => db,
+  getEvents: () => liveEvents(db, []),
+  rateLimit: async () => {},
+});
+const server = http.createServer(async (req, res) => {
+  const url = new URL(req.url, 'http://localhost');
+  if (url.pathname === '/api/events') return events(req, res);
+  if (url.pathname.startsWith('/api/auth/')) {
+    res.setHeader('Content-Type', 'application/json');
+    if (url.pathname.endsWith('email-otp/send-verification-otp'))
+      return res.end('{"success":true}');
+    if (url.pathname.endsWith('sign-in/email-otp')) {
+      const chunks = [];
+      for await (const chunk of req) chunks.push(chunk);
+      const body = JSON.parse(Buffer.concat(chunks).toString());
+      if (body.otp !== '123456') {
+        res.statusCode = 400;
+        return res.end('{"message":"Invalid code","code":"INVALID_OTP"}');
+      }
+      res.setHeader(
+        'Set-Cookie',
+        'test-officer=signed-in; HttpOnly; Path=/; SameSite=Lax',
+      );
+      return res.end(
+        JSON.stringify({ user: { email: 'officer@example.com' } }),
+      );
+    }
+    if (url.pathname.endsWith('sign-out')) {
+      res.setHeader('Set-Cookie', 'test-officer=; Max-Age=0; Path=/');
+      return res.end('{"success":true}');
+    }
+    return res.end(
+      req.headers.cookie?.includes('test-officer=signed-in')
+        ? '{"user":{"email":"officer@example.com"}}'
+        : 'null',
+    );
+  }
+  if (url.pathname === '/api/admin') return adminAPI(req, res);
+  if (url.pathname === '/api/surveys') return surveyAPI(req, res);
+  if (url.pathname === '/api/forms') return formsAPI(req, res);
+  const root = url.pathname.startsWith('/admin/')
+    ? path.join(backend, 'public')
+    : site;
+  const file = path.resolve(
+    root,
+    '.' + url.pathname + (url.pathname.endsWith('/') ? 'index.html' : ''),
+  );
+  try {
+    if (!file.startsWith(root + path.sep)) throw Error();
+    res.setHeader(
+      'Content-Type',
+      file.endsWith('.js')
+        ? 'text/javascript'
+        : file.endsWith('.css')
+          ? 'text/css'
+          : file.endsWith('.json')
+            ? 'application/json'
+            : file.endsWith('.html')
+              ? 'text/html'
+              : 'application/octet-stream',
+    );
+    const data = await readFile(file);
+    res.end(
+      file.endsWith('admin' + path.sep + 'index.html')
+        ? data
+            .toString()
+            .replace(
+              'data-site-origin="https://dallasai.club"',
+              'data-site-origin="http://127.0.0.1:' +
+                server.address().port +
+                '"',
+            )
+        : data,
+    );
+  } catch {
+    res.statusCode = 404;
+    res.end('Not found');
+  }
+});
+await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+const origin = 'http://127.0.0.1:' + server.address().port;
+process.env.AUTH_BASE_URL = origin;
+process.env.FORMS_ALLOWED_ORIGINS = origin;
+const browser = await chromium.launch({
+  executablePath: process.env.CHROME_PATH,
+  headless: true,
+});
+
+try {
+  const context = await browser.newContext({
+    viewport: { width: 1365, height: 950 },
+  });
+  await context.addCookies([
+    { name: 'test-officer', value: 'signed-in', url: origin },
+  ]);
+  const admin = await context.newPage();
+  const errors = [];
+  admin.on('pageerror', (e) => errors.push(e.message));
+  admin.on('dialog', (d) => d.accept());
+  await admin.goto(origin + '/admin/#events');
+  await admin.getByRole('button', { name: 'New event', exact: true }).click();
+  await admin.locator('[name=title]').fill('Potential social survey');
+  await admin.locator('[name=category]').selectOption('Social');
+  assert.equal(await admin.locator('[name=requireEduEmail]').isChecked(), true);
+  await admin.locator('[name=potential]').check();
+  await admin.locator('[name=surveyIntro]').fill('Test survey introduction.');
+  for (const [type, label, required, options, other] of [
+    ['text', 'Friend name', false, [], false],
+    ['single', 'Which day?', true, ['Friday', 'Saturday'], true],
+    ['multiple', 'Which games?', true, ['Cards', 'Puzzles'], true],
+  ]) {
+    await admin.locator('#add-survey-question').click();
+    let box = admin.locator('.survey-editor-question').last();
+    await box.getByLabel('Question', { exact: true }).fill(label);
+    await box.getByLabel('Answer type').selectOption(type);
+    box = admin.locator('.survey-editor-question').last();
+    await box.getByLabel('Required answer').setChecked(required);
+    if (type !== 'text') {
+      await box.getByLabel('Answer options').fill(options.join('\n'));
+      await box.getByLabel('Allow an Other answer').setChecked(other);
+    }
+  }
+  await admin.getByRole('button', { name: 'Save draft', exact: true }).click();
+  await admin
+    .getByText('Draft saved. The website has not changed.', { exact: true })
+    .waitFor();
+  const stored = (await db.query('SELECT * FROM club_forms.events')).rows[0];
+  assert.equal(stored.draft.surveyQuestions.length, 3);
+  assert.equal((await liveEvents(db, [])).length, 0);
+  await admin.reload();
+  await admin.locator('.event-choice').click();
+  assert.equal(await admin.locator('.survey-editor-question').count(), 3);
+  await admin
+    .getByRole('button', { name: 'Publish event', exact: true })
+    .click();
+  await admin
+    .getByText(
+      'Published. The website will show this event on its next refresh.',
+      { exact: true },
+    )
+    .waitFor();
+  const live = (await liveEvents(db, []))[0];
+  const page = await context.newPage();
+  page.on('pageerror', (e) => errors.push(e.message));
+  await page.route(
+    'https://dallasai-leaderboard.vercel.app/api/events*',
+    async (route) => {
+      const response = await fetch(origin + '/api/events');
+      await route.fulfill({
+        status: response.status,
+        contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: await response.text(),
+      });
+    },
+  );
+  let submissions = 0;
+  await page.route(
+    'https://dallasai-leaderboard.vercel.app/api/forms',
+    async (route) => {
+      if (route.request().method() === 'OPTIONS')
+        return route.fulfill({
+          status: 204,
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+          },
+        });
+      submissions++;
+      const response = await fetch(origin + '/api/forms', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: origin },
+        body: route.request().postData(),
+      });
+      await route.fulfill({
+        status: response.status,
+        contentType: 'application/json',
+        headers: { 'Access-Control-Allow-Origin': '*' },
+        body: await response.text(),
+      });
+    },
+  );
+  await page.goto(origin + '/club.html?mode=events&event=' + live.id);
+  await page.locator('#potential-events button').waitFor();
+  assert.match(await page.locator('#potential-events').textContent(), /TBD/);
+  assert.equal(await page.locator('#save-event').count(), 0);
+  await page.locator('#open-rsvp').click();
+  await page.locator('#event-rsvp [name=name]').fill('Browser survey test');
+  await page.locator('#event-rsvp [name=email]').fill('someone@gmail.com');
+  await page
+    .getByLabel('Friend name', { exact: true })
+    .fill('<img src=x onerror=alert(1)> Friend');
+  await page.getByLabel('Friday', { exact: true }).check();
+  await page.getByLabel('Cards', { exact: true }).check();
+  await page
+    .locator('[data-question="' + live.surveyQuestions[2].id + '"]')
+    .getByLabel('Other', { exact: true })
+    .check();
+  await page
+    .locator('[data-question="' + live.surveyQuestions[2].id + '"]')
+    .getByLabel('Other answer')
+    .fill('Chess');
+  await page.locator('#event-rsvp [name=consent]').check();
+  await page.locator('#event-rsvp button[type=submit]').click();
+  assert.equal(submissions, 0, 'Non-edu email must fail in the browser');
+  assert.equal(
+    await page
+      .locator('#event-rsvp [name=email]')
+      .evaluate((el) => el.validity.patternMismatch),
+    true,
+  );
+  await page
+    .locator('#event-rsvp [name=email]')
+    .fill('MKim23@Student.DallasCollege.edu');
+  await page.evaluate(async () => {
+    await (await import('/content/events.js')).refreshEvents();
+  });
+  assert.equal(
+    await page.getByLabel('Friend name', { exact: true }).inputValue(),
+    '<img src=x onerror=alert(1)> Friend',
+  );
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.equal(
+    await page
+      .locator('.rsvp-dialog')
+      .evaluate((el) => el.scrollWidth <= el.clientWidth),
+    true,
+  );
+  await page.screenshot({ path: path.join(screens, 'survey-rsvp-mobile.png') });
+  await page.locator('#event-rsvp button[type=submit]').click();
+  await page
+    .getByRole('heading', { name: 'RSVP received', exact: true })
+    .waitFor();
+  assert.equal(submissions, 1);
+  assert.match(
+    await page.locator('.form-success').textContent(),
+    /not confirmed/,
+  );
+  let response = (await db.query('SELECT * FROM club_forms.survey_responses'))
+    .rows[0];
+  assert.equal(response.answers.length, 3);
+  assert.deepEqual(response.answers[2].value, ['Cards', '__other__']);
+  assert.equal(response.answers[2].other, 'Chess');
+  const entryId = response.entry_id;
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
+  await page.locator('#open-rsvp').click();
+  assert.equal(
+    await page.getByLabel('Friend name', { exact: true }).inputValue(),
+    '',
+  );
+  await page.getByRole('button', { name: 'Close RSVP', exact: true }).click();
+  await admin.locator('#inbox-tab').click();
+  await admin.locator('#refresh').click();
+  await admin
+    .getByRole('heading', { name: 'Browser survey test', exact: true })
+    .waitFor();
+  assert.match(
+    await admin.locator('#entries').textContent(),
+    /Potential social survey · TBD/,
+  );
+  assert.doesNotMatch(await admin.locator('#entries').textContent(), /Chess/);
+  await admin.getByRole('button', { name: 'View survey answers' }).click();
+  await admin.locator('.survey-response').waitFor();
+  assert.match(
+    await admin.locator('#survey-results').textContent(),
+    /Other: Chess/,
+  );
+  assert.match(
+    await admin.locator('#survey-results').textContent(),
+    /mkim23@student.dallascollege.edu/,
+  );
+  assert.match(
+    await admin.locator('#survey-results').textContent(),
+    /Event date: TBD/,
+  );
+  assert.equal(await admin.locator('#survey-results img').count(), 0);
+  await admin.reload();
+  await admin.locator('.survey-response').waitFor();
+  await admin.screenshot({
+    path: path.join(screens, 'survey-results-desktop.png'),
+    fullPage: true,
+  });
+  await admin.setViewportSize({ width: 320, height: 820 });
+  assert.equal(
+    await admin.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+    true,
+  );
+  await admin.screenshot({
+    path: path.join(screens, 'survey-results-mobile.png'),
+    fullPage: true,
+  });
+  const anonymous = await fetch(origin + '/api/surveys');
+  assert.equal(anonymous.status, 401);
+  await admin.getByRole('button', { name: 'Sign out', exact: true }).click();
+  await admin.locator('#login').waitFor();
+  assert.equal(await admin.locator('#survey-results').textContent(), '');
+  assert.deepEqual(errors, []);
+  console.log(
+    'Passed: Social default, configurable edu policy, question builder, private draft and publish, TBD calendar, RSVP popup, browser/server persistence, Other and multiple choices, Inbox basic details, protected Surveys with all answers, reload, XSS, mobile, and sign-out clearing.',
+  );
+} finally {
+  await browser.close();
+  await new Promise((resolve) => server.close(resolve));
+  await db.close();
+}

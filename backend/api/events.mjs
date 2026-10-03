@@ -72,7 +72,7 @@ export function eventHandler({
         });
       adminOrigin(req);
       const upload = url.searchParams.has('upload');
-      const body = await jsonBody(req, upload ? 2900000 : 40000);
+      const body = await jsonBody(req, upload ? 2900000 : 200000);
       if (upload) {
         await rateLimit(getDatabase(), req);
         return send(res, 200, {

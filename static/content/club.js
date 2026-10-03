@@ -13,16 +13,20 @@ export const WORKSHOP_REQUEST_URL = PUBLISHED.club.WORKSHOP_REQUEST_URL;
 
 const dateOnly = (e) => /^\d{4}-\d{2}-\d{2}$/.test(e.date);
 export const eventDate = (e) =>
-  new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    timeZone: dateOnly(e) ? 'UTC' : 'America/Chicago',
-  }).format(new Date(e.date));
+  !e.date
+    ? 'TBD'
+    : new Intl.DateTimeFormat('en-US', {
+        month: 'short',
+        day: 'numeric',
+        timeZone: dateOnly(e) ? 'UTC' : 'America/Chicago',
+      }).format(new Date(e.date));
 export function eventTime(e) {
+  if (!e.date) return 'Date and time to be decided';
   if (dateOnly(e))
-    return new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: 'UTC' }).format(
-      new Date(e.date),
-    );
+    return new Intl.DateTimeFormat('en-US', {
+      weekday: 'long',
+      timeZone: 'UTC',
+    }).format(new Date(e.date));
   const start = new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
     hour: 'numeric',
@@ -40,6 +44,7 @@ export function eventTime(e) {
   return start + end + ' CT';
 }
 export function eventIsPast(e, now = new Date()) {
+  if (!e.date) return false;
   if (!dateOnly(e)) return new Date(e.end || e.date) < now;
   const day = new Intl.DateTimeFormat('en-CA', {
     year: 'numeric',
@@ -53,13 +58,23 @@ export function splitEvents(now = new Date(), events = EVENTS) {
   return {
     upcoming: events
       .filter((e) => !eventIsPast(e, now))
-      .sort((a, b) => a.date.localeCompare(b.date)),
-    past: events.filter((e) => eventIsPast(e, now)).sort((a, b) => b.date.localeCompare(a.date)),
+      .sort(
+        (a, b) =>
+          Number(!a.date) - Number(!b.date) || a.date.localeCompare(b.date),
+      ),
+    past: events
+      .filter((e) => eventIsPast(e, now))
+      .sort((a, b) => b.date.localeCompare(a.date)),
   };
 }
 export function eventCalendar(e) {
-  const url = new URL(e.url, globalThis.location?.href || 'https://dallasai.club/').href;
-  const utc = (s) => new Date(s).toISOString().replace(/[-:]/g, '').replace('.000', '');
+  if (!e.date) return '';
+  const url = new URL(
+    e.url,
+    globalThis.location?.href || 'https://dallasai.club/',
+  ).href;
+  const utc = (s) =>
+    new Date(s).toISOString().replace(/[-:]/g, '').replace('.000', '');
   const escape = (s) =>
     s
       .replaceAll('\\', '\\\\')
@@ -73,12 +88,16 @@ export function eventCalendar(e) {
     'BEGIN:VEVENT',
     'UID:' + e.id + '-' + e.date.slice(0, 4) + '@dallasai.club',
     'DTSTAMP:' + utc(new Date().toISOString()),
-    dateOnly(e) ? 'DTSTART;VALUE=DATE:' + e.date.replaceAll('-', '') : 'DTSTART:' + utc(e.date),
+    dateOnly(e)
+      ? 'DTSTART;VALUE=DATE:' + e.date.replaceAll('-', '')
+      : 'DTSTART:' + utc(e.date),
     ...(e.end ? ['DTEND:' + utc(e.end)] : []),
     'SUMMARY:' + escape(e.title),
     'DESCRIPTION:' +
       escape(
-        [e.summary, ...e.agenda, ...e.preparation, 'Details: ' + url].filter(Boolean).join('\n'),
+        [e.summary, ...e.agenda, ...e.preparation, 'Details: ' + url]
+          .filter(Boolean)
+          .join('\n'),
       ),
     ...(e.location ? ['LOCATION:' + escape(e.location)] : []),
     'URL:' + url,

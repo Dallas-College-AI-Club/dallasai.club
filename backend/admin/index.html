@@ -95,14 +95,12 @@
           <p id="identity"></p>
         </div>
         <nav class="office-tabs" aria-label="Club office">
-          <button id="inbox-tab" aria-pressed="true">
-            Members &amp; messages
-          </button>
-          <button id="events-tab" aria-pressed="false">Events</button>
+          <button id="inbox-tab" aria-pressed="true">Inbox</button>
+          <button id="events-tab" aria-pressed="false">Events</button
+          ><button id="surveys-tab" aria-pressed="false">Surveys</button>
         </nav>
-        <section id="inbox-pane" aria-label="Members and messages">
+        <section id="inbox-pane" aria-label="Inbox">
           <div class="heading">
-            <h2>Your club inbox</h2>
             <button id="refresh">Refresh</button>
           </div>
           <div id="counts" class="counts"></div>
@@ -156,9 +154,10 @@
                   >Event RSVP ↗</a
                 >
                 <p>
-                  Select an upcoming event with registration open and submit its
-                  RSVP form. Entries appear under Event RSVPs (upcoming only);
-                  use the event filter to choose an event.
+                  Select an upcoming or potential event and click RSVP. The
+                  popup asks for name, email, and any questions defined for that
+                  event. Basic details appear under Event RSVPs (upcoming only);
+                  full answers appear in Surveys.
                 </p>
               </li>
               <li>
@@ -306,6 +305,31 @@
             ><button id="next">Next</button>
           </nav>
         </section>
+        <section id="surveys-pane" aria-label="Survey results" hidden>
+          <div class="heading">
+            <h2>Surveys</h2>
+            <button id="survey-reload">Refresh</button>
+          </div>
+          <p>
+            Detailed answers from event RSVPs. Results remain here after an
+            event ends or is archived.
+          </p>
+          <label
+            >Survey event<select id="survey-event">
+              <option value="">All events, including past events</option>
+            </select></label
+          >
+          <button id="survey-all" class="secondary" hidden>
+            Show all responses
+          </button>
+          <p id="survey-status" role="status" aria-live="polite"></p>
+          <div id="survey-results"></div>
+          <nav class="pagination" aria-label="Survey result pages">
+            <button id="survey-previous">Previous</button
+            ><span id="survey-page"></span
+            ><button id="survey-next">Next</button>
+          </nav>
+        </section>
         <section id="events-pane" aria-label="Event editor" hidden>
           <div class="heading">
             <div>
@@ -398,6 +422,14 @@
                 </fieldset>
                 <fieldset class="editor-section">
                   <legend><span>02</span> When &amp; where</legend>
+                  <label class="checkbox"
+                    ><input name="potential" type="checkbox" />Potential
+                    event</label
+                  >
+                  <p class="hint">
+                    Gather interest before plans are confirmed. Potential events
+                    can be published with a blank date, shown as TBD.
+                  </p>
                   <p class="hint">
                     All times are Central. Leave the time blank if it is not
                     confirmed.
@@ -488,6 +520,37 @@
                   /></label>
                   <div id="event-images"></div>
                   <p id="image-status" role="status"></p>
+                </fieldset>
+                <fieldset class="editor-section">
+                  <legend><span>05</span> RSVP survey</legend>
+                  <p class="hint">
+                    Name and email are always collected. Add up to 20 custom
+                    questions. Changes apply to future RSVPs; earlier answers
+                    keep their original questions.
+                  </p>
+                  <label class="checkbox"
+                    ><input name="requireEduEmail" type="checkbox" />Require a
+                    college or alumni email ending in .edu</label
+                  >
+                  <p class="hint">
+                    Enabled by default when you choose Social. You can change
+                    this for each event.
+                  </p>
+                  <label
+                    >Introduction (optional)<textarea
+                      name="surveyIntro"
+                      maxlength="2000"
+                      rows="4"
+                    ></textarea>
+                  </label>
+                  <div id="survey-questions"></div>
+                  <button
+                    id="add-survey-question"
+                    type="button"
+                    class="secondary"
+                  >
+                    Add question
+                  </button>
                 </fieldset>
                 <div class="event-actions primary-actions">
                   <button

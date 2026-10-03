@@ -1,0 +1,151 @@
+{
+  "title": "AI Club Members Game Night",
+  "category": "Social",
+  "potential": true,
+  "requireEduEmail": true,
+  "date": "",
+  "startTime": "",
+  "endDate": "",
+  "endTime": "",
+  "location": "A private home near Coit Road & Belt Line Road, Dallas.",
+  "summary": "Games, puzzles, and time to hang out. No experience needed.\nHosted by Dallas College AI Club members. This event is independent of Dallas College.\nSpace for 10 people (12 maximum). We will share the date, exact address, games, and other details before you confirm a seat.",
+  "targetAudience": "AI Club members",
+  "learningOutcomes": [],
+  "agenda": [
+    "Play games and solve puzzles together.",
+    "Meet other club members."
+  ],
+  "preparation": ["Bring your own food and drinks."],
+  "meetingUrl": "",
+  "registrationOpen": true,
+  "images": [],
+  "surveyIntro": "Please reply by Sunday, October 11, 2026. This takes about 3 minutes.\nUse your college or alumni email address ending in .edu. Dallas College students may use their student e-number email.\nWe will share the final details before asking you to confirm a seat.",
+  "surveyQuestions": [
+    {
+      "id": "d89faf1b-a6b5-4a4b-8224-355afa62103c",
+      "label": "Is a friend coming with you? If so, what is their name?",
+      "type": "text",
+      "required": false,
+      "options": [],
+      "description": "",
+      "allowOther": false
+    },
+    {
+      "id": "8797f8cf-7e44-4d59-8bcc-7fc9c370fcdc",
+      "label": "What will your age group be at game night?",
+      "type": "single",
+      "required": true,
+      "options": [
+        "Under 21 — nonalcoholic drinks only",
+        "21 or older — may bring alcohol"
+      ],
+      "description": "Guests under 21 may not bring or drink alcohol.",
+      "allowOther": false
+    },
+    {
+      "id": "9cdcfa1a-8a5e-4a9c-aca0-0870aca1ee63",
+      "label": "Can you agree to respect the home, other guests, and the drink rule?",
+      "type": "single",
+      "required": true,
+      "options": [
+        "Yes, I agree",
+        "Please contact me before I decide",
+        "No, I cannot agree"
+      ],
+      "description": "",
+      "allowOther": false
+    },
+    {
+      "id": "b5d5f2b4-9f27-4ace-bd04-93725da60f0b",
+      "label": "When could you come? Select all times that work.",
+      "type": "multiple",
+      "required": true,
+      "options": [
+        "October 16 (Friday) — afternoon",
+        "October 16 (Friday) — evening",
+        "October 17 (Saturday) — afternoon",
+        "October 17 (Saturday) — evening",
+        "October 18 (Sunday) — afternoon",
+        "October 18 (Sunday) — evening",
+        "October 23 (Friday) — afternoon",
+        "October 23 (Friday) — evening",
+        "October 24 (Saturday) — afternoon",
+        "October 24 (Saturday) — evening",
+        "October 25 (Sunday) — afternoon",
+        "October 25 (Sunday) — evening",
+        "October 30 (Friday) — afternoon",
+        "October 30 (Friday) — evening",
+        "October 31 (Saturday) — afternoon",
+        "October 31 (Saturday) — evening",
+        "November 1 (Sunday) — afternoon",
+        "November 1 (Sunday) — evening",
+        "None of these times",
+        "Not sure yet"
+      ],
+      "description": "All dates are in 2026. Times are Dallas/Central; exact hours are to be decided. Use Other for different dates or time limits.",
+      "allowOther": true
+    },
+    {
+      "id": "54781818-3373-4623-b0bd-e72b7643e993",
+      "label": "How long would you like to stay?",
+      "type": "single",
+      "required": false,
+      "options": [
+        "About 1 hour",
+        "About 2 hours",
+        "About 3 hours or more",
+        "Depends on the date"
+      ],
+      "description": "",
+      "allowOther": false
+    },
+    {
+      "id": "d38fb690-aa98-41b0-9972-c0c95f0f1b23",
+      "label": "Which games would you like to play?",
+      "type": "multiple",
+      "required": false,
+      "options": [
+        "Social deduction (Secret Hitler, Werewolf, Avalon)",
+        "Cooperative (Pandemic)",
+        "Deck building (Dominion, Ascension)",
+        "Party games (Scrabble, Telestrations, Pictionary)",
+        "Card games (Hearts, Spades, Bridge, Rummy, Go Fish)",
+        "Any of these"
+      ],
+      "description": "If you choose Any of these, select that option alone.",
+      "allowOther": true
+    },
+    {
+      "id": "51fcd102-18fe-4e04-9a9b-b04397501e34",
+      "label": "Are you interested in coming?",
+      "type": "single",
+      "required": true,
+      "options": [
+        "Yes — I plan to come",
+        "Maybe — I need the final details",
+        "Not this time — tell me about future game nights",
+        "No — not interested"
+      ],
+      "description": "We will ask you to confirm later.",
+      "allowOther": false
+    },
+    {
+      "id": "a3a2ec85-263b-4a95-bb78-106a1e158791",
+      "label": "If the event is full, would you like to join the waitlist?",
+      "type": "single",
+      "required": true,
+      "options": ["Yes", "No"],
+      "description": "",
+      "allowOther": false
+    },
+    {
+      "id": "8707fa91-3c21-48f8-a233-f9bf98ce851a",
+      "label": "Anything else you would like us to know?",
+      "type": "text",
+      "required": false,
+      "options": [],
+      "description": "Share a game idea, practical need, or ask us to contact you privately.",
+      "allowOther": false
+    }
+  ]
+}

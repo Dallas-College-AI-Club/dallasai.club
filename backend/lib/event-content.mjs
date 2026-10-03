@@ -1,5 +1,6 @@
 import { RequestError } from './errors.mjs';
 import { uuid } from './validation.mjs';
+import { surveyQuestions, surveyVersion } from './surveys.mjs';
 export const eventIdPattern = /^[a-z0-9][a-z0-9-]{0,99}$/;
 function text(value, label, max, required = false) {
   if (value === undefined || value === null) value = '';
@@ -61,10 +62,25 @@ function lines(value, label) {
 export function draftContent(input, publish = false) {
   if (!input || typeof input !== 'object' || Array.isArray(input))
     throw new RequestError(400, 'Check the event details.');
+  for (const key of ['potential', 'requireEduEmail']) {
+    if (input[key] !== undefined && typeof input[key] !== 'boolean')
+      throw new RequestError(400, 'Check the event settings.');
+  }
   const draft = {
     title: text(input.title, 'the event title', 160, true),
     category: text(input.category, 'the event type', 80) || 'Club event',
-    date: day(text(input.date, 'the date', 10), publish),
+    potential: input.potential === true,
+    requireEduEmail:
+      input.requireEduEmail ??
+      String(input.category || '')
+        .trim()
+        .toLowerCase() === 'social',
+    date: day(
+      text(input.date, 'the date', 10),
+      publish && input.potential !== true,
+    ),
+    surveyIntro: text(input.surveyIntro, 'the RSVP introduction', 2000),
+    surveyQuestions: surveyQuestions(input.surveyQuestions),
     startTime: text(input.startTime, 'the start time', 5),
     endDate: day(text(input.endDate, 'the end date', 10)),
     endTime: text(input.endTime, 'the end time', 5),
@@ -131,6 +147,11 @@ export function publicContent(id, input, preview = false) {
     id,
     title: draft.title,
     category: draft.category,
+    potential: draft.potential,
+    requireEduEmail: draft.requireEduEmail,
+    surveyIntro: draft.surveyIntro,
+    surveyQuestions: draft.surveyQuestions,
+    surveyVersion: surveyVersion(draft.surveyQuestions),
     date: draft.startTime
       ? centralTime(draft.date, draft.startTime)
       : draft.date,

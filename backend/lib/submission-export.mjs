@@ -85,7 +85,7 @@ export function submissionsCSV(rows) {
           data.campus,
           data.interests,
           data.eventTitle,
-          data.eventDate,
+          row.kind === 'rsvp' && !data.eventDate ? 'TBD' : data.eventDate,
           data.location,
           data.eventId,
           plainText(

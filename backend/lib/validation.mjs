@@ -1,3 +1,4 @@
+import { validateSurvey } from './surveys.mjs';
 import { RequestError } from './errors.mjs';
 export const kinds = [
   'subscribe',
@@ -71,20 +72,36 @@ export function validate(body, events = [], now = new Date()) {
     if (
       !event ||
       event.registrationOpen === false ||
-      (/^\d{4}-\d{2}-\d{2}$/.test(event.date)
-        ? event.date < today
-        : new Date(event.end || event.date) <= now)
+      (!event.date && event.potential !== true) ||
+      (event.date &&
+        (/^\d{4}-\d{2}-\d{2}$/.test(event.date)
+          ? event.date < today
+          : !Number.isFinite(Date.parse(event.date)) ||
+            new Date(event.end || event.date) <= now))
     )
       throw new RequestError(
         400,
         'Registration for this event is unavailable.',
       );
+    if (
+      (event.requireEduEmail ?? event.category?.toLowerCase() === 'social') &&
+      !/^[A-Za-z0-9.!#$%&'*+\/=?^_\x60{|}~\-]+@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+edu$/.test(
+        result.email,
+      )
+    )
+      throw new RequestError(
+        400,
+        'Use a college or alumni email address ending in .edu.',
+      );
     result.data = {
       eventId: event.id,
       eventTitle: event.title,
-      eventDate: event.date,
+      eventDate: event.date || '',
+      potential: event.potential === true,
       location: event.location || '',
     };
+    result.survey = validateSurvey(body, event);
+    if (result.survey) result.data.hasSurvey = true;
   }
   if (body.kind === 'workshop')
     result.data = {

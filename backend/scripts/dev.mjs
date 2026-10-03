@@ -7,11 +7,13 @@ import admin from '../api/admin.mjs';
 import maintenance from '../api/maintenance.mjs';
 import auth from '../api/auth.mjs';
 import events from '../api/events.mjs';
+import surveys from '../api/surveys.mjs';
 const root = fileURLToPath(new URL('../public', import.meta.url));
 const handlers = {
   '/api/forms': forms,
   '/api/admin': admin,
   '/api/events': events,
+  '/api/surveys': surveys,
   '/api/maintenance': maintenance,
 };
 const server = http.createServer(async (req, res) => {

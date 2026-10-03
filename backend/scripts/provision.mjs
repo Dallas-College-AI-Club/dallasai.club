@@ -39,6 +39,7 @@ try {
     '003_club_forms.sql',
     '004_admin_auth.sql',
     '005_screen_confirmations.sql',
+    '010_event_surveys.sql',
   ]) {
     const sql = (
       await fs.readFile(new URL('../' + name, import.meta.url), 'utf8')
@@ -62,6 +63,7 @@ try {
   );
   await client.query(`GRANT USAGE ON SCHEMA club_forms TO club_forms_api;
     GRANT SELECT,INSERT,UPDATE,DELETE ON ALL TABLES IN SCHEMA club_forms TO club_forms_api;
+    REVOKE UPDATE ON club_forms.survey_responses FROM club_forms_api;
     GRANT USAGE,SELECT ON ALL SEQUENCES IN SCHEMA club_forms TO club_forms_api;
     GRANT EXECUTE ON FUNCTION club_forms.queue_new_entry() TO club_forms_api;
     GRANT USAGE ON SCHEMA public TO club_admin_api;

@@ -141,16 +141,17 @@ try {
   await page.waitForURL('**mode=journal');
   assert.equal(received.at(-1).kind, 'subscribe');
   await page.goto(origin + '/club.html?mode=events&event=productivity');
+  await page.locator('#open-rsvp').click();
   await page.locator('#event-rsvp [name="name"]').fill('Test Student');
   await page.locator('#event-rsvp [name="email"]').fill('student@example.com');
   await page.locator('#event-rsvp [name="consent"]').check();
   await page.locator('#event-rsvp button[type="submit"]').click();
   await page.locator('#event-rsvp .form-success').waitFor();
   assert.equal(received.at(-1).eventId, 'productivity');
-  await page.getByRole('button', { name: 'Done', exact: true }).click();
+  await page.getByRole('button', { name: 'Close', exact: true }).click();
   assert.ok(
     await page
-      .locator('#event-detail')
+      .locator('#open-rsvp')
       .evaluate((el) => el === document.activeElement),
   );
   await page.getByRole('button', { name: 'Request a workshop ↗' }).click();
@@ -494,7 +495,7 @@ try {
     .click();
   await admin.getByLabel('Sign-in code', { exact: true }).fill('123456');
   await admin.getByRole('button', { name: 'Sign in', exact: true }).click();
-  await admin.getByRole('heading', { name: 'Your club inbox' }).waitFor();
+  await admin.locator('#inbox-pane').waitFor();
   testSignedIn = true;
   await expect(admin.locator('[data-inbox-status="new"]')).toHaveAttribute(
     'aria-pressed',
@@ -626,7 +627,7 @@ try {
     .getByRole('button', { name: 'Enable browser alerts', exact: true })
     .click();
   await admin.reload();
-  await admin.getByRole('heading', { name: 'Your club inbox' }).waitFor();
+  await admin.locator('#inbox-pane').waitFor();
   assert.equal(
     await admin
       .getByRole('button', { name: 'Turn off browser alerts', exact: true })
@@ -656,7 +657,7 @@ try {
     0,
   );
   await admin.reload();
-  await admin.getByRole('heading', { name: 'Your club inbox' }).waitFor();
+  await admin.locator('#inbox-pane').waitFor();
   assert.equal(
     await admin
       .getByRole('button', { name: 'Enable browser alerts', exact: true })

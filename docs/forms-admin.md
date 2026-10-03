@@ -100,8 +100,11 @@ selector, **Starred only**, and the name/email search. Archiving a response hide
 from the default survey view without changing its answers or its basic Inbox RSVP.
 Opening a specific RSVP from Inbox also finds archived responses.
 
-**Compile summary** and **Export matching CSV** use the selected filters across all
-pages. Each event also has summary/export buttons. Changed question versions remain
+**Compile summary** opens a pop-up with the selected results and an **Export CSV**
+button. Its controls stay visible while answers scroll. Close or Escape dismisses
+and clears the compiled view; it does not occupy space on the response list.
+**Export matching CSV** also remains available from the page. Both use the selected
+filters across all pages. Each event also has summary/export buttons. Changed question versions remain
 separate. Choice percentages use the people who answered that question as the
 denominator; multi-select totals can exceed 100%. Written and Other answers are
 collapsible. CSV preserves multiline answers and neutralizes spreadsheet formulas.
@@ -109,11 +112,36 @@ Reports refuse more than 10,000 matches explicitly; narrow the event/search rath
 than receiving a silently incomplete export.
 
 **Contacts & follow-up**, available from Inbox and Event surveys, consolidates
-website submissions by normalized email. A contact shows the names used, submitted
+website submissions by normalized email. **Merge with another contact** lets an
+officer explicitly link a person's e-number and named school email addresses.
+Search for and select the contact to keep, then review **Confirm merge**. Its
+primary email is retained. Both email addresses find the same combined history,
+including future submissions. Original submission emails, answers and notes are
+preserved. Contacts with the same name are never automatically merged.
+A contact shows the names used, submitted
 messages, Inbox comments, response-management activity and officer follow-up notes.
 Notes carry the authenticated author and database timestamp. Retrying a saved note
 does not create duplicates. This does not read a mailbox or send emails. Private
 standalone-survey drafts and unsubmitted answers are not included.
+
+**Delete contact** removes a regular contact from the Active directory only.
+Select **Deleted** and **Restore contact** to bring it back; saved submissions and
+notes remain available. New submissions do not silently restore a deleted contact.
+**Mark as test** applies to every email linked to that contact and does not delete
+anything by itself. For a marked test contact, **Permanently delete test contact**
+shows the affected counts and requires typing its primary email. Confirmation
+erases its linked website entries, event survey answers, comments, notes, contact
+history, aliases and attachments. This cannot be restored. Regular and test
+contacts cannot be merged unless their test settings are first reviewed to match.
+Concurrent changes invalidate a management confirmation and require a refresh.
+
+Apply `backend/015_contact_identity_management.sql` after migration 014 before
+deploying contact management. It backfills aliases without merging or deleting
+any existing people. File deletions are queued in the same transaction as a test
+purge and attempted immediately; the existing maintenance job retries storage
+failures. Standalone private survey membership and admin login accounts remain
+separate; marking a directory contact as test does not grant access to or remove
+those accounts.
 
 Apply `backend/014_event_response_management.sql` after migrations 009 and 010,
 before deploying these controls. It backfills contacts from existing entries and

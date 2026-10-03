@@ -2,6 +2,7 @@ import { timingSafeEqual } from 'node:crypto';
 import { database } from '../lib/db.mjs';
 import { send, fail } from '../lib/http.mjs';
 import { RequestError } from '../lib/errors.mjs';
+import { cleanupContactFiles } from '../lib/contacts.mjs';
 export default async function handler(req, res) {
   try {
     const expected = 'Bearer ' + (process.env.CRON_SECRET || '');
@@ -19,7 +20,8 @@ export default async function handler(req, res) {
     await db.query(
       "DELETE FROM club_forms.webhook_events WHERE created_at<now()-interval '30 days'",
     );
-    send(res, 200, { cleaned: true });
+    const contactFilesCleaned = await cleanupContactFiles(db);
+    send(res, 200, { cleaned: true, contactFilesCleaned });
   } catch (error) {
     fail(res, error);
   }

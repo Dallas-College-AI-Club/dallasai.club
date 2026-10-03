@@ -17,7 +17,7 @@ export const formFooter = (
   <p class="form-note">Your information is shared with authorized club officers. <a href="privacy.html">How we use your information</a></p>
   <button type="submit" class="solid-link">${label}</button><p class="form-status" role="status" aria-live="polite"></p>`;
 export const identityFields = (educationOnly = false) =>
-  `<label>Your name<input name="name" autocomplete="name" maxlength="100" required></label><label>Email address<input name="email" type="email" autocomplete="email" maxlength="254" required placeholder="${educationOnly ? 'you@student.dallascollege.edu' : 'you@example.com'}" ${educationOnly ? 'pattern="[^\\s@]+@[^\\s@]+[.][eE][dD][uU]" title="Use a college or alumni email address ending in .edu."' : ''}>${educationOnly ? '<span>Use a college or alumni email address ending in .edu.</span>' : ''}</label>`;
+  `<label>Your full name<input name="name" autocomplete="name" maxlength="100" required></label><label>Email address<input name="email" type="email" autocomplete="email" maxlength="254" required placeholder="${educationOnly ? 'you@student.dallascollege.edu' : 'you@example.com'}" ${educationOnly ? 'pattern="[^\\s@]+@[^\\s@]+[.][eE][dD][uU]" title="Use a college or alumni email address ending in .edu."' : ''}>${educationOnly ? '<span>Use a college or alumni email address ending in .edu.</span>' : ''}</label>`;
 export async function request(endpoint, body, signal) {
   if (!formsURL)
     throw new Error('Forms are being connected. Please try again later.');

@@ -1,10 +1,10 @@
+import { testDatabase } from './helpers/db.mjs';
 import { chromium } from '@playwright/test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PGlite } from '@electric-sql/pglite';
 import { eventHandler } from '../api/events.mjs';
 import { RequestError } from '../lib/errors.mjs';
 import { submit } from '../lib/submissions.mjs';
@@ -17,20 +17,7 @@ const workshop = JSON.parse(
   await readFile(new URL('./fixtures/workshop.json', import.meta.url), 'utf8'),
 );
 await mkdir(screens, { recursive: true });
-const db = new PGlite();
-await db.exec('CREATE SCHEMA club_forms');
-for (const file of [
-  '003_club_forms.sql',
-  '005_screen_confirmations.sql',
-  '007_office_tools.sql',
-])
-  await db.exec(await readFile(new URL('../' + file, import.meta.url), 'utf8'));
-await db.exec(
-  await readFile(new URL('../006_event_editor.sql', import.meta.url), 'utf8'),
-);
-await db.exec(
-  await readFile(new URL('../008_event_archive.sql', import.meta.url), 'utf8'),
-);
+const db = await testDatabase();
 const authorized = (req) => {
   if (req.headers.cookie?.includes('test-officer=signed-in'))
     return { email: 'officer@example.com' };

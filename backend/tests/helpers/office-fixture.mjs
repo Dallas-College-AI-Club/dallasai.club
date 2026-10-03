@@ -12,17 +12,6 @@ export async function officeFixture() {
     db = f.db;
   const backend = path.resolve(import.meta.dirname, '../..'),
     site = path.resolve(backend, '../public');
-  for (const name of [
-    '006_event_editor.sql',
-    '007_office_tools.sql',
-    '008_event_archive.sql',
-    '009_submission_comments.sql',
-    '014_event_response_management.sql',
-    '015_contact_identity_management.sql',
-    '016_submission_management.sql',
-    '017_contact_profile_editing.sql',
-  ])
-    await db.exec(await readFile(path.join(backend, name), 'utf8'));
   const workshop = JSON.parse(
     await readFile(
       path.join(backend, 'tests/fixtures/workshop.json'),

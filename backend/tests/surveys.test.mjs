@@ -1,8 +1,8 @@
+import { testDatabase } from './helpers/db.mjs';
 import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { PGlite } from '@electric-sql/pglite';
 import { draftContent, publicContent } from '../lib/event-content.mjs';
 import { surveyResults, surveyQuestions } from '../lib/surveys.mjs';
 import { saveEvent, liveEvents } from '../lib/events.mjs';
@@ -40,19 +40,7 @@ const body = (extra = {}) => ({
 });
 let db;
 before(async () => {
-  db = new PGlite();
-  for (const f of [
-    '003_club_forms.sql',
-    '005_screen_confirmations.sql',
-    '006_event_editor.sql',
-    '007_office_tools.sql',
-    '008_event_archive.sql',
-    '009_submission_comments.sql',
-    '010_event_surveys.sql',
-    '014_event_response_management.sql',
-    '015_contact_identity_management.sql',
-  ])
-    await db.exec(await readFile(new URL('../' + f, import.meta.url), 'utf8'));
+  db = await testDatabase();
 });
 beforeEach(() =>
   db.exec('TRUNCATE club_forms.entries,club_forms.events CASCADE'),

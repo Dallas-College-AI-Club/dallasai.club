@@ -2,18 +2,13 @@ import { email as validEmail } from './validation.mjs';
 import { RequestError } from './errors.mjs';
 
 export async function contactAliases(db, primary) {
-  const hasMembers = (
-    await db.query(
-      "SELECT to_regclass('club_forms.custom_survey_members') IS NOT NULL AS present",
-    )
-  ).rows[0].present;
   return (
     await db.query(
       `SELECT a.email,
     (SELECT count(*)::int FROM club_forms.entries e WHERE e.email=a.email) AS submissions,
     (SELECT count(*)::int FROM club_forms.contact_notes n WHERE n.email=a.email) AS notes,
     (SELECT coalesce(jsonb_agg(recent),'[]'::jsonb) FROM (SELECT e.id,e.kind,coalesce(e.data->>'eventTitle',e.data->>'subject',e.data->>'topic',e.data->>'title',e.kind) AS title FROM club_forms.entries e WHERE e.email=a.email ORDER BY e.created_at DESC,e.id LIMIT 5) recent) AS responses,
-    ${hasMembers ? 'EXISTS(SELECT 1 FROM club_forms.custom_survey_members m WHERE m.email=a.email)' : 'false'} AS membership
+    EXISTS(SELECT 1 FROM club_forms.custom_survey_members m WHERE m.email=a.email) AS membership
     FROM club_forms.contact_emails a WHERE contact_email=$1 ORDER BY a.email`,
       [primary],
     )

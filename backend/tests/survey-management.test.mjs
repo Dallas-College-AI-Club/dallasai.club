@@ -1,8 +1,8 @@
+import { testDatabase } from './helpers/db.mjs';
 import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { PGlite } from '@electric-sql/pglite';
 import { manageResponse } from '../lib/survey-management.mjs';
 import {
   reportRows,
@@ -71,19 +71,7 @@ test('summary and CSV count Any of these consistently without choosing None, Not
   );
 });
 before(async () => {
-  db = new PGlite();
-  for (const file of [
-    '003_club_forms.sql',
-    '005_screen_confirmations.sql',
-    '007_office_tools.sql',
-    '009_submission_comments.sql',
-    '010_event_surveys.sql',
-    '014_event_response_management.sql',
-    '015_contact_identity_management.sql',
-  ])
-    await db.exec(
-      await readFile(new URL('../' + file, import.meta.url), 'utf8'),
-    );
+  db = await testDatabase();
 });
 after(() => db.close());
 beforeEach(() =>

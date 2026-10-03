@@ -1,9 +1,8 @@
+import { testDatabase } from './helpers/db.mjs';
 import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import http from 'node:http';
-import { PGlite } from '@electric-sql/pglite';
 import { changeSubmission } from '../lib/submission-management.mjs';
 import { adminHandler } from '../api/admin.mjs';
 import { surveysHandler } from '../api/surveys.mjs';
@@ -32,20 +31,7 @@ const questions = [
   },
 ];
 before(async () => {
-  db = new PGlite();
-  for (const file of [
-    '003_club_forms.sql',
-    '005_screen_confirmations.sql',
-    '007_office_tools.sql',
-    '009_submission_comments.sql',
-    '010_event_surveys.sql',
-    '014_event_response_management.sql',
-    '015_contact_identity_management.sql',
-    '016_submission_management.sql',
-  ])
-    await db.exec(
-      await readFile(new URL('../' + file, import.meta.url), 'utf8'),
-    );
+  db = await testDatabase();
   const config = {
     getDatabase: () => db,
     getEvents: async () => [],
@@ -395,6 +381,31 @@ test('deletion retains identities with another alias submission or independent c
     (
       await db.query(
         "SELECT * FROM club_forms.contacts WHERE email='note@example.edu'",
+      )
+    ).rows.length,
+    1,
+  );
+  // A custom survey respondent keeps their contact record too.
+  const memberId = await seed({ archived: true, email: 'member@example.edu' });
+  const surveyId = randomUUID();
+  await db.query(
+    `INSERT INTO club_forms.custom_surveys(id,slug,title,content_version,link_digest,expires_at)
+     VALUES($1,'retention-check','Retention check','v1','retention-digest',now()+interval '1 day')`,
+    [surveyId],
+  );
+  await db.query(
+    `INSERT INTO club_forms.custom_survey_members(survey_id,advisor_id,display_name,email)
+     VALUES($1,'member','Member','member@example.edu')`,
+    [surveyId],
+  );
+  assert.equal(
+    (await changeSubmission(db, remove(memberId), actor)).contactRemoved,
+    false,
+  );
+  assert.equal(
+    (
+      await db.query(
+        "SELECT * FROM club_forms.contacts WHERE email='member@example.edu'",
       )
     ).rows.length,
     1,

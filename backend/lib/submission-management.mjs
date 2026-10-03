@@ -46,13 +46,7 @@ export async function removeOrphanContact(tx, address) {
     )
   ).rows[0].retained;
   if (linked) return false;
-  const customExists = (
-    await tx.query(
-      "SELECT to_regclass('club_forms.custom_survey_members') IS NOT NULL AS present",
-    )
-  ).rows[0].present;
   if (
-    customExists &&
     (
       await tx.query(
         'SELECT 1 FROM club_forms.custom_survey_members WHERE email=ANY($1::text[]) LIMIT 1',

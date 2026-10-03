@@ -1,8 +1,7 @@
 import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { PGlite } from '@electric-sql/pglite';
+import { testDatabase } from './helpers/db.mjs';
 import {
   manageContact,
   contactHistory,
@@ -10,23 +9,13 @@ import {
 } from '../lib/contacts.mjs';
 let db;
 const actor = 'officer@example.edu';
+const surveyId = randomUUID();
 before(async () => {
-  db = new PGlite();
-  for (const file of [
-    '003_club_forms.sql',
-    '005_screen_confirmations.sql',
-    '007_office_tools.sql',
-    '009_submission_comments.sql',
-    '010_event_surveys.sql',
-    '014_event_response_management.sql',
-    '015_contact_identity_management.sql',
-    '017_contact_profile_editing.sql',
-  ])
-    await db.exec(
-      await readFile(new URL('../' + file, import.meta.url), 'utf8'),
-    );
-  await db.exec(
-    'CREATE TABLE club_forms.custom_survey_members(email text PRIMARY KEY)',
+  db = await testDatabase();
+  await db.query(
+    `INSERT INTO club_forms.custom_surveys(id,slug,title,content_version,link_digest,expires_at)
+     VALUES($1,'contact-profile-test','Contact profile test','v1','contact-profile-digest',now()+interval '1 day')`,
+    [surveyId],
   );
 });
 after(() => db.close());
@@ -164,7 +153,9 @@ test('unused aliases can be removed while used aliases, primary addresses and su
   );
   await edit('chosen@example.edu', 'advisor@example.edu');
   await db.query(
-    "INSERT INTO club_forms.custom_survey_members(email) VALUES('chosen@example.edu')",
+    `INSERT INTO club_forms.custom_survey_members(survey_id,advisor_id,display_name,email)
+     VALUES($1,'chosen','Chosen Advisor','chosen@example.edu')`,
+    [surveyId],
   );
   await assert.rejects(
     remove('advisor@example.edu', 'chosen@example.edu'),

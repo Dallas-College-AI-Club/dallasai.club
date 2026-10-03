@@ -1,8 +1,7 @@
+import { testDatabase } from './helpers/db.mjs';
 import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { PGlite } from '@electric-sql/pglite';
 import { submit } from '../lib/submissions.mjs';
 import { validate, validateFiles } from '../lib/validation.mjs';
 import { limit, cors, jsonBody } from '../lib/http.mjs';
@@ -19,16 +18,7 @@ const entry = (kind = 'join', extra = {}) => ({
   ...extra,
 });
 before(async () => {
-  db = new PGlite();
-  await db.exec(
-    await readFile(new URL('../003_club_forms.sql', import.meta.url), 'utf8'),
-  );
-  await db.exec(
-    await readFile(
-      new URL('../005_screen_confirmations.sql', import.meta.url),
-      'utf8',
-    ),
-  );
+  db = await testDatabase();
 });
 beforeEach(async () => {
   await db.exec(

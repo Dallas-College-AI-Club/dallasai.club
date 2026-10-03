@@ -1,10 +1,9 @@
+import { testDatabase } from './helpers/db.mjs';
 import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
-import { PGlite } from '@electric-sql/pglite';
 import { eventHandler } from '../api/events.mjs';
 import { adminHandler } from '../api/admin.mjs';
 import { addSubmissionComment } from '../lib/submission-activity.mjs';
@@ -51,18 +50,7 @@ const request = (route, body, admin = true) =>
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
 before(async () => {
-  db = new PGlite();
-  for (const file of [
-    '003_club_forms.sql',
-    '005_screen_confirmations.sql',
-    '006_event_editor.sql',
-    '007_office_tools.sql',
-    '008_event_archive.sql',
-    '009_submission_comments.sql',
-  ])
-    await db.exec(
-      await readFile(new URL('../' + file, import.meta.url), 'utf8'),
-    );
+  db = await testDatabase();
   const handle = eventHandler({
     getDatabase: () => db,
     authorize,

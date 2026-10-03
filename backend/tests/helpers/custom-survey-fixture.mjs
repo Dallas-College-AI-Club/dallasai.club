@@ -1,5 +1,4 @@
-import { PGlite } from '@electric-sql/pglite';
-import { readFile } from 'node:fs/promises';
+import { testDatabase } from './db.mjs';
 import { randomUUID } from 'node:crypto';
 import { customSurveysHandler } from '../../api/custom-surveys.mjs';
 import { privateSurveyToken, digest } from '../../lib/custom-surveys.mjs';
@@ -7,18 +6,7 @@ import { definition } from '../../lib/survey-contract.mjs';
 import { RequestError } from '../../lib/errors.mjs';
 import { jsonBody, send } from '../../lib/http.mjs';
 export async function fixture() {
-  const db = new PGlite();
-  for (const name of [
-    '003_club_forms.sql',
-    '005_screen_confirmations.sql',
-    '010_event_surveys.sql',
-    '011_custom_surveys.sql',
-    '012_survey_respondents.sql',
-    '013_survey_builder.sql',
-  ])
-    await db.exec(
-      await readFile(new URL('../../' + name, import.meta.url), 'utf8'),
-    );
+  const db = await testDatabase();
   process.env.FORM_TOKEN_SECRET = 'isolated-survey-tests-' + 'x'.repeat(40);
   const id = randomUUID(),
     token = privateSurveyToken(id);

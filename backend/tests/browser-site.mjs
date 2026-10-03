@@ -124,6 +124,14 @@ try {
     .waitFor();
   await page.goto(origin + '/club.html?mode=journal');
   await page
+    .getByRole('button', { name: 'All articles', exact: true })
+    .waitFor();
+  assert.equal(
+    await page.getByRole('button', { name: 'Club news', exact: true }).count(),
+    0,
+  );
+  assert.equal(await page.getByText('First Post', { exact: true }).count(), 0);
+  await page
     .getByRole('button', { name: 'Contribute an article ↗', exact: true })
     .click();
   await page.locator('#draft-form').waitFor();

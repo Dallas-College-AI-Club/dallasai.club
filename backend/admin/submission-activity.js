@@ -2,7 +2,7 @@ import { activityTime } from './event-activity.js';
 const actions = {
   'review:new': 'Marked new',
   'review:reviewed': 'Marked reviewed',
-  'review:closed': 'Marked closed',
+  'review:closed': 'Archived submission',
   'download-attachment': 'Downloaded an attachment',
   'comment-added': 'Added a comment',
 };

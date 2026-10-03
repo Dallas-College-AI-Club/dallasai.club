@@ -1,6 +1,6 @@
 {{- $articles := slice -}}
 {{- range sort (where site.RegularPages "Section" "blog") "Weight" -}}
-  {{- if and (not .Draft) (not (.PublishDate.After now)) -}}
+  {{- if and (not .Draft) (not (.PublishDate.After now)) (ne (lower (.Params.category | default "")) "club news") -}}
     {{- $headings := slice -}}
     {{- $headingIDs := slice -}}
     {{- $paragraphs := slice -}}

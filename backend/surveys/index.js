@@ -188,7 +188,13 @@ async function openQuestions() {
     opening = false;
   }
 }
-q('#survey-continue').onclick = () => openQuestions();
+q('#survey-continue').onclick = async () => {
+  try {
+    await openQuestions();
+  } catch {
+    message('Could not open the questions. Reload this page and try again.');
+  }
+};
 q('#survey-preview').onclick = () => {
   location.hash = new URLSearchParams({ invite: link, preview: '1' });
   location.reload();

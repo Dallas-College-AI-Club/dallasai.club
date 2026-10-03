@@ -481,6 +481,7 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
   };
   q('#survey-all').onclick = reset;
   return {
+    canLeave: () => contacts.canLeave(),
     show(id = '') {
       entryId = id;
       offset = 0;

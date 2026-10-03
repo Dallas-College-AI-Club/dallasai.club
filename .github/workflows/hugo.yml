@@ -34,6 +34,9 @@ jobs:
       - run: npm ci --include=dev --ignore-scripts
       - run: npm test
       - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Verify Club Office workflows and recovery
+        run: node tests/browser-office.mjs
 
   build:
     runs-on: ubuntu-latest

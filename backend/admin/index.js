@@ -41,19 +41,40 @@ function status(message = '') {
   q('#status').textContent = message;
 }
 async function api(path = '/api/admin', body) {
-  const response = await fetch(path, {
-    credentials: 'same-origin',
-    ...(body
-      ? {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(body),
-        }
-      : {}),
-  });
-  const data = await response.json();
+  const requestSession = sessionGeneration;
+  let response;
+  try {
+    response = await fetch(path, {
+      signal: AbortSignal.timeout(20000),
+      credentials: 'same-origin',
+      ...(body
+        ? {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+          }
+        : {}),
+    });
+  } catch {
+    throw new Error(
+      'Could not connect to Club Office. Check your connection and try again.',
+    );
+  }
+  const data = await response.json().catch(() => null);
+  if (response.status === 401 && requestSession === sessionGeneration) {
+    showLogin();
+    status('Your session ended. Sign in again to continue.');
+  }
+  if (!data || typeof data !== 'object') {
+    const error = new Error(
+      response.status === 401
+        ? 'Your session ended. Sign in again to continue.'
+        : 'Club Office is temporarily unavailable. Please try again; unsaved text has been kept.',
+    );
+    error.status = response.status >= 400 ? response.status : 503;
+    throw error;
+  }
   if (!response.ok) {
-    if (response.status === 401) showLogin();
     const error = new Error(data.error || 'Please try again.');
     error.status = response.status;
     throw error;
@@ -193,13 +214,16 @@ function renderEntry(entry) {
       const b = node('button', label);
       b.onclick = async () => {
         b.disabled = true;
+        const version = sessionGeneration;
         try {
           await api('/api/admin', {
             action: 'review',
             id: entry.id,
             status: value,
           });
+          if (version !== sessionGeneration) return;
           await load();
+          if (version !== sessionGeneration) return;
           status(
             value === 'closed'
               ? 'Submission moved to Archived. Comments and history are kept.'
@@ -207,6 +231,7 @@ function renderEntry(entry) {
                   (value === 'new' ? 'New.' : 'Reviewed.'),
           );
         } catch (e) {
+          if (version !== sessionGeneration) return;
           status(e.message);
           b.disabled = false;
         }
@@ -409,6 +434,7 @@ async function load({ background = false } = {}) {
       }
     }
   } catch (error) {
+    if (generation !== sessionGeneration) return;
     if (!signedIn) showLogin();
     status(error.message);
   } finally {
@@ -553,7 +579,12 @@ q('#change-email').onclick = () => {
   q('#login-form [name="email"]').focus();
 };
 q('#signout').onclick = async () => {
-  if (!editor.canLeave()) return;
+  if (
+    !editor.canLeave() ||
+    !customSurveys.canLeave() ||
+    !surveys.canLeave()
+  )
+    return;
   sessionGeneration++;
   try {
     const result = await auth.signOut();
@@ -590,19 +621,43 @@ const surveyArchive = mountSurveyArchive(
   api,
 );
 function surveyGroup(custom, id = '') {
+  const alreadyCustom = !q('#custom-surveys-root').hidden;
+  if (
+    custom === alreadyCustom &&
+    !id &&
+    !q('#surveys-pane').hidden &&
+    q(custom ? '#custom-surveys-root' : '#survey-results').childNodes
+      .length
+  )
+    return true;
+  if ((!custom || id) && !customSurveys.leave()) return false;
   q('#custom-surveys-root').hidden = !custom;
   q('#event-surveys-root').hidden = custom;
   q('#custom-surveys-group').setAttribute('aria-pressed', String(custom));
   q('#event-surveys-group').setAttribute('aria-pressed', String(!custom));
   if (custom) id ? customSurveys.show(id) : customSurveys.load();
+  return true;
 }
 q('#custom-surveys-group').onclick = () => surveyGroup(true);
 q('#event-surveys-group').onclick = () => {
-  surveyGroup(false);
+  if (!q('#event-surveys-root').hidden) return;
+  if (surveyGroup(false) === false) return;
+  history.replaceState({}, '', '#surveys');
   surveys.show();
 };
 function showPane(name, keepHash = false) {
-  if (name !== 'events' && !editor.canLeave()) return false;
+  const currentPane = ['inbox', 'events', 'surveys'].find(
+    (pane) => !q('#' + pane + '-pane').hidden,
+  );
+  if (name === currentPane && !keepHash) return true;
+  if (name !== 'events' && !q('#events-pane').hidden && !editor.leave())
+    return false;
+  if (
+    name !== 'surveys' &&
+    !q('#surveys-pane').hidden &&
+    !customSurveys.leave()
+  )
+    return false;
   for (const pane of ['inbox', 'events', 'surveys']) {
     q('#' + pane + '-pane').hidden = name !== pane;
     q('#' + pane + '-tab').setAttribute(
@@ -622,10 +677,10 @@ function showPane(name, keepHash = false) {
       'custom-survey',
     );
     if (customId) {
-      surveyGroup(true, customId);
+      if (surveyGroup(true, customId) === false) return false;
       return;
     }
-    surveyGroup(false);
+    if (surveyGroup(false) === false) return false;
     surveys.show(
       new URLSearchParams(location.hash.slice(1)).get('survey') || '',
     );
@@ -638,9 +693,22 @@ function selectSurveyArchive() {
   q('#event-filter-label').hidden = true;
   history.replaceState({}, '', location.pathname);
 }
-window.addEventListener('hashchange', () => {
+window.addEventListener('hashchange', (event) => {
+  function navigate(name) {
+    if (showPane(name, true) !== false) return true;
+    history.replaceState(
+      {},
+      '',
+      new URL(event.oldURL).hash || location.pathname,
+    );
+    return false;
+  }
+  if (signedIn && (location.hash === '#events' || !location.hash)) {
+    navigate(location.hash === '#events' ? 'events' : 'inbox');
+    return;
+  }
   if (signedIn && location.hash === '#archived-survey-questions') {
-    if (showPane('inbox', true) === false) return;
+    if (!navigate('inbox')) return;
     offset = 0;
     selectSurveyArchive();
     load();
@@ -652,7 +720,7 @@ window.addEventListener('hashchange', () => {
       location.hash.startsWith('#survey=') ||
       location.hash.startsWith('#custom-survey='))
   ) {
-    showPane('surveys', true);
+    navigate('surveys');
     return;
   }
   if (
@@ -660,7 +728,7 @@ window.addEventListener('hashchange', () => {
     !new URLSearchParams(location.hash.slice(1)).get('entry')
   )
     return;
-  if (showPane('inbox', true) === false) return;
+  if (!navigate('inbox')) return;
   offset = 0;
   q('#filters [name="kind"]').value = '';
   q('#filters [name="eventId"]').value = '';

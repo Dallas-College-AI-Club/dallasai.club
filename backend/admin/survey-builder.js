@@ -31,7 +31,7 @@ const fresh = () => ({
   durationDays: 30,
   questions: [],
 });
-export async function mountSurveyBuilder(root, api, onDone, id) {
+export function mountSurveyBuilder(root, api, onDone, id) {
   let definition = fresh(),
     surveyId = id || crypto.randomUUID(),
     revision = 0,
@@ -39,8 +39,9 @@ export async function mountSurveyBuilder(root, api, onDone, id) {
     busy = false,
     pending,
     previewLink = '',
-    saved = false,
-    published = false;
+    saved = true,
+    published = false,
+    active = true;
   const status = node('p');
   status.setAttribute('role', 'status');
   const retry = button('Retry the same save', async () => {
@@ -49,21 +50,35 @@ export async function mountSurveyBuilder(root, api, onDone, id) {
     if ((await save(action)) && action !== 'publish') render();
   });
   retry.hidden = true;
-  const steps = ['Template', 'Audience', 'Questions', 'Preview', 'Publish'];
-  if (id) {
-    try {
-      const { survey } = await api('/api/custom-surveys?action=draft&id=' + id);
-      if (survey.status !== 'draft')
-        throw Error('This survey has already been published.');
-      definition = survey.definition;
-      revision = survey.edit_revision;
-      previewLink = survey.previewLink;
-      saved = true;
-    } catch (error) {
-      root.replaceChildren(node('p', error.message));
-      root.append(button('Back to surveys', onDone));
-      return;
+  const steps = [
+    'Template',
+    'Audience',
+    'Questions',
+    'Preview',
+    'Publish',
+  ];
+  async function initialize() {
+    if (id) {
+      root.replaceChildren(node('p', 'Loading survey draft…'));
+      try {
+        const { survey } = await api(
+          '/api/custom-surveys?action=draft&id=' + id,
+        );
+        if (!active) return;
+        if (survey.status !== 'draft')
+          throw Error('This survey has already been published.');
+        definition = survey.definition;
+        revision = survey.edit_revision;
+        previewLink = survey.previewLink;
+        saved = true;
+      } catch (error) {
+        if (!active) return;
+        root.replaceChildren(node('p', error.message));
+        root.append(button('Back to surveys', onDone));
+        return;
+      }
     }
+    render();
   }
   function button(label, fn, cls = 'secondary') {
     const b = node('button', label, cls);
@@ -83,7 +98,8 @@ export async function mountSurveyBuilder(root, api, onDone, id) {
     input.value = definition[key];
     if (multiline) input.rows = 3;
     input.oninput = () => {
-      definition[key] = type === 'number' ? Number(input.value) : input.value;
+      definition[key] =
+        type === 'number' ? Number(input.value) : input.value;
       saved = false;
     };
     l.append(input);
@@ -92,6 +108,7 @@ export async function mountSurveyBuilder(root, api, onDone, id) {
   function select(label, value, options, onChange) {
     const l = node('label', label),
       s = node('select');
+    s.setAttribute('aria-label', label);
     for (const [v, t] of options) {
       const o = node('option', t);
       o.value = v;
@@ -106,7 +123,7 @@ export async function mountSurveyBuilder(root, api, onDone, id) {
     return l;
   }
   async function save(action = 'save') {
-    if (busy) return false;
+    if (busy || !active) return false;
     const body = {
       id: surveyId,
       action,
@@ -115,7 +132,8 @@ export async function mountSurveyBuilder(root, api, onDone, id) {
     };
     const serialized = JSON.stringify(body);
     if (pending && pending.serialized !== serialized) {
-      status.textContent = 'Retry the previous save before changing the draft.';
+      status.textContent =
+        'Retry the previous save before changing the draft.';
       return false;
     }
     pending ||= {
@@ -126,12 +144,14 @@ export async function mountSurveyBuilder(root, api, onDone, id) {
     root
       .querySelectorAll('button,input,textarea,select')
       .forEach((e) => (e.disabled = true));
-    status.textContent = action === 'publish' ? 'Publishing…' : 'Saving draft…';
+    status.textContent =
+      action === 'publish' ? 'Publishing…' : 'Saving draft…';
     try {
       const data = await api(
         '/api/custom-surveys?action=draft-change',
         pending.body,
       );
+      if (!active) return false;
       revision = data.revision;
       pending = null;
       saved = true;
@@ -143,16 +163,18 @@ export async function mountSurveyBuilder(root, api, onDone, id) {
       const result = await api(
         '/api/custom-surveys?action=draft&id=' + surveyId,
       );
+      if (!active) return false;
       previewLink = result.survey.previewLink;
       status.textContent = 'Draft saved.';
       return true;
     } catch (error) {
+      if (!active) return false;
       status.textContent = error.message;
       if (error.status && error.status < 500) pending = null;
       return false;
     } finally {
       busy = false;
-      if (root.isConnected)
+      if (active && root.isConnected)
         root
           .querySelectorAll('button,input,textarea,select')
           .forEach((e) => (e.disabled = Boolean(pending)));
@@ -168,6 +190,7 @@ export async function mountSurveyBuilder(root, api, onDone, id) {
     }
   }
   function render() {
+    if (!active) return;
     root.replaceChildren(
       node('h2', 'Create a custom survey'),
       node(
@@ -200,7 +223,10 @@ export async function mountSurveyBuilder(root, api, onDone, id) {
             definition.template = value;
             if (!definition.questions.length && value === 'feedback')
               definition.questions = [
-                newQuestion('How would you rate your experience?', 'scale'),
+                newQuestion(
+                  'How would you rate your experience?',
+                  'scale',
+                ),
                 newQuestion('What worked well?'),
                 newQuestion('What would you improve?'),
               ];
@@ -223,7 +249,8 @@ export async function mountSurveyBuilder(root, api, onDone, id) {
           Object.entries(audienceNames),
           (value) => {
             definition.audience = value;
-            if (value !== 'public') definition.permissions.answer = 'invited';
+            if (value !== 'public')
+              definition.permissions.answer = 'invited';
             render();
           },
         ),
@@ -414,7 +441,11 @@ export async function mountSurveyBuilder(root, api, onDone, id) {
         ),
       );
       for (const q of definition.questions) {
-        const card = node('section', undefined, 'builder-preview-question');
+        const card = node(
+          'section',
+          undefined,
+          'builder-preview-question',
+        );
         card.append(
           node('strong', q.title || 'Untitled question'),
           node('p', q.description),
@@ -468,7 +499,9 @@ export async function mountSurveyBuilder(root, api, onDone, id) {
           'p',
           `${definition.questions.length} questions · ${audienceNames[definition.audience]}`,
         ),
-        field('Days open after publishing', 'durationDays', { type: 'number' }),
+        field('Days open after publishing', 'durationDays', {
+          type: 'number',
+        }),
       );
       panel.querySelector('input').min = '1';
       panel.querySelector('input').max = '90';
@@ -516,7 +549,9 @@ export async function mountSurveyBuilder(root, api, onDone, id) {
     const actions = node('div', undefined, 'entry-actions');
     if (step) actions.append(button('← Back', () => go(step - 1)));
     if (step < 4)
-      actions.append(button('Save and continue →', () => go(step + 1), ''));
+      actions.append(
+        button('Save and continue →', () => go(step + 1), ''),
+      );
     actions.append(
       button('Save draft and leave', async () => {
         if (await save()) onDone(surveyId);
@@ -525,7 +560,7 @@ export async function mountSurveyBuilder(root, api, onDone, id) {
     root.append(actions, status, retry);
   }
   const beforeUnload = (e) => {
-    if (root.contains(status) && !saved && !published) {
+    if (active && (busy || pending || (!saved && !published))) {
       e.preventDefault();
       e.returnValue = '';
     }
@@ -533,8 +568,35 @@ export async function mountSurveyBuilder(root, api, onDone, id) {
   window.addEventListener('beforeunload', beforeUnload);
   const originalDone = onDone;
   onDone = async (selected) => {
-    window.removeEventListener('beforeunload', beforeUnload);
+    if (!active) return;
+    dispose();
     await originalDone(selected);
   };
-  render();
+  function dispose() {
+    active = false;
+    window.removeEventListener('beforeunload', beforeUnload);
+    for (const dialog of root.querySelectorAll('dialog[open]'))
+      dialog.close();
+  }
+  initialize();
+  return {
+    dispose,
+    canLeave() {
+      if (!active) return true;
+      if (busy || pending) {
+        status.textContent = busy
+          ? 'Please wait for this save to finish before leaving.'
+          : 'Retry the pending save before leaving so you know whether it was saved.';
+        status.scrollIntoView({ block: 'nearest' });
+        return false;
+      }
+      return (
+        saved ||
+        published ||
+        confirm(
+          'Discard your unsaved custom survey changes? Your last saved draft will be kept.',
+        )
+      );
+    },
+  };
 }

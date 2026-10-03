@@ -1,12 +1,12 @@
 @font-face {
   font-family: Geist;
-  src: url("./assets/geist-regular.woff2") format("woff2");
+  src: url('./assets/geist-regular.woff2') format('woff2');
   font-weight: 400;
   font-display: swap;
 }
 @font-face {
   font-family: Geist;
-  src: url("./assets/geist-semibold.woff2") format("woff2");
+  src: url('./assets/geist-semibold.woff2') format('woff2');
   font-weight: 500 900;
   font-display: swap;
 }
@@ -221,7 +221,7 @@ details[open] > summary {
   padding: 14px 18px;
   border-bottom: 2px solid transparent;
 }
-.office-tabs button[aria-pressed="true"] {
+.office-tabs button[aria-pressed='true'] {
   color: var(--accent);
   border-bottom-color: var(--accent);
 }
@@ -260,7 +260,7 @@ details[open] > summary {
   border: 0;
   border-radius: 8px;
 }
-.event-views button[aria-pressed="true"] {
+.event-views button[aria-pressed='true'] {
   background: var(--surface);
   color: var(--text);
   box-shadow: 0 2px 4px #0001;
@@ -359,7 +359,7 @@ details[open] > summary {
   font-weight: 400;
   color: var(--muted);
 }
-.event-choice[aria-pressed="true"] {
+.event-choice[aria-pressed='true'] {
   background: var(--selected);
   border-color: var(--accent);
 }
@@ -535,7 +535,7 @@ label.checkbox {
   z-index: 3;
   box-shadow: 0 6px 30px #17112b12;
 }
-.primary-actions button[value="publish"] {
+.primary-actions button[value='publish'] {
   margin-left: auto;
 }
 .secondary-actions {
@@ -568,7 +568,7 @@ label.checkbox {
 .event-image-item button {
   justify-self: start;
 }
-.image-manager input[type="file"] {
+.image-manager input[type='file'] {
   background: var(--subtle);
   border-style: dashed;
   padding: 20px;
@@ -1142,7 +1142,7 @@ input::file-selector-button {
   gap: 8px;
   margin: 20px 0;
 }
-.builder-steps [aria-current="step"] {
+.builder-steps [aria-current='step'] {
   background: var(--accent, #9980ed);
   color: var(--button-text);
 }
@@ -1154,7 +1154,7 @@ input::file-selector-button {
   display: block;
   margin: 14px 0;
 }
-.builder-panel input:not([type="checkbox"]),
+.builder-panel input:not([type='checkbox']),
 .builder-panel textarea,
 .builder-panel select {
   display: block;
@@ -1245,7 +1245,7 @@ input::file-selector-button {
 .survey-choice-row button {
   padding: 8px 12px;
 }
-.survey-choice-row [draggable="true"] {
+.survey-choice-row [draggable='true'] {
   cursor: grab;
 }
 
@@ -1642,4 +1642,40 @@ html.survey-report-open {
 }
 .contact-dialog .danger {
   border-color: #c76570;
+}
+.contact-dialog-heading,
+.survey-trial-header {
+  position: sticky;
+  top: -24px;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  background: var(--page);
+  margin: -24px -24px 16px;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--line);
+}
+.contact-dialog-heading h2,
+.survey-trial-header h3 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.contact-dialog-heading button,
+.survey-trial-header button {
+  flex-shrink: 0;
+}
+@media (max-width: 600px) {
+  .contact-dialog-heading {
+    top: -14px;
+    margin: -14px -14px 14px;
+    padding: 14px;
+  }
+  input,
+  select,
+  textarea {
+    font-size: 16px;
+  }
 }

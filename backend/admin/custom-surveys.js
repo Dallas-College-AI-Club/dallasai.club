@@ -54,7 +54,7 @@ export function mountCustomSurveys(root, api) {
       for (const survey of surveys) {
         const option = node(
           'option',
-          `${survey.title} · ${survey.status} · ${survey.response_count} ${survey.response_count === 1 ? 'response' : 'responses'}`,
+          `${survey.title} · ${survey.expired ? 'expired' : survey.status} · ${survey.response_count} active ${survey.response_count === 1 ? 'response' : 'responses'}${survey.archived_response_count ? ` · ${survey.archived_response_count} archived` : ''}`,
         );
         option.value = survey.id;
         select.append(option);
@@ -77,8 +77,7 @@ export function mountCustomSurveys(root, api) {
             '/api/custom-surveys?action=results&id=' +
               encodeURIComponent(selected),
           );
-          if (current !== generation || request !== requestGeneration)
-            return;
+          if (current !== generation || request !== requestGeneration) return;
           content.replaceChildren(
             node(
               'p',
@@ -109,16 +108,8 @@ export function mountCustomSurveys(root, api) {
                 close.disabled = true;
                 closeNote.textContent =
                   'Closing stops previews and new answers. Saved results remain available.';
-                const confirm = node(
-                  'button',
-                  'Confirm close',
-                  'secondary',
-                );
-                const cancel = node(
-                  'button',
-                  'Cancel closing',
-                  'secondary',
-                );
+                const confirm = node('button', 'Confirm close', 'secondary');
+                const cancel = node('button', 'Cancel closing', 'secondary');
                 cancel.onclick = () => {
                   confirm.remove();
                   cancel.remove();
@@ -171,11 +162,15 @@ export function mountCustomSurveys(root, api) {
               'p',
               survey.status === 'draft'
                 ? 'Draft · the answering period begins when you publish.'
-                : 'Private link expires ' +
-                    new Date(survey.expires_at).toLocaleString('en-US', {
-                      timeZone: 'America/Chicago',
-                    }) +
-                    ' Central.',
+                : survey.status === 'closed' || survey.status === 'archived'
+                  ? 'This survey is closed. Saved responses remain available.'
+                  : survey.expired
+                    ? 'This survey has expired. Saved responses remain available.'
+                    : 'Private link expires ' +
+                      new Date(survey.expires_at).toLocaleString('en-US', {
+                        timeZone: 'America/Chicago',
+                      }) +
+                      ' Central.',
             ),
           );
           if (survey.privateLink || survey.previewLink) {
@@ -228,8 +223,7 @@ export function mountCustomSurveys(root, api) {
           );
           content.append(respondents);
           await mountRespondents(respondents, selected, api, load);
-          if (current !== generation || request !== requestGeneration)
-            return;
+          if (current !== generation || request !== requestGeneration) return;
           if (survey.definition) {
             const { survey: detail } = await api(
               '/api/custom-surveys?action=draft&id=' +
@@ -254,7 +248,45 @@ export function mountCustomSurveys(root, api) {
               definition: data.resultsDefinition,
             }),
           );
-          if (data.results.some((r) => !r.active && r.responses?.length)) {
+          let nextOffset = data.nextOffset;
+          const more = node('button', 'Load more responses', 'secondary'),
+            pageStatus = node('p');
+          pageStatus.setAttribute('role', 'status');
+          more.hidden = nextOffset === null || nextOffset === undefined;
+          more.onclick = async () => {
+            more.disabled = true;
+            try {
+              const page = await api(
+                '/api/custom-surveys?' +
+                  new URLSearchParams({
+                    action: 'results',
+                    id: survey.id,
+                    offset: nextOffset,
+                  }),
+              );
+              if (current !== generation || request !== requestGeneration)
+                return;
+              content.insertBefore(
+                responseSections(page.results, {
+                  definition: data.resultsDefinition,
+                }),
+                more,
+              );
+              nextOffset = page.nextOffset;
+              more.hidden = nextOffset === null;
+              pageStatus.textContent = '';
+            } catch (error) {
+              if (current === generation && request === requestGeneration)
+                pageStatus.textContent = error.message;
+            } finally {
+              more.disabled = false;
+            }
+          };
+          content.append(more, pageStatus);
+          if (
+            survey.archived_response_count ||
+            data.results.some((r) => !r.active && r.responses?.length)
+          ) {
             const archived = node(
               'a',
               'View archived responses in Inbox → Archived → Questions',

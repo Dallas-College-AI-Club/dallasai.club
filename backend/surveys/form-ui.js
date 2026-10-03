@@ -1,4 +1,5 @@
 import { responseSections } from './results-ui.js';
+import { hasAnswer } from './form-values.js';
 const node = (tag, text, cls) => {
   const e = document.createElement(tag);
   if (text !== undefined) e.textContent = text;
@@ -277,6 +278,7 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
     };
   }
   function renderQuestions() {
+    status.textContent = '';
     intro();
     main.append(
       node(
@@ -304,27 +306,42 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
   }
   function answerText(q) {
     const v = values[q.id];
-    if (v === undefined || v === '' || (Array.isArray(v) && !v.length))
-      return 'Not answered';
+    if (!hasAnswer(v)) return 'Not answered';
     return q.type === 'text'
-      ? v
+      ? v.trim()
       : q.type === 'scale'
         ? v + ' / 5'
         : (q.type === 'single' ? [v] : v).map((i) => q.options[i]).join('\n');
   }
   function review() {
     const missing = definition.questions.find(
-      (q) => q.required && answerText(q) === 'Not answered',
+      (q) => q.required && !hasAnswer(values[q.id]),
     );
     if (missing) {
       status.textContent = 'Answer the required question: ' + missing.title;
+      main
+        .querySelector('[aria-labelledby="question-' + missing.id + '"]')
+        ?.querySelector('input,textarea,select')
+        ?.focus();
+      const field = main.querySelector(
+        'textarea[aria-labelledby="question-' +
+          missing.id +
+          '"],select[aria-labelledby="question-' +
+          missing.id +
+          '"]',
+      );
+      field?.focus();
       return;
     }
+    status.textContent = '';
     intro();
     main.append(node('h2', 'Review your answers'));
     for (const q of definition.questions) {
       const card = node('section', undefined, 'question');
-      card.append(node('h3', q.title), node('p', answerText(q), 'answer-copy'));
+      card.append(
+        node('h3', q.title),
+        node('p', answerText(q), 'answer-copy'),
+      );
       main.append(card);
     }
     const label = node('label', undefined, 'form-option'),
@@ -357,11 +374,19 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
         advisorId: bootstrap.advisorId,
         consent: welcome.permissions.results,
         answers: definition.questions
-          .filter((q) => answerText(q) !== 'Not answered')
+          .filter((q) => hasAnswer(values[q.id]))
           .map((q) => ({ id: q.id, value: values[q.id] })),
       };
       try {
         const saved = await request('submit', pending);
+        if (
+          !saved.receipt?.id ||
+          !Number.isInteger(saved.receipt.revision) ||
+          !Number.isFinite(Date.parse(saved.receipt.submittedAt))
+        )
+          throw new Error(
+            'We could not confirm the save. Retry this submission; your answers remain here.',
+          );
         revision = saved.receipt.revision;
         pending = null;
         dirty = false;
@@ -379,6 +404,7 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
             renderQuestions();
           }),
         );
+        main.querySelector('h1').focus();
         await showResults();
       } catch (error) {
         status.textContent = error.message;
@@ -415,6 +441,37 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
       const details = node('details', undefined, 'saved-summary');
       details.append(node('summary', 'Saved results · read-only'));
       details.append(responseSections(data.results, { definition }));
+      let nextOffset = data.nextOffset;
+      const pageStatus = node('p');
+      pageStatus.setAttribute('role', 'status');
+      const more = button(
+        'Load more saved results',
+        async () => {
+          more.disabled = true;
+          try {
+            const page = await request(
+              'shared-results',
+              undefined,
+              undefined,
+              nextOffset,
+            );
+            details.insertBefore(
+              responseSections(page.results, { definition }),
+              more,
+            );
+            nextOffset = page.nextOffset;
+            more.hidden = nextOffset === null;
+            pageStatus.textContent = '';
+          } catch (error) {
+            pageStatus.textContent = error.message;
+          } finally {
+            more.disabled = false;
+          }
+        },
+        'ghost',
+      );
+      more.hidden = nextOffset === null || nextOffset === undefined;
+      details.append(more, pageStatus);
       main.append(details);
     } catch {
       main.append(

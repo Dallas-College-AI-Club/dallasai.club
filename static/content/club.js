@@ -23,10 +23,12 @@ export const eventDate = (e) =>
 export function eventTime(e) {
   if (!e.date) return 'Date and time to be decided';
   if (dateOnly(e))
-    return new Intl.DateTimeFormat('en-US', {
-      weekday: 'long',
-      timeZone: 'UTC',
-    }).format(new Date(e.date));
+    return (
+      new Intl.DateTimeFormat('en-US', {
+        weekday: 'long',
+        timeZone: 'UTC',
+      }).format(new Date(e.date)) + ' · Time to be announced'
+    );
   const start = new Intl.DateTimeFormat('en-US', {
     weekday: 'long',
     hour: 'numeric',

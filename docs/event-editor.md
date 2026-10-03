@@ -69,66 +69,17 @@ events imported from the website have no office history until an officer saves
 a change. Previewing or typing without saving does not create a history entry.
 Activity is visible only to signed-in officers and clears on sign-out.
 
-The workshop **AI + Programming for Everyone: From Messy Data to Useful
-Answers** is intended to remain a private draft with blank date, time, and
-location until those details are decided. No workshop email is sent.
+Check the current event in Club Office for publication status and confirmed details.
+When a scheduled event has no confirmed time or location, the public page should
+say that those details are still to be announced.
 
 ## Deployment and operations
 
-Apply `008_event_archive.sql` after migrations 006 and 007 and before deploying
-the archive interface. It adds `archived_at`, prevents an archived row from
-having published content, and permits archive/restore revision history. It
-does not delete or automatically archive any events. Keep this migration on
-rollback; any replacement API must also enforce the archived-state restriction.
-
-Apply `007_office_tools.sql` before deploying the office enhancements. It adds
-shared event types, image metadata and the question submission kind. It leaves
-existing events, submissions, accounts and history intact. The existing private
-Blob store is reused; no public bucket or new secrets are needed.
-
-The public site is Hugo on GitHub Pages. The admin interface, event API, forms,
-and leaderboard are in the existing Vercel project
-`ai-c64d/dallasai-leaderboard`, deployed from `backend/`.
-
-1. Apply `backend/006_event_editor.sql` to the existing `dallasai_club` database
-   using the database administrator connection. It adds only event content and
-   revision history, and grants the existing forms runtime role access.
-2. Configure `NEON_AUTH_URL` to the project's public auth endpoint and
-   `NEON_AUTH_COOKIE_SECRET` to a random secret of at least 32 characters.
-   The supplied endpoint uses `neondb/auth`; club forms and events remain in
-   `dallasai_club`. Keep all database connections and cookie secrets outside Git.
-3. Set `AUTH_BASE_URL` to the exact admin origin and `ADMIN_EMAILS` to the
-   approved officers. Provision those accounts with the **admin** role in Neon.
-   Neon delivers sign-in codes through its configured email provider. The club
-   proxy permits sign-in codes only for approved emails, always uses the
-   sign-in purpose, and limits code requests and verification attempts.
-   It does not expose password login, signup, or password reset endpoints.
-   Register `https://dallasai-leaderboard.vercel.app` and
-   `https://dallasai-forms-preview.vercel.app` as trusted domains in the branch's
-   Auth configuration before testing.
-4. Deploy a protected Vercel preview and verify sign-in with an approved account.
-   The same-origin proxy exposes only session lookup, email sign-in codes,
-   code verification, and sign-out. Every admin data request checks the upstream
-   session without cookie caching and checks the current allowlist and role.
-5. Deploy Vercel production, verify `/api/events` and `/admin/`, then publish
-   the public site. `EVENTS_API_URL` and `ADMIN_URL` in `data/club.json` point
-   to that production deployment. Hugo params `eventsAPIURL` and `adminURL`
-   can override them for previews.
-
-Old self-hosted accounts and the authentication implementation remain available
-for a deliberate rollback to the previous deployment; removing `NEON_AUTH_URL`
-alone does not give the new email-code interface a password screen. Do not delete
-old accounts or tables as part of this release.
-
-The event API overlays the original JSON/YAML event registry with database
-records. Unsaved original events remain public; a saved null public version is
-an explicit unpublish, including for original events. A deployed static site
-does not revive unpublished events if the API is down. Public pages show a
-loading/unavailable notice until the live calendar can be read.
-
-On a release rollback, keep the event migration and history. Do not roll the
-public site back to a static calendar while published database edits are in use.
-Fix or restore the event API deployment instead.
+Use [Operations](operations.md) for service configuration, email-code access,
+migration order, release checks, and rollback. Event migrations 006–008 must precede
+the editor deployment. They preserve original events, responses, images, and history.
+Archived events remain private, and database publication status overrides the
+original static registry even during a public API outage.
 
 ## Verification
 

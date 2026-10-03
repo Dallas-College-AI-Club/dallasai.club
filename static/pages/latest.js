@@ -4,8 +4,6 @@ import { mountReplay } from '../desktop/replay.js';
 import { buildLatest } from '../content/latest.js';
 import { EVENTS, refreshEvents, eventsFresh } from '../content/events.js';
 
-let cachedContent = null;
-
 export function mountLatest(root) {
   root.classList.remove('content', 'space-page');
   root.classList.add('latest-desktop');
@@ -14,6 +12,7 @@ export function mountLatest(root) {
     player = null,
     stopDesktop = null;
   let request = null,
+    snapshot,
     disposed = false;
   const freshness = (message, stale = false) => {
     const indicator = root.querySelector('[data-freshness]');
@@ -69,7 +68,6 @@ export function mountLatest(root) {
       }
     }
     current = data;
-    cachedContent = data;
     views = next;
     freshness(
       'Club content checked at ' +
@@ -94,6 +92,7 @@ export function mountLatest(root) {
         throw new Error('Invalid published content');
       await refreshEvents();
       if (!disposed) {
+        snapshot = data;
         render(buildLatest(new Date(), { ...data, events: EVENTS }));
         if (!eventsFresh)
           freshness(
@@ -127,7 +126,8 @@ export function mountLatest(root) {
     )
       return;
     const url = new URL(anchor.href);
-    if (url.origin !== location.origin || url.pathname !== '/club.html') return;
+    if (url.origin !== location.origin || url.pathname !== '/club.html')
+      return;
     event.preventDefault();
     document.dispatchEvent(
       new CustomEvent('club:navigate', { detail: { href: url.href } }),
@@ -137,9 +137,22 @@ export function mountLatest(root) {
   document.addEventListener('visibilitychange', refresh);
   window.addEventListener('online', refresh);
   const updateEvents = () => {
-    if (!disposed) render(buildLatest());
+    if (!disposed) {
+      render(
+        buildLatest(
+          new Date(),
+          snapshot ? { ...snapshot, events: EVENTS } : undefined,
+        ),
+      );
+      if (!eventsFresh)
+        freshness(
+          'The calendar could not be checked. Reconnecting automatically.',
+          true,
+        );
+    }
   };
   document.addEventListener('club:events-updated', updateEvents);
+  document.addEventListener('club:events-status', updateEvents);
   render(buildLatest());
   refresh();
   return () => {
@@ -149,6 +162,7 @@ export function mountLatest(root) {
     root.removeEventListener('click', navigate);
     document.removeEventListener('visibilitychange', refresh);
     document.removeEventListener('club:events-updated', updateEvents);
+    document.removeEventListener('club:events-status', updateEvents);
     window.removeEventListener('online', refresh);
     player?.destroy();
     stopDesktop?.();

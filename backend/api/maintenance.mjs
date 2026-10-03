@@ -3,6 +3,7 @@ import { database } from '../lib/db.mjs';
 import { send, fail } from '../lib/http.mjs';
 import { RequestError } from '../lib/errors.mjs';
 import { cleanupContactFiles } from '../lib/contacts.mjs';
+import { cleanupSurveyDevices } from '../lib/survey-maintenance.mjs';
 export default async function handler(req, res) {
   try {
     const expected = 'Bearer ' + (process.env.CRON_SECRET || '');
@@ -16,12 +17,19 @@ export default async function handler(req, res) {
     if (!['GET', 'POST'].includes(req.method))
       throw new RequestError(405, 'Method not allowed.');
     const db = database();
-    await db.query('DELETE FROM club_forms.rate_limits WHERE expires_at<now()');
+    await db.query(
+      'DELETE FROM club_forms.rate_limits WHERE expires_at<now()',
+    );
     await db.query(
       "DELETE FROM club_forms.webhook_events WHERE created_at<now()-interval '30 days'",
     );
     const contactFilesCleaned = await cleanupContactFiles(db);
-    send(res, 200, { cleaned: true, contactFilesCleaned });
+    const surveyDevicesCleaned = await cleanupSurveyDevices(db);
+    send(res, 200, {
+      cleaned: true,
+      contactFilesCleaned,
+      surveyDevicesCleaned,
+    });
   } catch (error) {
     fail(res, error);
   }

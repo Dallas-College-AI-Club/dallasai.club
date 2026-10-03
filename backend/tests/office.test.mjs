@@ -94,6 +94,55 @@ after(async () => {
   await new Promise((resolve) => server.close(resolve));
   await db.close();
 });
+test('unpublished RSVP snapshots stay in history and cannot resurrect upcoming events', async () => {
+  for (const eventId of ['next', 'unpublished-potential']) {
+    const id = randomUUID();
+    await db.query(
+      "INSERT INTO club_forms.entries(id,kind,email,dedupe_key,data) VALUES($1::uuid,'rsvp','person@example.edu',$1::text,$2)",
+      [
+        id,
+        JSON.stringify({
+          eventId,
+          eventTitle: eventId,
+          eventDate: '',
+          potential: true,
+        }),
+      ],
+    );
+  }
+  const active = await (await request('/api/admin?kind=rsvp')).json();
+  assert.deepEqual(
+    active.entries.map((e) => e.data.eventId),
+    ['next'],
+  );
+  assert.equal(active.counts.find((c) => c.kind === 'rsvp').total, 1);
+  assert.equal(active.counts.find((c) => c.kind === 'rsvp-past').total, 1);
+  const past = await (await request('/api/admin?kind=rsvp-past')).json();
+  assert.deepEqual(
+    past.entries.map((e) => e.data.eventId),
+    ['unpublished-potential'],
+  );
+});
+
+test('inbox rejects invalid pages and refuses a silently incomplete CSV export', async () => {
+  for (const offset of ['1.5', '-1', 'Infinity', 'no', '100001'])
+    assert.equal((await request('/api/admin?offset=' + offset)).status, 400);
+  await db.query(
+    "INSERT INTO club_forms.entries(id,kind,email,dedupe_key) SELECT gen_random_uuid(),'join','export-'||n||'@example.edu','export-'||n FROM generate_series(1,10001) n",
+  );
+  const response = await request('/api/admin?export=csv');
+  assert.equal(response.status, 413);
+  assert.match((await response.json()).error, /Narrow the filters/);
+  assert.equal(
+    (
+      await db.query(
+        "SELECT count(*)::int n FROM club_forms.audit WHERE action='export-csv'",
+      )
+    ).rows[0].n,
+    0,
+  );
+});
+
 test('legacy event types include Social and collapse legacy aliases without rewriting event details or duplicating aliases', async () => {
   const originals = [
     'Club event',

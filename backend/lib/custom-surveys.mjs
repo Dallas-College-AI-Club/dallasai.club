@@ -59,7 +59,10 @@ export async function linkedPreview(db, token) {
     )
   ).rows[0];
   if (!survey?.definition || survey.content_version !== FORM_VERSION)
-    throw new RequestError(404, 'This preview link is unavailable or expired.');
+    throw new RequestError(
+      404,
+      'This preview link is unavailable or expired.',
+    );
   return survey;
 }
 export async function surveyMembers(db, id) {
@@ -156,7 +159,12 @@ export async function rememberDevice(db, survey, user) {
     return { token, member };
   });
 }
-export async function currentResponses(db, surveyId, viewerId = null) {
+export async function currentResponses(
+  db,
+  surveyId,
+  viewerId = null,
+  { ownOnly = false, activeOnly = false } = {},
+) {
   return (
     await db.query(
       `SELECT m.advisor_id,m.display_name,m.active,r.revision,r.responses,r.submitted_at
@@ -164,8 +172,10 @@ export async function currentResponses(db, surveyId, viewerId = null) {
        ON r.survey_id=m.survey_id AND r.advisor_id=m.advisor_id
        AND ($2::text IS NULL OR r.advisor_id=$2 OR $2=ANY(r.shared_with))
        WHERE m.survey_id=$1 AND ($2::text IS NULL OR m.active)
+         AND (NOT $3::boolean OR m.advisor_id=$2)
+         AND (NOT $4::boolean OR m.active)
        ORDER BY m.active DESC,m.advisor_id DESC`,
-      [surveyId, viewerId],
+      [surveyId, viewerId, ownOnly, activeOnly],
     )
   ).rows;
 }
@@ -246,7 +256,13 @@ export async function submitSurvey(db, req, link, body) {
     const receipt = (
       await tx.query(
         'INSERT INTO club_forms.custom_survey_receipts(id,survey_id,advisor_id,revision,request_digest) VALUES($1,$2,$3,$4,$5) RETURNING id,revision,created_at',
-        [body.requestId, survey.id, member.advisor_id, revision, requestDigest],
+        [
+          body.requestId,
+          survey.id,
+          member.advisor_id,
+          revision,
+          requestDigest,
+        ],
       )
     ).rows[0];
     return {

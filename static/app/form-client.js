@@ -4,9 +4,13 @@ export const escapeHTML = (value) =>
   String(value ?? '').replace(
     /[&<>"']/g,
     (char) =>
-      ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[
-        char
-      ],
+      ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+      })[char],
   );
 export const formFooter = (
   label,
@@ -29,7 +33,9 @@ export async function request(endpoint, body, signal) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal,
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(30000)])
+        : AbortSignal.timeout(30000),
     });
   } catch (error) {
     if (error.name === 'AbortError') throw error;

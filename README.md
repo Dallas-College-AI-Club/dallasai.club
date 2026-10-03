@@ -63,11 +63,11 @@ Use Vercel project **ai-c64d/dallasai-leaderboard**, Framework **Other**. Deploy
 
 ## Forms and club administration
 
-The form implementation uses the existing Vercel backend and Neon with separate database roles. It supports club membership, newsletter subscription requests, event RSVPs, workshop requests, and private article submissions. The protected club office lives at the backend's `/admin/` and uses individual passwords for approved officers, with public account creation disabled.
+The Vercel backend stores membership requests, newsletter requests, event RSVPs, workshop requests, questions, and private article submissions in Neon. Approved officers sign in to `/admin/` using an emailed six-digit code. Access requires both the officer email allowlist and the Neon admin role.
 
-All five forms confirm success on screen only after the record is saved. New records appear in the admin inbox with New counts and review status; the inbox refreshes every minute while open. Automated email delivery is not enabled.
+All six forms confirm success on screen only after the record is saved. New records appear in the admin inbox with New counts and review status; the inbox refreshes every minute while open. Form confirmation emails, inbox email alerts, and newsletter delivery are not enabled. Neon sends authentication codes separately.
 
-Read [forms and admin setup](docs/forms-admin.md) for configuration, provisioning, verification, and deployment. Approved officer accounts and a private Vercel Blob store are required; no email provider is needed. Local event plans and calendar downloads remain personal conveniences; registration uses the RSVP form.
+Use [operations](docs/operations.md) for configuration, migrations, sessions, verification, and deployment. See [forms and inbox](docs/forms-admin.md), [event editing](docs/event-editor.md), and [custom surveys](docs/custom-surveys.md) for officer workflows. Local calendar downloads are personal conveniences; registration uses the RSVP form.
 
 Cloudflare Turnstile can be added if the existing server-side quotas and honeypot need additional bot protection.
 

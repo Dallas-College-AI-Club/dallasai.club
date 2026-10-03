@@ -4,7 +4,7 @@ import { database } from '../lib/db.mjs';
 import { requireAdmin, adminOrigin } from '../lib/auth.mjs';
 import { send, fail, jsonBody } from '../lib/http.mjs';
 import { RequestError } from '../lib/errors.mjs';
-import { kinds, uuid } from '../lib/validation.mjs';
+import { uuid } from '../lib/validation.mjs';
 import { liveEvents } from '../lib/events.mjs';
 import { upcomingEvents, inboxFilter } from '../lib/inbox.mjs';
 import { submissionsCSV } from '../lib/submission-export.mjs';
@@ -90,31 +90,37 @@ export function adminHandler({
             `SELECT DISTINCT ON (data->>'eventId') data->>'eventId' AS id,data->>'eventTitle' AS title,data->>'eventDate' AS date,(data->>'potential')='true' AS potential FROM club_forms.entries WHERE kind='rsvp' ORDER BY data->>'eventId',created_at DESC,id`,
           )
         ).rows;
+        const publishedEvents = await getEvents(db);
         const allEvents = [
           ...new Map(
-            [...savedEvents, ...(await getEvents(db))].map((event) => [
+            [...savedEvents, ...publishedEvents].map((event) => [
               event.id,
               event,
             ]),
           ).values(),
         ];
-        const events = upcomingEvents(allEvents);
+        // Saved RSVP snapshots supply history, never current publication status.
+        const events = upcomingEvents(publishedEvents);
         const upcomingIds = events.map((event) => event.id);
         const { values: filters, where } = inboxFilter(
           url.searchParams,
           events,
         );
-        const offset = Math.max(
-          0,
-          Math.min(100000, Number(url.searchParams.get('offset')) || 0),
-        );
+        const offset = Number(url.searchParams.get('offset') || 0);
+        if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100000)
+          throw new RequestError(400, 'Choose a valid inbox page.');
         if (url.searchParams.get('export') === 'csv') {
           const rows = (
             await db.query(
-              `SELECT id,kind,email,name,state,review_status,created_at,data FROM club_forms.entries e ${where} ORDER BY created_at DESC LIMIT 10000`,
+              `SELECT id,kind,email,name,state,review_status,created_at,data FROM club_forms.entries e ${where} ORDER BY created_at DESC,id LIMIT 10001`,
               filters,
             )
           ).rows;
+          if (rows.length > 10000)
+            throw new RequestError(
+              413,
+              'More than 10,000 submissions match. Narrow the filters before exporting.',
+            );
           await db.query(
             "INSERT INTO club_forms.audit(actor,action) VALUES($1,'export-csv')",
             [user.email],

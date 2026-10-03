@@ -1,3 +1,4 @@
+import { eventPlainText } from '../app/event-format.js';
 import { PUBLISHED } from './published.js';
 import { articles } from './articles.js';
 import { splitEvents, eventDate } from './club.js';
@@ -38,7 +39,7 @@ export function stationUpdates(id, snapshot = PUBLISHED) {
             : 'COMING UP · '
           : 'PAST EVENT · ') + eventDate(e),
       title: e.title,
-      body: e.summary,
+      body: eventPlainText(e.summary),
       action: 'View events',
       mode: 'events',
       event: e.id,

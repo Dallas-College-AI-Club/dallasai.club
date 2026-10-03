@@ -1,3 +1,4 @@
+import { eventPlainText } from '../app/event-format.js';
 import { splitEvents, eventDate } from '../content/club.js';
 import { stationUpdates } from '../content/discovery.js';
 export function clubBulletins() {
@@ -14,7 +15,7 @@ export function clubBulletins() {
                 eventDate(event)
               : 'FROM THE CLUB',
             title: event.title,
-            body: event.summary,
+            body: eventPlainText(event.summary),
             action: 'View events',
             mode: 'events',
             event: event.id,

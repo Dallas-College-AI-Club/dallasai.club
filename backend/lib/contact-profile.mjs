@@ -80,10 +80,9 @@ export async function editContact(db, body, actor) {
         'UPDATE club_forms.contact_activity SET email=$1 WHERE email=$2',
         [source, target],
       );
-      await tx.query(
-        'DELETE FROM club_forms.contact_emails WHERE email=$1',
-        [target],
-      );
+      await tx.query('DELETE FROM club_forms.contact_emails WHERE email=$1', [
+        target,
+      ]);
       await tx.query('DELETE FROM club_forms.contacts WHERE email=$1', [
         target,
       ]);

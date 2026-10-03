@@ -92,20 +92,14 @@ export async function addContactNote(db, body, actor) {
     !body.note.trim() ||
     body.note.trim().length > 5000
   )
-    throw new RequestError(
-      400,
-      'Enter a note between 1 and 5,000 characters.',
-    );
+    throw new RequestError(400, 'Enter a note between 1 and 5,000 characters.');
   return db.transaction(async (tx) => {
     await tx.query(
       'LOCK TABLE club_forms.contacts IN SHARE ROW EXCLUSIVE MODE',
     );
     const contact = await resolveContact(tx, email);
     if (contact.deleted_at)
-      throw new RequestError(
-        409,
-        'Restore this contact before adding a note.',
-      );
+      throw new RequestError(409, 'Restore this contact before adding a note.');
     const row = (
       await tx.query(
         'INSERT INTO club_forms.contact_notes(id,email,author_email,body) VALUES($1,$2,$3,$4) ON CONFLICT(id) DO NOTHING RETURNING *',
@@ -120,10 +114,9 @@ export async function addContactNote(db, body, actor) {
       return row;
     }
     const old = (
-      await tx.query(
-        'SELECT * FROM club_forms.contact_notes WHERE id=$1',
-        [body.noteId],
-      )
+      await tx.query('SELECT * FROM club_forms.contact_notes WHERE id=$1', [
+        body.noteId,
+      ])
     ).rows[0];
     if (
       !old ||
@@ -216,10 +209,7 @@ export async function manageContact(db, body, actor, storage = { del }) {
           'These addresses already belong to the same contact.',
         );
       if (contact.deleted_at || target.deleted_at)
-        throw new RequestError(
-          409,
-          'Restore both contacts before merging.',
-        );
+        throw new RequestError(409, 'Restore both contacts before merging.');
       if (contact.is_test !== target.is_test)
         throw new RequestError(
           409,

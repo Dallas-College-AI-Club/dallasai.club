@@ -31,11 +31,7 @@ const campuses = [
 ];
 
 export function submissionEditor(api, onSaved) {
-  const dialog = node(
-    'dialog',
-    undefined,
-    'contact-dialog submission-dialog',
-  );
+  const dialog = node('dialog', undefined, 'contact-dialog submission-dialog');
   const headingId = 'submission-dialog-' + crypto.randomUUID();
   dialog.setAttribute('aria-labelledby', headingId);
   document.body.append(dialog);
@@ -44,8 +40,7 @@ export function submissionEditor(api, onSaved) {
     dirty = () => false;
   function canClose() {
     return (
-      !busy &&
-      (!dirty() || confirm('Discard your unsaved response changes?'))
+      !busy && (!dirty() || confirm('Discard your unsaved response changes?'))
     );
   }
   dialog.addEventListener('cancel', (event) => {
@@ -82,9 +77,7 @@ export function submissionEditor(api, onSaved) {
     dialog.replaceChildren(title, message, cancel);
     if (!dialog.open) dialog.showModal();
     try {
-      const { entry } = await api(
-        '/api/admin?edit=' + encodeURIComponent(id),
-      );
+      const { entry } = await api('/api/admin?edit=' + encodeURIComponent(id));
       if (version !== generation || !dialog.open) return;
       const form = node('form'),
         intro = node(
@@ -127,14 +120,11 @@ export function submissionEditor(api, onSaved) {
         const email = input(form, 'Email address', entry.email, 254, true);
         email.type = 'email';
         const values = {};
-        for (const [key, label, max, required] of fields[entry.kind] ||
-          []) {
+        for (const [key, label, max, required] of fields[entry.kind] || []) {
           if (key === 'campus') {
             const labelEl = node('label', label),
               select = node('select');
-            select.append(
-              ...campuses.map((value) => new Option(value, value)),
-            );
+            select.append(...campuses.map((value) => new Option(value, value)));
             select.value = entry.data[key] || '';
             select.required = true;
             labelEl.append(select);
@@ -246,10 +236,7 @@ function input(parent, label, value, max, required) {
 function questionInput(parent, question, answer) {
   const group = node('fieldset', undefined, 'submission-question');
   group.append(
-    node(
-      'legend',
-      question.label + (question.required ? ' (required)' : ''),
-    ),
+    node('legend', question.label + (question.required ? ' (required)' : '')),
   );
   if (question.description)
     group.append(node('p', question.description, 'hint'));
@@ -278,8 +265,7 @@ function questionInput(parent, question, answer) {
       new Option('Choose an answer', ''),
       ...question.options.map((option) => new Option(option, option)),
     );
-    if (question.allowOther)
-      select.append(new Option('Other', '__other__'));
+    if (question.allowOther) select.append(new Option('Other', '__other__'));
     select.value = answer?.value || '';
     group.append(select);
   } else {
@@ -300,13 +286,7 @@ function questionInput(parent, question, answer) {
       controls.push(control);
     }
   }
-  const other = input(
-    group,
-    'Other answer',
-    answer?.other || '',
-    1000,
-    false,
-  );
+  const other = input(group, 'Other answer', answer?.other || '', 1000, false);
   const values = () =>
     select
       ? [select.value]

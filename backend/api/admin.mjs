@@ -55,10 +55,9 @@ export function adminHandler({
           if (!uuid.test(id))
             throw new RequestError(400, 'Invalid attachment.');
           const file = (
-            await db.query(
-              'SELECT * FROM club_forms.attachments WHERE id=$1',
-              [id],
-            )
+            await db.query('SELECT * FROM club_forms.attachments WHERE id=$1', [
+              id,
+            ])
           ).rows[0];
           if (!file) throw new RequestError(404, 'Attachment not found.');
           const blob = await storage.get(file.pathname, {

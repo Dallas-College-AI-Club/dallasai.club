@@ -81,11 +81,7 @@ async function seed(n = 0, extra = {}) {
   const id = randomUUID();
   await db.query(
     `INSERT INTO club_forms.entries(id,kind,email,name,dedupe_key,data) VALUES($1::uuid,'rsvp',$2,$3,$1::text,'{"eventTitle":"Game night"}')`,
-    [
-      id,
-      extra.email || `person${n}@example.edu`,
-      extra.name || 'Person ' + n,
-    ],
+    [id, extra.email || `person${n}@example.edu`, extra.name || 'Person ' + n],
   );
   await db.query(
     `INSERT INTO club_forms.survey_responses(entry_id,event_id,event_title,survey_version,questions,answers) VALUES($1,'game-night','Game night',$2,$3,$4)`,
@@ -106,16 +102,8 @@ test('star/archive/restore persist separately, are retry-safe and audited; filte
   const id = await seed(),
     second = await seed(1);
   const original = (await surveyResults(db, { entryId: id })).responses[0];
-  await manageResponse(
-    db,
-    { entryId: id, action: 'star', value: true },
-    actor,
-  );
-  await manageResponse(
-    db,
-    { entryId: id, action: 'star', value: true },
-    actor,
-  );
+  await manageResponse(db, { entryId: id, action: 'star', value: true }, actor);
+  await manageResponse(db, { entryId: id, action: 'star', value: true }, actor);
   assert.equal((await surveyResults(db, { starred: true })).total, 1);
   assert.equal(
     (await surveyResults(db, { search: 'PERSON0@EXAMPLE' })).responses[0]

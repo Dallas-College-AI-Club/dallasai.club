@@ -1,4 +1,12 @@
-import { readFile, writeFile, mkdir, cp, readdir, rm, stat } from 'node:fs/promises';
+import {
+  readFile,
+  writeFile,
+  mkdir,
+  cp,
+  readdir,
+  rm,
+  stat,
+} from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { parseEventSource } from '../lib/event-registry.mjs';
@@ -24,7 +32,11 @@ if (await stat(content).catch(() => null)) {
   );
 }
 // public/ holds build output only. Starting empty means removed files never linger.
-await rm(path.join(root, 'public'), { recursive: true, force: true, maxRetries: 3 });
+await rm(path.join(root, 'public'), {
+  recursive: true,
+  force: true,
+  maxRetries: 3,
+});
 await mkdir(path.join(root, 'public/admin'), { recursive: true });
 await cp(
   path.join(root, 'admin/index.html'),

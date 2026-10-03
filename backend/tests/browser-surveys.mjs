@@ -427,7 +427,9 @@ try {
   await admin.locator('#survey-view').selectOption('active');
   await admin.locator('#survey-results .survey-response').waitFor();
   assert.equal(
-    await admin.locator('#survey-results .survey-response').getAttribute('open'),
+    await admin
+      .locator('#survey-results .survey-response')
+      .getAttribute('open'),
     null,
   );
   await admin.locator('#survey-results .survey-response > summary').click();
@@ -442,7 +444,10 @@ try {
       exact: true,
     })
     .waitFor();
-  assert.equal(await admin.locator('#survey-results .survey-response').count(), 0);
+  assert.equal(
+    await admin.locator('#survey-results .survey-response').count(),
+    0,
+  );
   await admin.locator('#survey-view').selectOption('archived');
   await admin.locator('#survey-results .survey-response > summary').click();
   await admin.getByRole('button', { name: 'Restore', exact: true }).click();
@@ -579,7 +584,9 @@ try {
   await admin.getByRole('button', { name: 'Save note', exact: true }).click();
   await admin.getByText('Follow-up note saved.', { exact: true }).waitFor();
   assert.match(
-    await admin.locator('.contact-dialog:not(.submission-dialog)').textContent(),
+    await admin
+      .locator('.contact-dialog:not(.submission-dialog)')
+      .textContent(),
     /Called to confirm/,
   );
   assert.equal(
@@ -743,7 +750,10 @@ try {
       { exact: true },
     )
     .waitFor();
-  assert.equal(await admin.locator('#survey-results .survey-response').count(), 0);
+  assert.equal(
+    await admin.locator('#survey-results .survey-response').count(),
+    0,
+  );
   await admin
     .getByRole('button', { name: 'Contacts & follow-up', exact: true })
     .click();

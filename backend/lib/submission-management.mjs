@@ -1,11 +1,7 @@
 import { createHash } from 'node:crypto';
 import { RequestError } from './errors.mjs';
 import { uuid, email, campuses } from './validation.mjs';
-import {
-  validateSurvey,
-  surveyQuestions,
-  surveyVersion,
-} from './surveys.mjs';
+import { validateSurvey, surveyQuestions, surveyVersion } from './surveys.mjs';
 
 const fields = {
   subscribe: {},
@@ -116,10 +112,9 @@ export async function changeSubmission(
         'LOCK TABLE club_forms.contacts IN SHARE ROW EXCLUSIVE MODE',
       );
       const receipt = (
-        await tx.query(
-          'SELECT * FROM club_forms.entry_changes WHERE id=$1',
-          [body.requestId],
-        )
+        await tx.query('SELECT * FROM club_forms.entry_changes WHERE id=$1', [
+          body.requestId,
+        ])
       ).rows[0];
       if (receipt) {
         if (receipt.request_digest !== signature)
@@ -198,9 +193,7 @@ export async function changeSubmission(
             'Only the response fields can be edited.',
           );
         const data = { ...entry.data };
-        for (const [key, [max, required]] of Object.entries(
-          fields[entry.kind],
-        ))
+        for (const [key, [max, required]] of Object.entries(fields[entry.kind]))
           data[key] = text(body.data[key] ?? '', max, required);
         if (entry.kind === 'join' && !campuses.includes(data.campus))
           throw new RequestError(400, 'Choose a valid campus.');
@@ -254,8 +247,7 @@ export async function changeSubmission(
           'UPDATE club_forms.entries SET name=$2,email_verified=CASE WHEN email=$3 THEN email_verified ELSE false END,email=$3,data=$4,dedupe_key=$5,edit_revision=edit_revision+1,updated_at=now() WHERE id=$1',
           [entry.id, name, address, JSON.stringify(data), key],
         );
-        if (address !== entry.email)
-          await removeOrphanContact(tx, entry.email);
+        if (address !== entry.email) await removeOrphanContact(tx, entry.email);
         await tx.query(
           "INSERT INTO club_forms.audit(actor,entry_id,action) VALUES($1,$2,'submission-edited')",
           [actor, entry.id],
@@ -264,14 +256,7 @@ export async function changeSubmission(
       const revision = entry.edit_revision + 1;
       await tx.query(
         'INSERT INTO club_forms.entry_changes(id,entry_id,action,actor,revision,request_digest) VALUES($1,$2,$3,$4,$5,$6)',
-        [
-          body.requestId,
-          entry.id,
-          body.action,
-          actor,
-          revision,
-          signature,
-        ],
+        [body.requestId, entry.id, body.action, actor, revision, signature],
       );
       return {
         saved: !deleting,

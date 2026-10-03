@@ -12,10 +12,7 @@ const browser = await chromium.launch({
   headless: true,
 });
 const failures = [],
-  screens = path.resolve(
-    import.meta.dirname,
-    '../../.preview/office-audit',
-  );
+  screens = path.resolve(import.meta.dirname, '../../.preview/office-audit');
 await mkdir(screens, { recursive: true });
 async function check(name, fn) {
   const context = await browser.newContext({
@@ -43,10 +40,7 @@ async function check(name, fn) {
     failures.push(name + ': ' + error.message);
     console.log('FAIL ' + name + ': ' + error.message);
     await page.screenshot({
-      path: path.join(
-        screens,
-        name.replaceAll(/[^a-z0-9]/gi, '-') + '.png',
-      ),
+      path: path.join(screens, name.replaceAll(/[^a-z0-9]/gi, '-') + '.png'),
     });
   } finally {
     await context.close();
@@ -82,8 +76,7 @@ try {
       });
       const requested = page.waitForRequest(
         (request) =>
-          request.method() === 'POST' &&
-          request.url().endsWith('/api/admin'),
+          request.method() === 'POST' && request.url().endsWith('/api/admin'),
       );
       await dialog
         .getByRole('button', { name: 'Save changes', exact: true })
@@ -113,9 +106,7 @@ try {
         .getByLabel('Full name', { exact: true })
         .fill('Discard this change');
       setAccept(true);
-      await dialog
-        .getByRole('button', { name: 'Cancel', exact: true })
-        .click();
+      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
       await expect(dialog).toHaveCount(0);
     },
   );
@@ -138,9 +129,7 @@ try {
       await expect(page.locator('#login')).toBeVisible();
       await expect(page.locator('dialog[open]')).toHaveCount(0);
       await expect(page.locator('#entries')).toBeEmpty();
-      await expect(page.locator('#status')).toContainText(
-        'Your session ended',
-      );
+      await expect(page.locator('#status')).toContainText('Your session ended');
     },
   );
   await check(
@@ -166,9 +155,7 @@ try {
           exact: true,
         })
         .click();
-      await page
-        .getByRole('button', { name: /Remove access for/ })
-        .waitFor();
+      await page.getByRole('button', { name: /Remove access for/ }).waitFor();
       await page
         .getByRole('button', { name: 'Save and continue →', exact: true })
         .click();
@@ -225,18 +212,10 @@ try {
       await expect(
         page.getByRole('button', { name: 'Close survey', exact: true }),
       ).toBeEnabled();
-      await page
-        .getByRole('button', { name: /Remove access for/ })
-        .click();
-      await page
-        .getByText('Archived respondents', { exact: true })
-        .click();
-      await page
-        .getByRole('button', { name: /Restore access for/ })
-        .click();
-      await page
-        .getByRole('button', { name: /Remove access for/ })
-        .waitFor();
+      await page.getByRole('button', { name: /Remove access for/ }).click();
+      await page.getByText('Archived respondents', { exact: true }).click();
+      await page.getByRole('button', { name: /Restore access for/ }).click();
+      await page.getByRole('button', { name: /Remove access for/ }).waitFor();
       await page
         .getByRole('button', { name: 'Close survey', exact: true })
         .click();
@@ -320,97 +299,87 @@ try {
       );
     },
   );
-  await check(
-    'Late custom draft cannot redraw after signout',
-    async (page) => {
-      const id = randomUUID();
-      await changeDraft(
-        fixture.db,
-        { email: 'officer@example.com' },
-        {
-          id,
-          requestId: randomUUID(),
-          expectedRevision: 0,
-          action: 'save',
-          definition: {
-            template: 'blank',
-            title: 'Delayed private draft',
-            intro: '',
-            audience: 'advisors',
-            permissions: {
-              preview: 'link',
-              answer: 'invited',
-              results: 'admins',
-            },
-            durationDays: 30,
-            questions: [],
+  await check('Late custom draft cannot redraw after signout', async (page) => {
+    const id = randomUUID();
+    await changeDraft(
+      fixture.db,
+      { email: 'officer@example.com' },
+      {
+        id,
+        requestId: randomUUID(),
+        expectedRevision: 0,
+        action: 'save',
+        definition: {
+          template: 'blank',
+          title: 'Delayed private draft',
+          intro: '',
+          audience: 'advisors',
+          permissions: {
+            preview: 'link',
+            answer: 'invited',
+            results: 'admins',
           },
+          durationDays: 30,
+          questions: [],
         },
-      );
-      await page.locator('#surveys-tab').click();
-      await page.locator('#custom-surveys-group').click();
-      await page
-        .getByLabel('Custom survey', { exact: true })
-        .selectOption(id);
-      await page
-        .getByRole('button', {
-          name: 'Continue editing draft',
-          exact: true,
-        })
-        .waitFor();
-      let release;
-      const gate = new Promise((resolve) => {
-        release = resolve;
-      });
-      await page.route(
-        '**/api/custom-surveys?action=draft&id=' + id,
-        async (route) => {
-          const response = await route.fetch();
-          await gate;
-          await route.fulfill({ response });
-        },
-      );
-      const requested = page.waitForRequest(
-        '**/api/custom-surveys?action=draft&id=' + id,
-      );
-      await page
-        .getByRole('button', {
-          name: 'Continue editing draft',
-          exact: true,
-        })
-        .click();
-      await requested;
-      await page.locator('#signout').click();
-      await page.locator('#login').waitFor();
-      const response = page.waitForResponse(
-        '**/api/custom-surveys?action=draft&id=' + id,
-      );
-      release();
-      await response;
-      await expect(page.locator('#custom-surveys-root')).toBeEmpty();
-      await expect(page.locator('#office')).toBeHidden();
-    },
-  );
-  await check(
-    'Discarded event edits stay discarded',
-    async (page, dialogs) => {
-      await page.locator('#events-tab').click();
-      await page.locator('#new-event').click();
-      await page
-        .locator('#event-form [name=title]')
-        .fill('Unsaved event change');
-      await page.locator('#inbox-tab').click();
-      assert.equal(dialogs.length, 1);
-      await page.locator('#surveys-tab').click();
-      assert.equal(
-        dialogs.length,
-        1,
-        'discarding an event should not keep prompting from a hidden form',
-      );
-      await page.locator('#events-tab').click();
-      assert.equal(await page.locator('#event-form').isVisible(), false);
-    },
-  );
+      },
+    );
+    await page.locator('#surveys-tab').click();
+    await page.locator('#custom-surveys-group').click();
+    await page.getByLabel('Custom survey', { exact: true }).selectOption(id);
+    await page
+      .getByRole('button', {
+        name: 'Continue editing draft',
+        exact: true,
+      })
+      .waitFor();
+    let release;
+    const gate = new Promise((resolve) => {
+      release = resolve;
+    });
+    await page.route(
+      '**/api/custom-surveys?action=draft&id=' + id,
+      async (route) => {
+        const response = await route.fetch();
+        await gate;
+        await route.fulfill({ response });
+      },
+    );
+    const requested = page.waitForRequest(
+      '**/api/custom-surveys?action=draft&id=' + id,
+    );
+    await page
+      .getByRole('button', {
+        name: 'Continue editing draft',
+        exact: true,
+      })
+      .click();
+    await requested;
+    await page.locator('#signout').click();
+    await page.locator('#login').waitFor();
+    const response = page.waitForResponse(
+      '**/api/custom-surveys?action=draft&id=' + id,
+    );
+    release();
+    await response;
+    await expect(page.locator('#custom-surveys-root')).toBeEmpty();
+    await expect(page.locator('#office')).toBeHidden();
+  });
+  await check('Discarded event edits stay discarded', async (page, dialogs) => {
+    await page.locator('#events-tab').click();
+    await page.locator('#new-event').click();
+    await page.locator('#event-form [name=title]').fill('Unsaved event change');
+    await page.locator('#inbox-tab').click();
+    assert.equal(dialogs.length, 1);
+    await page.locator('#surveys-tab').click();
+    assert.equal(
+      dialogs.length,
+      1,
+      'discarding an event should not keep prompting from a hidden form',
+    );
+    await page.locator('#events-tab').click();
+    assert.equal(await page.locator('#event-form').isVisible(), false);
+  });
   await check(
     'Custom draft navigation is guarded',
     async (page, dialogs, setAccept) => {
@@ -440,9 +409,9 @@ try {
   await check('Active tabs preserve filters', async (page) => {
     await page.locator('#surveys-tab').click();
     await page.locator('#survey-search').fill('rsvp@example.edu');
-    await expect(
-      page.locator('#survey-results .survey-response'),
-    ).toHaveCount(1);
+    await expect(page.locator('#survey-results .survey-response')).toHaveCount(
+      1,
+    );
     await page.locator('#surveys-tab').click();
     await expect(page.locator('#survey-search')).toHaveValue(
       'rsvp@example.edu',
@@ -455,9 +424,9 @@ try {
       .getByLabel('Survey title', { exact: true })
       .fill('Keep on same tab');
     await page.locator('#custom-surveys-group').click();
-    await expect(
-      page.getByLabel('Survey title', { exact: true }),
-    ).toHaveValue('Keep on same tab');
+    await expect(page.getByLabel('Survey title', { exact: true })).toHaveValue(
+      'Keep on same tab',
+    );
   });
   await check('Hash navigation matches the visible tab', async (page) => {
     await page.evaluate(() => {
@@ -496,83 +465,70 @@ try {
       assert.equal(dialogs.length, 1);
     },
   );
-  await check(
-    'Contact notes survive closing and reopening',
-    async (page) => {
-      await page
-        .locator('#inbox-pane')
-        .getByRole('button', { name: 'Contacts & follow-up', exact: true })
-        .click();
-      const dialog = page.locator(
-        '.contact-dialog:not(.submission-dialog)',
-      );
-      await dialog
-        .getByRole('button', { name: /rsvp@example.edu/ })
-        .click();
-      await dialog
-        .getByLabel('Record a follow-up note', { exact: true })
-        .fill('Unsaved follow-up that should not disappear');
-      await dialog
-        .getByRole('button', { name: 'Close', exact: true })
-        .click();
-      await page
-        .locator('#inbox-pane')
-        .getByRole('button', { name: 'Contacts & follow-up', exact: true })
-        .click();
-      await dialog
-        .getByRole('button', { name: /rsvp@example.edu/ })
-        .click();
-      await expect(
-        dialog.getByLabel('Record a follow-up note', { exact: true }),
-      ).toHaveValue('Unsaved follow-up that should not disappear');
-      await page.setViewportSize({ width: 390, height: 550 });
-      await dialog.evaluate((el) => {
-        el.scrollTop = el.scrollHeight;
-      });
-      const close = dialog.getByRole('button', {
-        name: 'Close',
-        exact: true,
-      });
-      const rect = await close.boundingBox();
-      assert.ok(
-        rect.y >= 0 && rect.y + rect.height <= 550,
-        'Close remains onscreen while contact history scrolls',
-      );
-      await page.screenshot({
-        path: path.join(screens, 'contact-scroll-mobile.png'),
-      });
-      let count = 0;
-      await page.route('**/api/surveys', async (route) => {
-        if (route.request().postDataJSON()?.action !== 'contact-note')
-          return route.continue();
-        if (++count === 1) {
-          await route.fetch();
-          await route.abort('failed');
-        } else await route.continue();
-      });
-      const save = dialog.getByRole('button', {
-        name: 'Save note',
-        exact: true,
-      });
-      await save.click();
-      await expect(dialog).toContainText(
-        'Could not connect to Club Office',
-      );
-      await save.click();
-      await expect(
-        dialog.getByLabel('Record a follow-up note', { exact: true }),
-      ).toHaveValue('');
-      assert.equal(
-        (
-          await fixture.db.query(
-            'SELECT count(*)::int n FROM club_forms.contact_notes WHERE email=$1',
-            ['rsvp@example.edu'],
-          )
-        ).rows[0].n,
-        1,
-      );
-    },
-  );
+  await check('Contact notes survive closing and reopening', async (page) => {
+    await page
+      .locator('#inbox-pane')
+      .getByRole('button', { name: 'Contacts & follow-up', exact: true })
+      .click();
+    const dialog = page.locator('.contact-dialog:not(.submission-dialog)');
+    await dialog.getByRole('button', { name: /rsvp@example.edu/ }).click();
+    await dialog
+      .getByLabel('Record a follow-up note', { exact: true })
+      .fill('Unsaved follow-up that should not disappear');
+    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+    await page
+      .locator('#inbox-pane')
+      .getByRole('button', { name: 'Contacts & follow-up', exact: true })
+      .click();
+    await dialog.getByRole('button', { name: /rsvp@example.edu/ }).click();
+    await expect(
+      dialog.getByLabel('Record a follow-up note', { exact: true }),
+    ).toHaveValue('Unsaved follow-up that should not disappear');
+    await page.setViewportSize({ width: 390, height: 550 });
+    await dialog.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    const close = dialog.getByRole('button', {
+      name: 'Close',
+      exact: true,
+    });
+    const rect = await close.boundingBox();
+    assert.ok(
+      rect.y >= 0 && rect.y + rect.height <= 550,
+      'Close remains onscreen while contact history scrolls',
+    );
+    await page.screenshot({
+      path: path.join(screens, 'contact-scroll-mobile.png'),
+    });
+    let count = 0;
+    await page.route('**/api/surveys', async (route) => {
+      if (route.request().postDataJSON()?.action !== 'contact-note')
+        return route.continue();
+      if (++count === 1) {
+        await route.fetch();
+        await route.abort('failed');
+      } else await route.continue();
+    });
+    const save = dialog.getByRole('button', {
+      name: 'Save note',
+      exact: true,
+    });
+    await save.click();
+    await expect(dialog).toContainText('Could not connect to Club Office');
+    await save.click();
+    await expect(
+      dialog.getByLabel('Record a follow-up note', { exact: true }),
+    ).toHaveValue('');
+    assert.equal(
+      (
+        await fixture.db.query(
+          'SELECT count(*)::int n FROM club_forms.contact_notes WHERE email=$1',
+          ['rsvp@example.edu'],
+        )
+      ).rows[0].n,
+      1,
+    );
+  });
   await check(
     'Survey answers survive a lost acknowledgement without duplicate receipts',
     async (page) => {
@@ -651,7 +607,7 @@ try {
       await page
         .getByRole('button', { name: 'Review answers →', exact: true })
         .click();
-    await expect(page.locator('#main').getByRole('status')).toContainText(
+      await expect(page.locator('#main').getByRole('status')).toContainText(
         'Answer the required question',
       );
       await page
@@ -666,22 +622,21 @@ try {
       await page
         .getByRole('button', { name: 'Submit answers', exact: true })
         .click();
-    await expect(page.locator('#main').getByRole('status')).toContainText('Confirm');
+      await expect(page.locator('#main').getByRole('status')).toContainText(
+        'Confirm',
+      );
       await page.getByRole('checkbox').check();
       let dropped = false;
-      await page.route(
-        '**/api/custom-surveys?action=submit',
-        async (route) => {
-          if (dropped) return route.continue();
-          dropped = true;
-          await route.fetch();
-          await route.abort('failed');
-        },
-      );
+      await page.route('**/api/custom-surveys?action=submit', async (route) => {
+        if (dropped) return route.continue();
+        dropped = true;
+        await route.fetch();
+        await route.abort('failed');
+      });
       await page
         .getByRole('button', { name: 'Submit answers', exact: true })
         .click();
-    await expect(page.locator('#main').getByRole('status')).toContainText(
+      await expect(page.locator('#main').getByRole('status')).toContainText(
         'Your answers remain in this tab',
       );
       await page
@@ -713,9 +668,12 @@ try {
         ['Not answered'],
       );
       await page.reload();
-      await page.getByRole('button', {
-        name: 'Continue to questions →', exact: true,
-      }).click();
+      await page
+        .getByRole('button', {
+          name: 'Continue to questions →',
+          exact: true,
+        })
+        .click();
       await expect(
         page.getByRole('textbox', {
           name: 'Your feedback *',
@@ -741,9 +699,7 @@ try {
       await page
         .getByRole('link', { name: 'Export filtered CSV', exact: true })
         .click();
-      await expect(page.locator('#status')).toContainText(
-        'Narrow the filters',
-      );
+      await expect(page.locator('#status')).toContainText('Narrow the filters');
       await expect(page.locator('#office')).toBeVisible();
       await page.unroute(exportRoute);
       const download = page.waitForEvent('download');
@@ -754,9 +710,7 @@ try {
         (await download).suggestedFilename(),
         'club-submissions.csv',
       );
-      await expect(page.locator('#status')).toHaveText(
-        'CSV download started.',
-      );
+      await expect(page.locator('#status')).toHaveText('CSV download started.');
     },
   );
   await check('Friendly recovery from a non-JSON error', async (page) => {
@@ -815,12 +769,8 @@ try {
         .locator('#inbox-pane')
         .getByRole('button', { name: 'Contacts & follow-up', exact: true })
         .click();
-      const dialog = page.locator(
-        '.contact-dialog:not(.submission-dialog)',
-      );
-      await dialog
-        .getByRole('button', { name: /join@example.edu/ })
-        .click();
+      const dialog = page.locator('.contact-dialog:not(.submission-dialog)');
+      await dialog.getByRole('button', { name: /join@example.edu/ }).click();
       await dialog
         .getByLabel('Record a follow-up note', { exact: true })
         .fill('Keep this draft during contact corrections');
@@ -851,9 +801,7 @@ try {
       await dialog
         .getByLabel('Contact name', { exact: true })
         .fill('Unsaved profile name');
-      await dialog
-        .getByRole('button', { name: 'Close', exact: true })
-        .click();
+      await dialog.getByRole('button', { name: 'Close', exact: true }).click();
       await page
         .locator('#inbox-pane')
         .getByRole('button', { name: 'Contacts & follow-up', exact: true })
@@ -869,9 +817,7 @@ try {
       await expect(
         dialog.getByLabel('Contact name', { exact: true }),
       ).toHaveValue('Unsaved profile name');
-      await dialog
-        .getByRole('button', { name: 'Cancel', exact: true })
-        .click();
+      await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
       await dialog
         .getByRole('button', { name: 'Edit contact', exact: true })
         .click();
@@ -975,9 +921,7 @@ try {
       await responseDialog
         .getByRole('button', { name: 'Save changes', exact: true })
         .click();
-      await expect(page.locator('#status')).toHaveText(
-        'Response updated.',
-      );
+      await expect(page.locator('#status')).toHaveText('Response updated.');
       await page
         .locator('#inbox-pane')
         .getByRole('button', { name: 'Contacts & follow-up', exact: true })

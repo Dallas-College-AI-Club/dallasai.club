@@ -126,10 +126,7 @@ export function mountCustomSurveys(root, api) {
                       expectedRevision: latest.edit_revision,
                       requestId: crypto.randomUUID(),
                     });
-                    if (
-                      current !== generation ||
-                      request !== requestGeneration
-                    )
+                    if (current !== generation || request !== requestGeneration)
                       return;
                     const reloadGeneration = generation + 1;
                     await load();
@@ -202,8 +199,7 @@ export function mountCustomSurveys(root, api) {
                 notice.textContent =
                   'Preview link copied. Answer controls are disabled.';
               } catch {
-                notice.textContent =
-                  'Copy this preview link: ' + preview.href;
+                notice.textContent = 'Copy this preview link: ' + preview.href;
               }
             };
             const actions = node('div', undefined, 'entry-actions');
@@ -224,8 +220,7 @@ export function mountCustomSurveys(root, api) {
               '/api/custom-surveys?action=draft&id=' +
                 encodeURIComponent(selected),
             );
-            if (current !== generation || request !== requestGeneration)
-              return;
+            if (current !== generation || request !== requestGeneration) return;
             const history = node('details');
             history.append(node('summary', 'Survey activity'));
             for (const entry of detail.activity)

@@ -24,8 +24,7 @@ beforeEach(() =>
     'TRUNCATE club_forms.entries,club_forms.contacts,club_forms.custom_survey_members CASCADE',
   ),
 );
-const contact = async (email) =>
-  (await contactHistory(db, { email })).contact;
+const contact = async (email) => (await contactHistory(db, { email })).contact;
 async function seed(email, name = 'Member') {
   const id = randomUUID();
   await db.query(
@@ -83,11 +82,8 @@ test('contact editing consolidates an existing alias under one chosen primary an
   assert.equal((await contact(old)).name, 'Correct Name');
   assert.equal((await contact(old)).submissions, 2);
   assert.equal(
-    (
-      await db.query('SELECT email FROM club_forms.entries WHERE id=$1', [
-        id,
-      ])
-    ).rows[0].email,
+    (await db.query('SELECT email FROM club_forms.entries WHERE id=$1', [id]))
+      .rows[0].email,
     old,
   );
   await seed(preferred, 'Stale submitted name');
@@ -132,35 +128,31 @@ test('unused aliases can be removed while used aliases, primary addresses and su
   await edit('original@example.edu', 'unused@example.edu');
   await edit('unused@example.edu', 'chosen@example.edu');
   assert.equal(
-    (await remove('chosen@example.edu', 'unused@example.edu'))
-      .aliasRemoved,
+    (await remove('chosen@example.edu', 'unused@example.edu')).aliasRemoved,
     true,
   );
   assert.equal((await contact('chosen@example.edu')).emails.length, 2);
   await assert.rejects(contact('unused@example.edu'), { status: 404 });
   assert.ok(
-    (
-      await contactHistory(db, { email: 'chosen@example.edu' })
-    ).history.some((row) => row.label === 'Contact edited'),
+    (await contactHistory(db, { email: 'chosen@example.edu' })).history.some(
+      (row) => row.label === 'Contact edited',
+    ),
   );
-  await assert.rejects(
-    remove('chosen@example.edu', 'original@example.edu'),
-    { status: 409 },
-  );
-  await assert.rejects(
-    remove('chosen@example.edu', 'chosen@example.edu'),
-    { status: 400 },
-  );
+  await assert.rejects(remove('chosen@example.edu', 'original@example.edu'), {
+    status: 409,
+  });
+  await assert.rejects(remove('chosen@example.edu', 'chosen@example.edu'), {
+    status: 400,
+  });
   await edit('chosen@example.edu', 'advisor@example.edu');
   await db.query(
     `INSERT INTO club_forms.custom_survey_members(survey_id,advisor_id,display_name,email)
      VALUES($1,'chosen','Chosen Advisor','chosen@example.edu')`,
     [surveyId],
   );
-  await assert.rejects(
-    remove('advisor@example.edu', 'chosen@example.edu'),
-    { status: 409 },
-  );
+  await assert.rejects(remove('advisor@example.edu', 'chosen@example.edu'), {
+    status: 409,
+  });
   assert.equal(
     (await contact('advisor@example.edu')).aliases.find(
       (row) => row.email === 'chosen@example.edu',

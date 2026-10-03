@@ -115,9 +115,7 @@ const edit = (id, extra = {}) => ({
   name: 'Edited Person',
   email: 'changed@example.edu',
   data: {},
-  answers: [
-    { questionId: qid, value: [questions[0].options[1]], other: '' },
-  ],
+  answers: [{ questionId: qid, value: [questions[0].options[1]], other: '' }],
   ...extra,
 });
 const remove = (id, extra = {}) => ({
@@ -132,9 +130,7 @@ const request = (path, body, headers = {}) =>
     method: body ? 'POST' : 'GET',
     headers: {
       'x-test-admin': 'yes',
-      ...(body
-        ? { 'Content-Type': 'application/json', Origin: origin }
-        : {}),
+      ...(body ? { 'Content-Type': 'application/json', Origin: origin } : {}),
       ...headers,
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
@@ -248,8 +244,7 @@ test('Inbox edits regular questions without changing event metadata and enforces
     401,
   );
   assert.equal((await request('/api/admin', body)).status, 200);
-  const entry = (await (await request('/api/admin?edit=' + id)).json())
-    .entry;
+  const entry = (await (await request('/api/admin?edit=' + id)).json()).entry;
   assert.equal(entry.data.message, 'New wording');
   assert.equal(entry.data.eventTitle, 'Game night');
   assert.equal((await request('/api/surveys', remove(id))).status, 409);
@@ -283,17 +278,14 @@ test('archive-only deletion cascades response details, retries safely, removes o
     'contact_emails',
   ])
     assert.equal(
-      (
-        await db.query(
-          `SELECT count(*)::int AS n FROM club_forms.${table}`,
-        )
-      ).rows[0].n,
+      (await db.query(`SELECT count(*)::int AS n FROM club_forms.${table}`))
+        .rows[0].n,
       0,
       table,
     );
   assert.equal(
-    (await db.query('SELECT * FROM club_forms.contact_file_deletions'))
-      .rows.length,
+    (await db.query('SELECT * FROM club_forms.contact_file_deletions')).rows
+      .length,
     1,
   );
   assert.equal(
@@ -364,8 +356,7 @@ test('deletion retains identities with another alias submission or independent c
   );
   await changeSubmission(db, remove(id), actor);
   assert.equal(
-    (await db.query('SELECT * FROM club_forms.contact_emails')).rows
-      .length,
+    (await db.query('SELECT * FROM club_forms.contact_emails')).rows.length,
     2,
   );
   const noteId = await seed({ archived: true, email: 'note@example.edu' });
@@ -436,8 +427,5 @@ test('CSV has one line per response and explicit columns for chosen dates, inclu
     rows[1],
     /"Any of these","Yes \(Any of these\)","Yes \(Any of these\)","Yes","No","No"/,
   );
-  assert.match(
-    rows[2],
-    /"October 17 — evening","No","Yes","No","No","No"/,
-  );
+  assert.match(rows[2], /"October 17 — evening","No","Yes","No","No","No"/);
 });

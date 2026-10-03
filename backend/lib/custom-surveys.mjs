@@ -59,10 +59,7 @@ export async function linkedPreview(db, token) {
     )
   ).rows[0];
   if (!survey?.definition || survey.content_version !== FORM_VERSION)
-    throw new RequestError(
-      404,
-      'This preview link is unavailable or expired.',
-    );
+    throw new RequestError(404, 'This preview link is unavailable or expired.');
   return survey;
 }
 export async function surveyMembers(db, id) {
@@ -256,13 +253,7 @@ export async function submitSurvey(db, req, link, body) {
     const receipt = (
       await tx.query(
         'INSERT INTO club_forms.custom_survey_receipts(id,survey_id,advisor_id,revision,request_digest) VALUES($1,$2,$3,$4,$5) RETURNING id,revision,created_at',
-        [
-          body.requestId,
-          survey.id,
-          member.advisor_id,
-          revision,
-          requestDigest,
-        ],
+        [body.requestId, survey.id, member.advisor_id, revision, requestDigest],
       )
     ).rows[0];
     return {

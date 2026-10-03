@@ -29,9 +29,7 @@ export function surveysHandler({
         adminOrigin(req);
         const body = await jsonBody(req, 400000),
           db = getDatabase();
-        if (
-          ['edit-submission', 'delete-submission'].includes(body.action)
-        ) {
+        if (['edit-submission', 'delete-submission'].includes(body.action)) {
           const result = await changeSubmission(db, body, user.email, {
             surface: 'survey',
           });
@@ -49,8 +47,7 @@ export function surveysHandler({
       }
       if (req.method !== 'GET')
         throw new RequestError(405, 'Method not allowed.');
-      const params = new URL(req.url, 'https://admin.invalid')
-        .searchParams;
+      const params = new URL(req.url, 'https://admin.invalid').searchParams;
       const db = getDatabase(),
         offset = Number(params.get('offset') || 0);
       if (params.has('contact'))

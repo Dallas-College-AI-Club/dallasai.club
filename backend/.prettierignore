@@ -1,0 +1,5 @@
+public
+generated
+node_modules
+*.json
+*.md

@@ -177,10 +177,7 @@ function renderEntry(entry) {
       entry.review_status === 'closed' ? 'archived' : entry.review_status,
       'badge ' + entry.review_status,
     ),
-    node(
-      'span',
-      entry.kind === 'rsvp' ? 'Event RSVP' : labels[entry.kind],
-    ),
+    node('span', entry.kind === 'rsvp' ? 'Event RSVP' : labels[entry.kind]),
     node('span', activityTime(entry.created_at)),
   );
   card.append(top);
@@ -293,11 +290,7 @@ function groupedEntries(entries) {
     groups.get(key).push(entry);
   }
   return [...groups].map(([key, rows]) => {
-    const group = node(
-      'details',
-      undefined,
-      'survey-event-group inbox-group',
-    );
+    const group = node('details', undefined, 'survey-event-group inbox-group');
     group.dataset.group = key;
     group.open = true;
     group.append(
@@ -319,8 +312,7 @@ async function load({ background = false } = {}) {
     return;
   }
   loading = true;
-  if (location.hash === '#archived-survey-questions')
-    selectSurveyArchive();
+  if (location.hash === '#archived-survey-questions') selectSurveyArchive();
   const generation = sessionGeneration,
     requestedFilters = filters().toString();
   q('#entries').setAttribute('aria-busy', 'true');
@@ -337,9 +329,7 @@ async function load({ background = false } = {}) {
       reloadPending = true;
       return;
     }
-    const linkedId = new URLSearchParams(location.hash.slice(1)).get(
-      'entry',
-    );
+    const linkedId = new URLSearchParams(location.hash.slice(1)).get('entry');
     const linkedEntry =
       linkedId && data.entries.find((entry) => entry.id === linkedId);
     if (linkedEntry) selectInboxStatus(linkedEntry.review_status);
@@ -351,8 +341,7 @@ async function load({ background = false } = {}) {
     q('#identity').textContent = 'Signed in as ' + data.user;
     const newCount = data.counts.reduce((sum, row) => sum + row.new, 0);
     document.title =
-      (newCount ? '(' + newCount + ') ' : '') +
-      'Club office · Dallas AI Club';
+      (newCount ? '(' + newCount + ') ' : '') + 'Club office · Dallas AI Club';
     const latest = Math.max(
       0,
       ...data.counts.map((row) => Date.parse(row.latest) || 0),
@@ -376,16 +365,11 @@ async function load({ background = false } = {}) {
         .filter((e) => Boolean(e.past) === past)
         .map(
           (e) =>
-            new Option(
-              e.title + ' · ' + (e.date?.slice(0, 10) || 'TBD'),
-              e.id,
-            ),
+            new Option(e.title + ' · ' + (e.date?.slice(0, 10) || 'TBD'), e.id),
         ),
     );
     if (
-      [...eventSelect.options].some(
-        (option) => option.value === selectedEvent,
-      )
+      [...eventSelect.options].some((option) => option.value === selectedEvent)
     )
       eventSelect.value = selectedEvent;
     if (location.hash === '#events' && q('#events-pane').hidden)
@@ -420,26 +404,22 @@ async function load({ background = false } = {}) {
       'Setup still needed: ' + missing.join(', ') + '.';
     if (
       !background ||
-      (!commentDrafts.size &&
-        !q('#entries').contains(document.activeElement))
+      (!commentDrafts.size && !q('#entries').contains(document.activeElement))
     ) {
       const expanded = new Map(
-        [...q('#entries').querySelectorAll('[id^="entry-"]')].map(
-          (card) => [
-            card.id,
-            [
-              card.open,
-              ...[...card.querySelectorAll('details')].map(
-                (panel) => panel.open,
-              ),
-            ],
+        [...q('#entries').querySelectorAll('[id^="entry-"]')].map((card) => [
+          card.id,
+          [
+            card.open,
+            ...[...card.querySelectorAll('details')].map((panel) => panel.open),
           ],
-        ),
+        ]),
       );
       const groupStates = new Map(
-        [...q('#entries').querySelectorAll('[data-group]')].map(
-          (group) => [group.dataset.group, group.open],
-        ),
+        [...q('#entries').querySelectorAll('[data-group]')].map((group) => [
+          group.dataset.group,
+          group.open,
+        ]),
       );
       q('#entries').replaceChildren(
         ...(data.entries.length
@@ -448,9 +428,7 @@ async function load({ background = false } = {}) {
       );
       for (const group of q('#entries').querySelectorAll('[data-group]'))
         group.open = groupStates.get(group.dataset.group) ?? true;
-      for (const card of q('#entries').querySelectorAll(
-        '[id^="entry-"]',
-      )) {
+      for (const card of q('#entries').querySelectorAll('[id^="entry-"]')) {
         card.open = expanded.get(card.id)?.[0] || false;
         [...card.querySelectorAll('details')].forEach((panel, index) => {
           panel.open = expanded.get(card.id)?.[index + 1] || false;
@@ -462,9 +440,7 @@ async function load({ background = false } = {}) {
     q('#page').textContent = 'Page ' + (offset / 50 + 1);
     q('#export').href = '/api/admin?' + filters() + '&export=csv';
     surveyArchive.load(filters(), { background });
-    const linked = new URLSearchParams(location.hash.slice(1)).get(
-      'entry',
-    );
+    const linked = new URLSearchParams(location.hash.slice(1)).get('entry');
     if (linked) {
       const card = document.getElementById('entry-' + linked);
       if (card) {
@@ -499,8 +475,7 @@ function selectInboxStatus(value) {
   });
   q('#inbox-view-note').textContent = {
     new: 'New submissions awaiting review.',
-    reviewed:
-      'Reviewed submissions. Archive them when follow-up is complete.',
+    reviewed: 'Reviewed submissions. Archive them when follow-up is complete.',
     closed:
       'Archived submissions. Comments and history are kept. Mark an entry new or reviewed to restore it.',
   }[value];
@@ -567,10 +542,7 @@ async function sendCode(email) {
 }
 q('#login-form').onsubmit = async (event) => {
   event.preventDefault();
-  const email = new FormData(event.target)
-    .get('email')
-    .trim()
-    .toLowerCase();
+  const email = new FormData(event.target).get('email').trim().toLowerCase();
   loginBusy(true);
   status();
   try {
@@ -621,17 +593,12 @@ q('#change-email').onclick = () => {
   q('#login-form [name="email"]').focus();
 };
 q('#signout').onclick = async () => {
-  if (
-    !editor.canLeave() ||
-    !customSurveys.canLeave() ||
-    !surveys.canLeave()
-  )
+  if (!editor.canLeave() || !customSurveys.canLeave() || !surveys.canLeave())
     return;
   sessionGeneration++;
   try {
     const result = await auth.signOut();
-    if (result.error)
-      throw new Error('Could not sign out. Please try again.');
+    if (result.error) throw new Error('Could not sign out. Please try again.');
     showLogin();
     q('#login-form').reset();
     status('Signed out.');
@@ -658,18 +625,14 @@ const surveys = mountSurveyResults(api, (result) => {
   load();
 });
 const customSurveys = mountCustomSurveys(q('#custom-surveys-root'), api);
-const surveyArchive = mountSurveyArchive(
-  q('#archived-survey-questions'),
-  api,
-);
+const surveyArchive = mountSurveyArchive(q('#archived-survey-questions'), api);
 function surveyGroup(custom, id = '') {
   const alreadyCustom = !q('#custom-surveys-root').hidden;
   if (
     custom === alreadyCustom &&
     !id &&
     !q('#surveys-pane').hidden &&
-    q(custom ? '#custom-surveys-root' : '#survey-results').childNodes
-      .length
+    q(custom ? '#custom-surveys-root' : '#survey-results').childNodes.length
   )
     return true;
   if ((!custom || id) && !customSurveys.leave()) return false;
@@ -702,10 +665,7 @@ function showPane(name, keepHash = false) {
     return false;
   for (const pane of ['inbox', 'events', 'surveys']) {
     q('#' + pane + '-pane').hidden = name !== pane;
-    q('#' + pane + '-tab').setAttribute(
-      'aria-pressed',
-      String(name === pane),
-    );
+    q('#' + pane + '-tab').setAttribute('aria-pressed', String(name === pane));
   }
   if (!keepHash)
     history.replaceState(
@@ -765,10 +725,7 @@ window.addEventListener('hashchange', (event) => {
     navigate('surveys');
     return;
   }
-  if (
-    !signedIn ||
-    !new URLSearchParams(location.hash.slice(1)).get('entry')
-  )
+  if (!signedIn || !new URLSearchParams(location.hash.slice(1)).get('entry'))
     return;
   if (!navigate('inbox')) return;
   offset = 0;
@@ -816,8 +773,7 @@ auth
     if (data?.user) load();
     else {
       showLogin();
-      if (error)
-        status('Could not verify your sign-in. Please try again.');
+      if (error) status('Could not verify your sign-in. Please try again.');
     }
   })
   .catch(() => {

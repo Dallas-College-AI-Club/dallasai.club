@@ -67,12 +67,7 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
   reportHeading.tabIndex = -1;
   reportDialog.setAttribute('aria-labelledby', reportHeading.id);
   reportStatus.setAttribute('role', 'status');
-  reportHeader.append(
-    reportHeading,
-    reportExport,
-    reportClose,
-    reportStatus,
-  );
+  reportHeader.append(reportHeading, reportExport, reportClose, reportStatus);
   reportDialog.append(reportHeader, report);
   document.body.append(reportDialog);
   function clearReport() {
@@ -355,16 +350,11 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
     el.append(
       actions,
       status,
-      node(
-        'p',
-        'Event date: ' + (response.event_date?.slice(0, 10) || 'TBD'),
-      ),
+      node('p', 'Event date: ' + (response.event_date?.slice(0, 10) || 'TBD')),
     );
     const answers = node('dl');
     for (const question of response.questions) {
-      const answer = response.answers.find(
-        (a) => a.questionId === question.id,
-      );
+      const answer = response.answers.find((a) => a.questionId === question.id);
       const values = (
         Array.isArray(answer?.value) ? answer.value : [answer?.value || '']
       )
@@ -400,17 +390,13 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
         new Option('All events, including past events', ''),
         ...data.events.map(
           (e) =>
-            new Option(
-              e.title + ' · ' + (e.date?.slice(0, 10) || 'TBD'),
-              e.id,
-            ),
+            new Option(e.title + ' · ' + (e.date?.slice(0, 10) || 'TBD'), e.id),
         ),
       );
       q('#survey-event').value = eventId;
       const groups = new Map();
       for (const response of data.responses) {
-        if (!groups.has(response.event_id))
-          groups.set(response.event_id, []);
+        if (!groups.has(response.event_id)) groups.set(response.event_id, []);
         groups.get(response.event_id).push(response);
       }
       for (const [id, rows] of groups) {

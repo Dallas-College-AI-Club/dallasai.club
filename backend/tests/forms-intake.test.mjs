@@ -89,16 +89,16 @@ test('signups, RSVPs and requests are each saved once and confirmed', async () =
     assert.equal((await response.json()).message, confirmations[kind]);
   }
   const rsvp = form('rsvp', { eventId: 'meetup' });
-  assert.equal(
-    (await (await post(rsvp)).json()).message,
-    confirmations.rsvp,
-  );
+  assert.equal((await (await post(rsvp)).json()).message, confirmations.rsvp);
   const again = await post({ ...rsvp, requestId: randomUUID() });
   assert.match((await again.json()).message, /already have an RSVP/);
-  assert.deepEqual(
-    (await rows()).map((row) => row.kind).sort(),
-    ['contribution', 'join', 'rsvp', 'subscribe', 'workshop'],
-  );
+  assert.deepEqual((await rows()).map((row) => row.kind).sort(), [
+    'contribution',
+    'join',
+    'rsvp',
+    'subscribe',
+    'workshop',
+  ]);
 });
 
 test('rejected submissions save nothing', async () => {
@@ -112,7 +112,9 @@ test('rejected submissions save nothing', async () => {
 });
 
 test('the spam trap answers politely and saves nothing', async () => {
-  const response = await post(form('join', { website: 'https://spam.example' }));
+  const response = await post(
+    form('join', { website: 'https://spam.example' }),
+  );
   assert.equal(response.status, 200);
   assert.deepEqual(await rows(), []);
 });

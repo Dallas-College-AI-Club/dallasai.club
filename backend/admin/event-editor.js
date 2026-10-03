@@ -164,8 +164,7 @@ export function mountEventEditor(api) {
     content.images = images.map((image) => ({ ...image }));
     return content;
   }
-  const dirty = () =>
-    editing && current && JSON.stringify(values()) !== saved;
+  const dirty = () => editing && current && JSON.stringify(values()) !== saved;
   const canLeave = () =>
     !busy && (!dirty() || confirm('Discard your unsaved event changes?'));
   const state = (row) =>
@@ -177,14 +176,8 @@ export function mountEventEditor(api) {
           ? 'Published'
           : 'Published · draft changes waiting';
   function list() {
-    q('#active-events').setAttribute(
-      'aria-pressed',
-      String(!showArchived),
-    );
-    q('#archived-events').setAttribute(
-      'aria-pressed',
-      String(showArchived),
-    );
+    q('#active-events').setAttribute('aria-pressed', String(!showArchived));
+    q('#archived-events').setAttribute('aria-pressed', String(showArchived));
     q('#active-event-count').textContent = rows.filter(
       (r) => !r.archived_at,
     ).length;
@@ -222,10 +215,7 @@ export function mountEventEditor(api) {
       }
       const button = node('button', undefined, 'event-choice');
       button.classList.toggle('has-draft', isDraft);
-      button.classList.toggle(
-        'potential-choice',
-        Boolean(row.draft.potential),
-      );
+      button.classList.toggle('potential-choice', Boolean(row.draft.potential));
       button.type = 'button';
       button.setAttribute('aria-pressed', String(row.id === current?.id));
       button.append(
@@ -237,24 +227,16 @@ export function mountEventEditor(api) {
             ? 'Archived · kept for later'
             : isDraft
               ? 'DRAFT · ' +
-                (!row.published
-                  ? 'Not published'
-                  : 'Changes not published')
+                (!row.published ? 'Not published' : 'Changes not published')
               : 'Published',
-          row.archived_at
-            ? 'archived-badge'
-            : isDraft
-              ? 'draft-badge'
-              : '',
+          row.archived_at ? 'archived-badge' : isDraft ? 'draft-badge' : '',
         ),
       );
       button.onclick = () => {
         if (canLeave()) edit(row);
       };
       if (activityTime(row.updated_at))
-        button.append(
-          node('span', 'Updated ' + activityTime(row.updated_at)),
-        );
+        button.append(node('span', 'Updated ' + activityTime(row.updated_at)));
       listItems.push(button);
     }
     q('#event-list').replaceChildren(...listItems);
@@ -305,10 +287,7 @@ export function mountEventEditor(api) {
       const input = form.elements.namedItem(key);
       if (!input || key === 'category') continue;
       if (input.type === 'checkbox') input.checked = value !== false;
-      else
-        input.value = Array.isArray(value)
-          ? value.join('\n')
-          : value || '';
+      else input.value = Array.isArray(value) ? value.join('\n') : value || '';
     }
     if (row.draft.requireEduEmail === undefined)
       form.elements.requireEduEmail.checked =
@@ -330,9 +309,7 @@ export function mountEventEditor(api) {
     q('#archive-event').hidden =
       Boolean(row.archived_at) || (!row.revision && !row.published);
     q('#restore-event').hidden = !row.archived_at;
-    form.querySelector('[value="publish"]').hidden = Boolean(
-      row.archived_at,
-    );
+    form.querySelector('[value="publish"]').hidden = Boolean(row.archived_at);
     q('#view-event').hidden = !row.published;
     q('#view-event').href =
       'https://dallasai.club/club.html?mode=events&event=' +
@@ -363,15 +340,12 @@ export function mountEventEditor(api) {
       rows = data.events;
       types = data.types;
       typeOptions(
-        form.elements.category.value ||
-          current?.draft.category ||
-          'Workshop',
+        form.elements.category.value || current?.draft.category || 'Workshop',
       );
       list();
       say();
     } catch (e) {
-      if (version === generation && request === loadGeneration)
-        say(e.message);
+      if (version === generation && request === loadGeneration) say(e.message);
     }
   }
   async function preview(event) {
@@ -385,9 +359,7 @@ export function mountEventEditor(api) {
             { credentials: 'same-origin' },
           );
           if (!response.ok)
-            throw Error(
-              'Could not load the preview image. Please try again.',
-            );
+            throw Error('Could not load the preview image. Please try again.');
           return {
             ...image,
             previewSrc: await dataUrl(await response.blob()),
@@ -438,11 +410,7 @@ export function mountEventEditor(api) {
                     ? 'Changes saved. This event is still archived and private.'
                     : 'Draft saved successfully. These saved changes are private until you publish. Editing is complete.',
         );
-        const confirmation = node(
-          'div',
-          undefined,
-          'event-save-confirmation',
-        );
+        const confirmation = node('div', undefined, 'event-save-confirmation');
         confirmation.setAttribute('role', 'status');
         confirmation.tabIndex = -1;
         confirmation.append(
@@ -504,8 +472,7 @@ export function mountEventEditor(api) {
   };
   q('#restore-event').onclick = () => {
     if (busy || !current?.archived_at) return;
-    if (dirty())
-      return say('Save your changes before restoring this event.');
+    if (dirty()) return say('Save your changes before restoring this event.');
     save('restore');
   };
   function changeCollection(archived) {

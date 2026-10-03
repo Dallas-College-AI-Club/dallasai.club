@@ -138,9 +138,7 @@ export function builderLinks(survey) {
 export async function getDraft(db, id) {
   if (!uuid.test(id || '')) invalid('Choose a survey.');
   const survey = (
-    await db.query('SELECT * FROM club_forms.custom_surveys WHERE id=$1', [
-      id,
-    ])
+    await db.query('SELECT * FROM club_forms.custom_surveys WHERE id=$1', [id])
   ).rows[0];
   if (!survey) throw new RequestError(404, 'Survey not found.');
   return {
@@ -155,13 +153,7 @@ export async function getDraft(db, id) {
   };
 }
 export async function changeDraft(db, actor, body) {
-  object(body, [
-    'id',
-    'requestId',
-    'expectedRevision',
-    'action',
-    'definition',
-  ]);
+  object(body, ['id', 'requestId', 'expectedRevision', 'action', 'definition']);
   if (
     !uuid.test(body.id) ||
     !uuid.test(body.requestId) ||

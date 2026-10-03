@@ -149,12 +149,9 @@ http
         }
         res.writeHead(200, {
           'Content-Type': 'text/csv; charset=utf-8',
-          'Content-Disposition':
-            'attachment; filename="club-submissions.csv"',
+          'Content-Disposition': 'attachment; filename="club-submissions.csv"',
         });
-        return res.end(
-          'Name,Email\nSynthetic respondent,audit@example.com\n',
-        );
+        return res.end('Name,Email\nSynthetic respondent,audit@example.com\n');
       }
       res.setHeader('Content-Type', 'application/json');
       return res.end(
@@ -176,9 +173,7 @@ http
     try {
       const file = path.resolve(
         root,
-        '.' +
-          url.pathname +
-          (url.pathname.endsWith('/') ? 'index.html' : ''),
+        '.' + url.pathname + (url.pathname.endsWith('/') ? 'index.html' : ''),
       );
       if (!file.startsWith(root + path.sep)) throw Error('Path');
       res.setHeader(
@@ -199,8 +194,7 @@ http
     console.log(
       JSON.stringify({
         officer: origin + '/test-officer',
-        respondent:
-          origin + '/surveys/#invite=' + privateSurveyToken(id),
+        respondent: origin + '/surveys/#invite=' + privateSurveyToken(id),
         controls: origin + '/test-controls',
         email: 'audit@example.com',
         code: '123456',

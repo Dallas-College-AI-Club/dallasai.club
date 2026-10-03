@@ -106,9 +106,7 @@ http
       }
       const file = path.resolve(
         root,
-        '.' +
-          url.pathname +
-          (url.pathname.endsWith('/') ? 'index.html' : ''),
+        '.' + url.pathname + (url.pathname.endsWith('/') ? 'index.html' : ''),
       );
       if (!file.startsWith(root + path.sep)) throw Error('Path');
       res.setHeader(
@@ -127,7 +125,5 @@ http
     }
   })
   .listen(port, '127.0.0.1', () =>
-    console.log(
-      'Synthetic response management fixture: ' + origin + '/admin/',
-    ),
+    console.log('Synthetic response management fixture: ' + origin + '/admin/'),
   );

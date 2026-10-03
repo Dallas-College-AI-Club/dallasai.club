@@ -13,10 +13,7 @@ export async function officeFixture() {
   const backend = path.resolve(import.meta.dirname, '../..'),
     site = path.resolve(backend, '../public');
   const workshop = JSON.parse(
-    await readFile(
-      path.join(backend, 'tests/fixtures/workshop.json'),
-      'utf8',
-    ),
+    await readFile(path.join(backend, 'tests/fixtures/workshop.json'), 'utf8'),
   );
   const event = await saveEvent(
     db,
@@ -65,9 +62,7 @@ export async function officeFixture() {
             hasSurvey: true,
           }
         : {
-            ...(kind === 'join'
-              ? { campus: 'Richland', interests: '' }
-              : {}),
+            ...(kind === 'join' ? { campus: 'Richland', interests: '' } : {}),
             message: 'Saved ' + kind + ' example',
             topic: 'Example topic',
           };
@@ -146,15 +141,12 @@ export async function officeFixture() {
     if (url.pathname === '/api/events') return events(req, res);
     if (url.pathname === '/api/custom-surveys') return f.handler(req, res);
     const root =
-      url.pathname.startsWith('/admin/') ||
-      url.pathname.startsWith('/surveys/')
+      url.pathname.startsWith('/admin/') || url.pathname.startsWith('/surveys/')
         ? path.join(backend, 'public')
         : site;
     const file = path.resolve(
       root,
-      '.' +
-        url.pathname +
-        (url.pathname.endsWith('/') ? 'index.html' : ''),
+      '.' + url.pathname + (url.pathname.endsWith('/') ? 'index.html' : ''),
     );
     try {
       if (!file.startsWith(root + path.sep)) throw Error('Path');

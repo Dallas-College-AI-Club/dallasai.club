@@ -268,8 +268,7 @@ export function customSurveysHandler({
             ...(survey.definition || definition),
             respondents: members
               .filter(
-                (m) =>
-                  !survey.definition || m.advisor_id === member.advisor_id,
+                (m) => !survey.definition || m.advisor_id === member.advisor_id,
               )
               .map((m) => ({
                 id: m.advisor_id,

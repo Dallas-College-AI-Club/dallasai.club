@@ -111,11 +111,12 @@ after(async () => {
 });
 
 test('officers download attachments in full and each download is audited', async () => {
-  const response = await fetch(
-    origin + '/api/admin?attachment=' + fileId,
-  );
+  const response = await fetch(origin + '/api/admin?attachment=' + fileId);
   assert.equal(response.status, 200);
-  assert.equal(response.headers.get('content-type'), 'application/octet-stream');
+  assert.equal(
+    response.headers.get('content-type'),
+    'application/octet-stream',
+  );
   assert.match(
     response.headers.get('content-disposition'),
     /filename\*=UTF-8''draft%20notes\.pdf/,

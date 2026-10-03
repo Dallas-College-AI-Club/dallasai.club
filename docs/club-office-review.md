@@ -252,6 +252,84 @@ Each phase can ship on its own.
 Phase 0 needs no layout changes and closes every critical item. Phase 1's focus helper and in-place
 updates set up Phase 2. Without them, the redesigned Inbox would keep the same focus and scroll bugs.
 
+## Requested enhancements
+
+Requested by an officer on October 3, 2026. Custom surveys are special-occasion surveys for a
+targeted audience. Event surveys are generic and open to anyone. Both requests below follow from
+that difference.
+
+### A. Export a custom-survey response as a document to circulate
+
+**Today.** Custom-survey results appear only as on-screen cards (`surveys/results-ui.js`
+`responseSections`, `admin/custom-surveys.js:245-250`). They have no CSV, PDF or Word export
+(`custom-surveys-4`). Event surveys export CSV only.
+
+**Proposal.**
+- **Where.** Add "Download Word (.docx)" and "Print / Save as PDF" to each response card. Add
+  "Download all (.docx)" with one respondent per page.
+- **Word.** Reuse the dependency-free generator in `surveys/personal-copy.js` (`makeDocx`). It is a
+  minimal WordprocessingML package that Advisor Studio respondents already download as their
+  personal copy. Change its input from the personal copy to `{title, subtitle, note, sections: [{heading,
+  items: [{question, answer}]}]}` so both callers share it. This needs no new dependency, and the
+  admin bundle stays small.
+- **PDF.** Add a print stylesheet (`@media print`) for a single-response view and call
+  `window.print()`. The browser's "Save as PDF" writes the file. This works under the admin CSP
+  (`style-src 'self'`). Server-side PDF rendering with headless Chrome is heavy for a Vercel function
+  and isn't needed.
+- **Layout.** Survey title, respondent and submitted date (Central), then section headings, each
+  question in bold and its answer, in the order `responseSections` already computes. Keep the
+  existing answer notes, such as "Shared wording only" and dial positions. End with a footer:
+  sharing audience, exporting officer and date.
+- **Audit.** Record each export in the survey activity log: who, which responses, when. Survey
+  CSV exports aren't audited today either (`event-surveys-16`).
+- **Consent.** Advisor Studio tells respondents the audience is "Authorized club officers and the
+  other advisor for this survey". Exports should contain only what respondents included in their
+  shared summary, which is already all that results show. Print the audience statement in the
+  document and show it in the export dialog. Circulating more widely would need different consent
+  wording for future respondents.
+
+### B. Create a custom survey from a file (CSV, HTML, Word, PDF)
+
+**Today.** The builder (`admin/survey-builder.js`, `lib/survey-builder.mjs`) holds a flat list of
+1–30 questions in four types: text, single choice, multiple choice and scale. The only
+special-occasion survey so far, Advisor Studio, needed far more:
+- **Structure.** 20 questions in 5 chapters, with per-chapter comments.
+- **Question types.** 8 of them, including ranking, dials and focus groups.
+- **Sharing.** Sharing rules and a review-before-sharing step.
+- **Code.** A 1,767-line hand-written UI (`surveys/advisor-ui.js`), a 331-line contract
+  (`lib/survey-contract.mjs`) and a JSON definition (`surveys/advisor-definition.json`).
+
+Each new special survey is a coding project today.
+
+**Proposal, in order.**
+1. **Let the builder hold what special surveys need.** Add sections with an intro and an optional
+   comment box, plus a ranking question type. A dial can be a scale with labelled ends. Surveys like
+   Advisor Studio then become data instead of code. This step comes first, because an import can
+   only produce what the builder can represent.
+2. **Import as a draft, never publish directly.** "Create from file" on Custom surveys parses the
+   file and opens the builder on the Questions step with a report, for example "Imported 18
+   questions in 4 sections; 2 lines skipped" with the skipped lines shown. The officer reviews,
+   previews and publishes as today. The draft passes through the existing server validation in
+   `lib/survey-builder.mjs`, so imported and hand-built surveys share the same limits.
+3. **Formats, most reliable first.**
+   - **CSV (deterministic).** One row per question: section, question, help text, type, options
+     separated by `|`, required. Offer a template, and export existing surveys in the same format
+     so a survey can be copied, edited in a spreadsheet and re-imported.
+   - **HTML forms (deterministic).** Parse in the browser with `DOMParser`. A `fieldset`/`legend`
+     becomes a section; radio buttons, checkboxes and selects become single or multiple choice; a
+     `textarea` or text input becomes text; range and number inputs become a scale. Never render
+     the imported HTML.
+   - **Word or PDF (free-form).** These have no fixed structure, so a rules-based parser will
+     mislabel questions. Option (a): extract the text (a `.docx` is a zip of XML; PDF needs pdf.js)
+     and apply simple conventions: numbered lines are questions, bullet lines are options. Option
+     (b): send the extracted text to Claude on the server with the builder's JSON schema as the
+     required output, then validate it like any other draft. Option (b) copes with real documents.
+     It also adds an API key, a cost per import, and sends the document text to Anthropic. That's
+     fine for survey questions, but not for files containing respondent data.
+
+**Suggested order.** A first: it's small and reuses existing code. For B, step 1 before steps 2–3,
+and CSV and HTML import before Word and PDF.
+
 ## Still open
 
 - **Completeness critic.** The workflow's last agent was still running at handoff. Its output is not

@@ -45,13 +45,28 @@ export function submissionEditor(api, onSaved) {
   dialog.setAttribute('aria-labelledby', headingId);
   document.body.append(dialog);
   let generation = 0,
-    busy = false;
+    busy = false,
+    dirty = () => false;
+  function canClose() {
+    return (
+      !busy &&
+      (!dirty() || confirm('Discard your unsaved response changes?'))
+    );
+  }
   dialog.addEventListener('cancel', (event) => {
-    if (busy) event.preventDefault();
+    event.preventDefault();
+    if (canClose()) clear();
+  });
+  window.addEventListener('beforeunload', (event) => {
+    if (dialog.open && (busy || dirty())) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
   });
   function clear() {
     generation++;
     busy = false;
+    dirty = () => false;
     dialog.close();
     dialog.replaceChildren();
   }
@@ -66,7 +81,9 @@ export function submissionEditor(api, onSaved) {
     message.setAttribute('role', 'status');
     const cancel = node('button', 'Cancel', 'secondary');
     cancel.type = 'button';
-    cancel.onclick = clear;
+    cancel.onclick = () => {
+      if (canClose()) clear();
+    };
     dialog.replaceChildren(title, message, cancel);
     if (!dialog.open) dialog.showModal();
     try {
@@ -161,6 +178,8 @@ export function submissionEditor(api, onSaved) {
         });
       }
       const actions = node('div', undefined, 'survey-response-actions');
+      const original = JSON.stringify(read());
+      dirty = () => !remove && JSON.stringify(read()) !== original;
       const save = node(
         'button',
         remove ? 'Delete permanently' : 'Save changes',
@@ -190,7 +209,13 @@ export function submissionEditor(api, onSaved) {
           requestId = crypto.randomUUID();
         }
         busy = true;
-        save.disabled = cancel.disabled = true;
+        const controls = [
+          ...form.querySelectorAll('input,textarea,select,button'),
+        ];
+        const disabled = controls.map((control) => control.disabled);
+        controls.forEach((control) => {
+          control.disabled = true;
+        });
         message.textContent = remove ? 'Deleting…' : 'Saving…';
         try {
           const result = await api(
@@ -208,7 +233,9 @@ export function submissionEditor(api, onSaved) {
           if (version === generation) {
             message.textContent = error.message;
             busy = false;
-            save.disabled = cancel.disabled = false;
+            controls.forEach((control, index) => {
+              control.disabled = disabled[index];
+            });
           }
         }
       };

@@ -19,6 +19,7 @@ export async function officeFixture() {
     '009_submission_comments.sql',
     '014_event_response_management.sql',
     '015_contact_identity_management.sql',
+    '016_submission_management.sql',
   ])
     await db.exec(await readFile(path.join(backend, name), 'utf8'));
   const workshop = JSON.parse(
@@ -73,7 +74,10 @@ export async function officeFixture() {
             eventDate: '2030-10-04',
             hasSurvey: true,
           }
-        : { message: 'Saved ' + kind + ' example', topic: 'Example topic' };
+        : {
+            message: 'Saved ' + kind + ' example',
+            topic: 'Example topic',
+          };
     await db.query(
       `INSERT INTO club_forms.entries(id,kind,email,name,dedupe_key,data) VALUES($1::uuid,$2,$3,$4,$1::text,$5)`,
       [id, kind, email, name, JSON.stringify(data)],
@@ -155,7 +159,9 @@ export async function officeFixture() {
         : site;
     const file = path.resolve(
       root,
-      '.' + url.pathname + (url.pathname.endsWith('/') ? 'index.html' : ''),
+      '.' +
+        url.pathname +
+        (url.pathname.endsWith('/') ? 'index.html' : ''),
     );
     try {
       if (!file.startsWith(root + path.sep)) throw Error('Path');

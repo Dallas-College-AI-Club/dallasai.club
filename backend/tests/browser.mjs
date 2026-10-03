@@ -516,6 +516,7 @@ try {
     .locator('#counts')
     .getByText('The AI Review subscription', { exact: true })
     .waitFor();
+  await admin.locator('#entries .entry > summary').click();
   await admin.getByText('Received in club inbox', { exact: true }).waitFor();
   await admin
     .getByText('What do the inbox statuses mean?', { exact: true })
@@ -533,17 +534,24 @@ try {
   );
   await admin.locator('#filters [name="kind"]').selectOption('join');
   await admin.getByRole('button', { name: 'Apply', exact: true }).click();
+  await admin.locator('#entries .entry > summary').click();
   await admin.getByText('Submission details', { exact: true }).click();
   assert.equal(await admin.locator('.entry img').count(), 0);
   await admin.getByRole('button', { name: 'Mark reviewed' }).click();
   await expect(admin.locator('#entries .entry')).toHaveCount(0);
   await admin.locator('[data-inbox-status="reviewed"]').click();
+  await admin.locator('#entries .entry').waitFor();
+  if (!(await admin.locator('#entries .entry').evaluate(el => el.open)))
+    await admin.locator('#entries .entry > summary').click();
   await admin.locator('.badge').filter({ hasText: 'reviewed' }).waitFor();
   await admin
     .getByRole('button', { name: 'Archive submission', exact: true })
     .click();
   await expect(admin.locator('#entries .entry')).toHaveCount(0);
   await admin.locator('[data-inbox-status="closed"]').click();
+  await admin.locator('#entries .entry').waitFor();
+  if (!(await admin.locator('#entries .entry').evaluate(el => el.open)))
+    await admin.locator('#entries .entry > summary').click();
   await admin.locator('.badge').filter({ hasText: 'archived' }).waitFor();
   await expect(admin.locator('#export')).toHaveAttribute(
     'href',
@@ -553,6 +561,9 @@ try {
   await admin.getByRole('button', { name: 'Mark new', exact: true }).click();
   await expect(admin.locator('#entries .entry')).toHaveCount(0);
   await admin.locator('[data-inbox-status="new"]').click();
+  await admin.locator('#entries .entry').waitFor();
+  if (!(await admin.locator('#entries .entry').evaluate(el => el.open)))
+    await admin.locator('#entries .entry > summary').click();
   await admin.locator('.badge').filter({ hasText: 'new' }).waitFor();
   await admin.getByText('Activity & comments', { exact: true }).click();
   await admin
@@ -598,6 +609,9 @@ try {
     .click();
   await expect(admin.locator('#entries .entry')).toHaveCount(0);
   await admin.locator('[data-inbox-status="closed"]').click();
+  await admin.locator('#entries .entry').waitFor();
+  if (!(await admin.locator('#entries .entry').evaluate(el => el.open)))
+    await admin.locator('#entries .entry > summary').click();
   await admin.locator('.badge').filter({ hasText: 'archived' }).waitFor();
   await expect(admin.locator('#export')).toHaveAttribute(
     'href',
@@ -670,6 +684,9 @@ try {
     'aria-pressed',
     'true',
   );
+  await admin.locator('#entries .entry').waitFor();
+  if (!(await admin.locator('#entries .entry').evaluate(el => el.open)))
+    await admin.locator('#entries .entry > summary').click();
   await admin.locator('.badge').filter({ hasText: 'archived' }).waitFor();
   await admin.emulateMedia({ colorScheme: 'dark' });
   await admin.waitForFunction(() =>

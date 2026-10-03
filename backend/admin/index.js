@@ -135,7 +135,10 @@ function renderEntry(entry) {
       entry.review_status === 'closed' ? 'archived' : entry.review_status,
       'badge ' + entry.review_status,
     ),
-    node('span', entry.kind === 'rsvp' ? 'Event RSVP' : labels[entry.kind]),
+    node(
+      'span',
+      entry.kind === 'rsvp' ? 'Event RSVP' : labels[entry.kind],
+    ),
     node('span', activityTime(entry.created_at)),
   );
   card.append(top);
@@ -211,13 +214,16 @@ function renderEntry(entry) {
       const b = node('button', label);
       b.onclick = async () => {
         b.disabled = true;
+        const version = sessionGeneration;
         try {
           await api('/api/admin', {
             action: 'review',
             id: entry.id,
             status: value,
           });
+          if (version !== sessionGeneration) return;
           await load();
+          if (version !== sessionGeneration) return;
           status(
             value === 'closed'
               ? 'Submission moved to Archived. Comments and history are kept.'
@@ -225,6 +231,7 @@ function renderEntry(entry) {
                   (value === 'new' ? 'New.' : 'Reviewed.'),
           );
         } catch (e) {
+          if (version !== sessionGeneration) return;
           status(e.message);
           b.disabled = false;
         }
@@ -270,7 +277,8 @@ async function load({ background = false } = {}) {
     return;
   }
   loading = true;
-  if (location.hash === '#archived-survey-questions') selectSurveyArchive();
+  if (location.hash === '#archived-survey-questions')
+    selectSurveyArchive();
   const generation = sessionGeneration,
     requestedFilters = filters().toString();
   q('#entries').setAttribute('aria-busy', 'true');
@@ -387,10 +395,9 @@ async function load({ background = false } = {}) {
         ),
       );
       const groupStates = new Map(
-        [...q('#entries').querySelectorAll('[data-group]')].map((group) => [
-          group.dataset.group,
-          group.open,
-        ]),
+        [...q('#entries').querySelectorAll('[data-group]')].map(
+          (group) => [group.dataset.group, group.open],
+        ),
       );
       q('#entries').replaceChildren(
         ...(data.entries.length
@@ -399,7 +406,9 @@ async function load({ background = false } = {}) {
       );
       for (const group of q('#entries').querySelectorAll('[data-group]'))
         group.open = groupStates.get(group.dataset.group) ?? true;
-      for (const card of q('#entries').querySelectorAll('[id^="entry-"]')) {
+      for (const card of q('#entries').querySelectorAll(
+        '[id^="entry-"]',
+      )) {
         card.open = expanded.get(card.id)?.[0] || false;
         [...card.querySelectorAll('details')].forEach((panel, index) => {
           panel.open = expanded.get(card.id)?.[index + 1] || false;
@@ -411,7 +420,9 @@ async function load({ background = false } = {}) {
     q('#page').textContent = 'Page ' + (offset / 50 + 1);
     q('#export').href = '/api/admin?' + filters() + '&export=csv';
     surveyArchive.load(filters(), { background });
-    const linked = new URLSearchParams(location.hash.slice(1)).get('entry');
+    const linked = new URLSearchParams(location.hash.slice(1)).get(
+      'entry',
+    );
     if (linked) {
       const card = document.getElementById('entry-' + linked);
       if (card) {
@@ -615,10 +626,11 @@ function surveyGroup(custom, id = '') {
     custom === alreadyCustom &&
     !id &&
     !q('#surveys-pane').hidden &&
-    q(custom ? '#custom-surveys-root' : '#survey-results').childNodes.length
+    q(custom ? '#custom-surveys-root' : '#survey-results').childNodes
+      .length
   )
     return true;
-  if (!custom && !customSurveys.leave()) return false;
+  if ((!custom || id) && !customSurveys.leave()) return false;
   q('#custom-surveys-root').hidden = !custom;
   q('#event-surveys-root').hidden = custom;
   q('#custom-surveys-group').setAttribute('aria-pressed', String(custom));
@@ -665,10 +677,10 @@ function showPane(name, keepHash = false) {
       'custom-survey',
     );
     if (customId) {
-      surveyGroup(true, customId);
+      if (surveyGroup(true, customId) === false) return false;
       return;
     }
-    surveyGroup(false);
+    if (surveyGroup(false) === false) return false;
     surveys.show(
       new URLSearchParams(location.hash.slice(1)).get('survey') || '',
     );
@@ -681,21 +693,22 @@ function selectSurveyArchive() {
   q('#event-filter-label').hidden = true;
   history.replaceState({}, '', location.pathname);
 }
-window.addEventListener('hashchange', () => {
+window.addEventListener('hashchange', (event) => {
+  function navigate(name) {
+    if (showPane(name, true) !== false) return true;
+    history.replaceState(
+      {},
+      '',
+      new URL(event.oldURL).hash || location.pathname,
+    );
+    return false;
+  }
   if (signedIn && (location.hash === '#events' || !location.hash)) {
-    if (
-      showPane(location.hash === '#events' ? 'events' : 'inbox', true) ===
-      false
-    )
-      history.replaceState(
-        {},
-        '',
-        q('#events-pane').hidden ? '#surveys' : '#events',
-      );
+    navigate(location.hash === '#events' ? 'events' : 'inbox');
     return;
   }
   if (signedIn && location.hash === '#archived-survey-questions') {
-    if (showPane('inbox', true) === false) return;
+    if (!navigate('inbox')) return;
     offset = 0;
     selectSurveyArchive();
     load();
@@ -707,7 +720,7 @@ window.addEventListener('hashchange', () => {
       location.hash.startsWith('#survey=') ||
       location.hash.startsWith('#custom-survey='))
   ) {
-    showPane('surveys', true);
+    navigate('surveys');
     return;
   }
   if (
@@ -715,7 +728,7 @@ window.addEventListener('hashchange', () => {
     !new URLSearchParams(location.hash.slice(1)).get('entry')
   )
     return;
-  if (showPane('inbox', true) === false) return;
+  if (!navigate('inbox')) return;
   offset = 0;
   q('#filters [name="kind"]').value = '';
   q('#filters [name="eventId"]').value = '';
@@ -761,7 +774,8 @@ auth
     if (data?.user) load();
     else {
       showLogin();
-      if (error) status('Could not verify your sign-in. Please try again.');
+      if (error)
+        status('Could not verify your sign-in. Please try again.');
     }
   })
   .catch(() => {

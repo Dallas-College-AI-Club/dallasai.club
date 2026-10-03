@@ -181,7 +181,10 @@ export function mountEventEditor(api) {
           ? 'Published'
           : 'Published · draft changes waiting';
   function list() {
-    q('#active-events').setAttribute('aria-pressed', String(!showArchived));
+    q('#active-events').setAttribute(
+      'aria-pressed',
+      String(!showArchived),
+    );
     q('#archived-events').setAttribute(
       'aria-pressed',
       String(showArchived),
@@ -238,9 +241,15 @@ export function mountEventEditor(api) {
             ? 'Archived · kept for later'
             : isDraft
               ? 'DRAFT · ' +
-                (!row.published ? 'Not published' : 'Changes not published')
+                (!row.published
+                  ? 'Not published'
+                  : 'Changes not published')
               : 'Published',
-          row.archived_at ? 'archived-badge' : isDraft ? 'draft-badge' : '',
+          row.archived_at
+            ? 'archived-badge'
+            : isDraft
+              ? 'draft-badge'
+              : '',
         ),
       );
       button.onclick = () => {
@@ -302,7 +311,9 @@ export function mountEventEditor(api) {
       if (!input || key === 'category') continue;
       if (input.type === 'checkbox') input.checked = value !== false;
       else
-        input.value = Array.isArray(value) ? value.join('\n') : value || '';
+        input.value = Array.isArray(value)
+          ? value.join('\n')
+          : value || '';
     }
     if (row.draft.requireEduEmail === undefined)
       form.elements.requireEduEmail.checked =

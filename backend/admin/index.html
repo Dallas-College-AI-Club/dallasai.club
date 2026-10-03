@@ -45,9 +45,7 @@
       <section id="login" hidden>
         <p class="eyebrow">FOR CLUB OFFICERS</p>
         <h1>Good things start here.</h1>
-        <p>
-          Enter your club officer email. We will send you a sign-in code.
-        </p>
+        <p>Enter your club officer email. We will send you a sign-in code.</p>
         <form id="login-form">
           <label
             >Email address<input
@@ -79,13 +77,13 @@
             Use another email
           </button>
           <p class="hint">
-            Check your inbox and junk folder. Use the latest code; older
-            codes may expire.
+            Check your inbox and junk folder. Use the latest code; older codes
+            may expire.
           </p>
         </form>
         <p class="hint">
-          Access is limited to approved club officers. No password is
-          needed. Stay signed in for 3 days on this browser.
+          Access is limited to approved club officers. No password is needed.
+          Stay signed in for 3 days on this browser.
         </p>
       </section>
       <section id="office" hidden>
@@ -93,9 +91,7 @@
           <div>
             <p class="eyebrow">THE OFFICER WORKSPACE</p>
             <h1>Your club office</h1>
-            <p class="intro-copy">
-              A little planning. A lot of possibility.
-            </p>
+            <p class="intro-copy">A little planning. A lot of possibility.</p>
           </div>
           <p id="identity"></p>
         </div>
@@ -133,8 +129,8 @@
                 >
                 <p>
                   Subscribe links in the menu, The AI Review, and the signup
-                  page open the email form. Entries appear under The AI
-                  Review subscription.
+                  page open the email form. Entries appear under The AI Review
+                  subscription.
                 </p>
               </li>
               <li>
@@ -147,8 +143,8 @@
                 <p>
                   “Contribute an article,” “Start a draft,” and “Develop an
                   article of your own” open the contribution form. Text and
-                  attachments appear under AI Review submissions for an
-                  editor to review.
+                  attachments appear under AI Review submissions for an editor
+                  to review.
                 </p>
               </li>
               <li>
@@ -160,9 +156,9 @@
                 >
                 <p>
                   Select an upcoming or potential event and click RSVP. The
-                  popup asks for name, email, and any questions defined for
-                  that event. Basic details appear under Event RSVPs
-                  (upcoming only); full answers appear in Surveys.
+                  popup asks for name, email, and any questions defined for that
+                  event. Basic details appear under Event RSVPs (upcoming only);
+                  full answers appear in Surveys.
                 </p>
               </li>
               <li>
@@ -185,8 +181,8 @@
                   >Ask about an event ↗</a
                 >
                 <p>
-                  Select an event, then “Ask about this event.” The popup
-                  sends a question linked to that event to Questions.
+                  Select an event, then “Ask about this event.” The popup sends
+                  a question linked to that event to Questions.
                 </p>
               </li>
               <li>
@@ -197,16 +193,16 @@
                   >Ask the club ↗</a
                 >
                 <p>
-                  “Ask the club” in the public website footer opens the
-                  general question popup. Entries appear under Questions.
+                  “Ask the club” in the public website footer opens the general
+                  question popup. Entries appear under Questions.
                 </p>
               </li>
             </ul>
             <p>
-              Successful submissions open a confirmation screen with a Close
-              or Done button. Use the sender’s email link in the inbox to
-              reply. Subscription requests are saved for future updates;
-              email broadcasts are not enabled.
+              Successful submissions open a confirmation screen with a Close or
+              Done button. Use the sender’s email link in the inbox to reply.
+              Subscription requests are saved for future updates; email
+              broadcasts are not enabled.
             </p>
             <p>
               Other website actions: game scores go to
@@ -215,9 +211,9 @@
                 target="_blank"
                 rel="noopener"
                 >Rankings ↗</a
-              >. Teams links open the club community. Saving a writing draft
-              or choosing “Save to my plans” keeps that choice on the
-              visitor’s device; it does not submit an inbox entry.
+              >. Teams links open the club community. Saving a writing draft or
+              choosing “Save to my plans” keeps that choice on the visitor’s
+              device; it does not submit an inbox entry.
             </p>
           </details>
           <details class="office-preferences">
@@ -228,15 +224,15 @@
             </p>
             <p>
               <strong>New:</strong> waiting for an officer to review.
-              <strong>Reviewed:</strong> an officer has looked at it;
-              follow-up may still be needed. <strong>Archived:</strong> no
-              further action is planned.
+              <strong>Reviewed:</strong> an officer has looked at it; follow-up
+              may still be needed. <strong>Archived:</strong> no further action
+              is planned.
             </p>
             <p>
-              Mark reviewed and Archive submission move entries between
-              these sections. Neither sends a reply, deletes a record,
-              unsubscribes anyone, or publishes a contribution. You can
-              change the status later. Use the sender’s email link to reply.
+              Mark reviewed and Archive submission move entries between these
+              sections. Neither sends a reply, deletes a record, unsubscribes
+              anyone, or publishes a contribution. You can change the status
+              later. Use the sender’s email link to reply.
             </p>
           </details>
           <p id="configuration" class="notice" hidden></p>
@@ -246,14 +242,11 @@
               Enable browser alerts
             </button>
             <p id="notification-status" class="hint">
-              New counts update automatically. Browser alerts work while
-              this office tab is open. Email alerts are not connected.
+              New counts update automatically. Browser alerts work while this
+              office tab is open. Email alerts are not connected.
             </p>
           </div>
-          <nav
-            class="event-views inbox-views"
-            aria-label="Submission status"
-          >
+          <nav class="event-views inbox-views" aria-label="Submission status">
             <button
               type="button"
               data-inbox-status="new"
@@ -288,9 +281,7 @@
               >Type<select name="kind">
                 <option value="">All submissions</option>
                 <option value="join">Club signups</option>
-                <option value="subscribe">
-                  The AI Review subscription
-                </option>
+                <option value="subscribe">The AI Review subscription</option>
                 <option value="rsvp">Event RSVPs (upcoming only)</option>
                 <option value="rsvp-past">Event RSVPs (past)</option>
                 <option value="contribution">AI Review submissions</option>
@@ -304,13 +295,11 @@
             ><button type="submit">Apply</button>
           </form>
           <div class="toolbar">
-            <a id="export" href="/api/admin?export=csv"
-              >Export filtered CSV</a
-            >
+            <a id="export" href="/api/admin?export=csv">Export filtered CSV</a>
           </div>
           <p class="hint">
-            This inbox refreshes every minute while open. CSV exports
-            include up to 10,000 matching records.
+            This inbox refreshes every minute while open. CSV exports include up
+            to 10,000 matching records.
           </p>
           <div id="entries"></div>
           <section
@@ -339,8 +328,8 @@
               <button id="survey-reload">Refresh</button>
             </div>
             <p>
-              Detailed answers from event RSVPs. Results remain here after
-              an event ends or is archived.
+              Detailed answers from event RSVPs. Results remain here after an
+              event ends or is archived.
             </p>
             <label
               >Survey event<select id="survey-event">
@@ -365,8 +354,7 @@
               <p class="eyebrow">MAKE SOMETHING HAPPEN</p>
               <h2>Events</h2>
               <p>
-                From first idea to the club calendar. Draft, preview,
-                publish.
+                From first idea to the club calendar. Draft, preview, publish.
               </p>
             </div>
             <button id="new-event">
@@ -390,9 +378,7 @@
                   type="search"
                   placeholder="Search by title"
               /></label>
-              <button id="reload-events" class="secondary">
-                Refresh list
-              </button>
+              <button id="reload-events" class="secondary">Refresh list</button>
               <div id="event-list"></div>
             </aside>
             <div>
@@ -401,8 +387,7 @@
                 <h3>A place for your next idea.</h3>
                 <p>Choose an event to edit, or create a new one.</p>
                 <p class="hint">
-                  Archived events stay here for whenever you need them
-                  again.
+                  Archived events stay here for whenever you need them again.
                 </p>
               </div>
               <form id="event-form" hidden>
@@ -416,15 +401,8 @@
                   <p class="hint">
                     Saved changes, newest first. All times are Central.
                   </p>
-                  <ol
-                    id="event-activity-list"
-                    aria-label="Event activity"
-                  ></ol>
-                  <p
-                    id="event-activity-status"
-                    class="hint"
-                    role="status"
-                  ></p>
+                  <ol id="event-activity-list" aria-label="Event activity"></ol>
+                  <p id="event-activity-status" class="hint" role="status"></p>
                   <button
                     id="event-activity-more"
                     type="button"
@@ -437,10 +415,7 @@
                 <fieldset class="editor-section">
                   <legend><span>01</span> The essentials</legend>
                   <label
-                    >Event title<input
-                      name="title"
-                      maxlength="160"
-                      required
+                    >Event title<input name="title" maxlength="160" required
                   /></label>
                   <label
                     >Type<select name="category" required>
@@ -450,9 +425,8 @@
                   <details>
                     <summary>Manage event types</summary>
                     <p class="hint">
-                      Workshop, Meeting, Talk, or Hackathon covers most
-                      events. Only add a shared group when none of these
-                      fits.
+                      Workshop, Meeting, Talk, or Hackathon covers most events.
+                      Only add a shared group when none of these fits.
                     </p>
                     <label
                       >New type name<input
@@ -471,8 +445,8 @@
                     event</label
                   >
                   <p class="hint">
-                    Gather interest before plans are confirmed. Potential
-                    events can be published with a blank date, shown as TBD.
+                    Gather interest before plans are confirmed. Potential events
+                    can be published with a blank date, shown as TBD.
                   </p>
                   <p class="hint">
                     All times are Central. Leave the time blank if it is not
@@ -569,16 +543,16 @@
                   <legend><span>05</span> RSVP survey</legend>
                   <p class="hint">
                     Name and email are always collected. Add up to 20 custom
-                    questions. Changes apply to future RSVPs; earlier
-                    answers keep their original questions.
+                    questions. Changes apply to future RSVPs; earlier answers
+                    keep their original questions.
                   </p>
                   <label class="checkbox"
-                    ><input name="requireEduEmail" type="checkbox" />Require
-                    a college or alumni email ending in .edu</label
+                    ><input name="requireEduEmail" type="checkbox" />Require a
+                    college or alumni email ending in .edu</label
                   >
                   <p class="hint">
-                    Enabled by default when you choose Social. You can
-                    change this for each event.
+                    Enabled by default when you choose Social. You can change
+                    this for each event.
                   </p>
                   <label
                     >Introduction (optional)<textarea
@@ -618,11 +592,7 @@
                   </button>
                 </div>
                 <div class="event-actions secondary-actions">
-                  <button
-                    type="button"
-                    id="duplicate-event"
-                    class="secondary"
-                  >
+                  <button type="button" id="duplicate-event" class="secondary">
                     Duplicate event
                   </button>
                   <button
@@ -666,8 +636,8 @@
           <button id="close-site-preview">Close preview</button>
         </div>
         <p id="preview-note">
-          Private preview of your current edits. Nothing is published. Forms
-          are disabled.
+          Private preview of your current edits. Nothing is published. Forms are
+          disabled.
         </p>
         <div class="event-actions">
           <button id="preview-desktop" class="secondary">Desktop</button

@@ -568,10 +568,11 @@
 }
 .content .event-detail .event-agenda-list > li {
   display: grid;
-  grid-template-columns: 85px minmax(0, 1fr);
-  gap: 16px;
-  padding: 16px 0;
+  grid-template-columns: 76px minmax(0, 1fr);
+  gap: 12px;
+  padding: 10px 0;
   margin: 0;
+  line-height: 1.5;
   border-top: 1px solid var(--line);
 }
 .event-agenda-list > li:last-child {
@@ -585,11 +586,16 @@
   padding-top: 3px;
 }
 .event-agenda-list strong {
-  display: block;
+  display: inline;
 }
 .content .event-detail .event-agenda-list p {
-  margin: 5px 0 0;
+  display: inline;
+  margin: 0;
   font-size: 14px;
+  line-height: inherit;
+}
+.event-agenda-list p::before {
+  content: ' — ';
 }
 @media (max-width: 900px) {
   .events-layout {
@@ -631,8 +637,8 @@
     font-size: 28px;
   }
   .content .event-detail .event-agenda-list > li {
-    grid-template-columns: 62px minmax(0, 1fr);
-    gap: 12px;
+    grid-template-columns: 70px minmax(0, 1fr);
+    gap: 10px;
   }
   .event-detail-actions > :is(button, a) {
     max-width: 100%;

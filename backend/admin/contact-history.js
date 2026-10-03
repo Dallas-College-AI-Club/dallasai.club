@@ -40,6 +40,7 @@ export function contactHistory(api, onChange = () => {}) {
     new Option('Deleted', 'deleted'),
     new Option('All contacts', 'all'),
   );
+  view.setAttribute('aria-label', 'Show contacts');
   viewLabel.append(view);
   searchForm.append(label, viewLabel, find);
   const status = node('p');

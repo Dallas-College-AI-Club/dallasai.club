@@ -13,6 +13,8 @@ export function fail(res, error) {
     console.error('Club forms request failed', {
       code: error.code || 'internal',
     });
+  // A response that already started streaming cannot carry an error body.
+  if (res.headersSent) return res.destroy();
   return send(res, error instanceof RequestError ? error.status : 503, {
     error:
       error instanceof RequestError
@@ -63,10 +65,11 @@ export async function rawBody(req, max = 3000000) {
 export async function jsonBody(req, max = 3000000) {
   if (!/^application\/json(?:;|$)/i.test(req.headers['content-type'] || ''))
     throw new RequestError(415, 'Send JSON.');
-  let value = req.body;
-  if (value === undefined) value = await rawBody(req, max);
-  if (Buffer.isBuffer(value)) value = value.toString('utf8');
   try {
+    // Vercel's lazy body parser throws on malformed JSON when req.body is read.
+    let value = req.body;
+    if (value === undefined) value = await rawBody(req, max);
+    if (Buffer.isBuffer(value)) value = value.toString('utf8');
     if (typeof value === 'string') {
       if (Buffer.byteLength(value) > max)
         throw new RequestError(413, 'This submission is too large.');

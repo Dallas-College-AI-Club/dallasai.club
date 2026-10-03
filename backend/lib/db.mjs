@@ -17,19 +17,25 @@ export function database() {
   });
   return {
     query: (sql, values) => pool.query(sql, values),
-    async transaction(fn) {
-      const client = await pool.connect();
-      try {
-        await client.query('BEGIN');
-        const result = await fn(client);
-        await client.query('COMMIT');
-        return result;
-      } catch (error) {
-        await client.query('ROLLBACK');
-        throw error;
-      } finally {
-        client.release();
-      }
-    },
+    transaction: (fn) => transaction(pool, fn),
   };
+}
+// A failed ROLLBACK must not hide the original error, and its connection is
+// destroyed instead of returning to the pool in an unknown state.
+export async function transaction(pool, fn) {
+  const client = await pool.connect();
+  let broken;
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK').catch((rollbackError) => {
+      broken = rollbackError;
+    });
+    throw error;
+  } finally {
+    client.release(broken);
+  }
 }

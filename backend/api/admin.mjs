@@ -1,4 +1,4 @@
-import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { get, del } from '@vercel/blob';
 import { database } from '../lib/db.mjs';
 import { requireAdmin, adminOrigin } from '../lib/auth.mjs';
@@ -77,12 +77,7 @@ export function adminHandler({
             'Content-Disposition',
             `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
           );
-          await new Promise((resolve, reject) => {
-            const stream = Readable.fromWeb(blob.stream);
-            stream.on('error', reject);
-            res.on('finish', resolve);
-            stream.pipe(res);
-          });
+          await pipeline(blob.stream, res);
           return;
         }
         const savedEvents = (
@@ -197,8 +192,7 @@ export function adminHandler({
       });
       send(res, 200, { saved: true });
     } catch (error) {
-      if (!res.headersSent) fail(res, error);
-      else res.destroy();
+      fail(res, error);
     }
   };
 }

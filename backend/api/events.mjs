@@ -107,8 +107,7 @@ export function eventHandler({
         event: await saveEvent(getDatabase(), body, user.email, originals),
       });
     } catch (error) {
-      if (!res.headersSent) fail(res, error);
-      else res.destroy();
+      fail(res, error);
     }
   };
 }

@@ -713,6 +713,9 @@ try {
         ['Not answered'],
       );
       await page.reload();
+      await page.getByRole('button', {
+        name: 'Continue to questions →', exact: true,
+      }).click();
       await expect(
         page.getByRole('textbox', {
           name: 'Your feedback *',

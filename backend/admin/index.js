@@ -461,7 +461,11 @@ q('#signout').onclick = async () => {
   }
 };
 const editor = mountEventEditor(api);
-const surveys = mountSurveyResults(api);
+const surveys = mountSurveyResults(api, () => {
+  offset = 0;
+  commentDrafts.clear();
+  load();
+});
 const customSurveys = mountCustomSurveys(q('#custom-surveys-root'), api);
 const surveyArchive = mountSurveyArchive(q('#archived-survey-questions'), api);
 function surveyGroup(custom, id = '') {

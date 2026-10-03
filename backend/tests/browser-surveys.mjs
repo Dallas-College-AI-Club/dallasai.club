@@ -718,6 +718,12 @@ try {
       exact: true,
     })
     .waitFor();
+  await admin.waitForFunction(
+    () =>
+      !document
+        .querySelector('#entries')
+        .textContent.includes('Browser survey test'),
+  );
   assert.equal(
     (await db.query('SELECT count(*)::int n FROM club_forms.survey_responses'))
       .rows[0].n,

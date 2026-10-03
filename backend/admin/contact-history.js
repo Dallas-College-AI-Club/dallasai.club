@@ -260,7 +260,7 @@ export function contactHistory(api, onChange = () => {}) {
             result.purged && !result.filesDeleted
               ? 'Test contact and saved records permanently deleted. Attachment cleanup is pending and will retry automatically.'
               : message;
-        onChange();
+        onChange(result);
       } catch (error) {
         if (fresh()) {
           status.textContent = error.message;

@@ -12,9 +12,12 @@ const button = (text, handler) => {
   el.onclick = handler;
   return el;
 };
-export function mountSurveyResults(api) {
+export function mountSurveyResults(api, onContactPurge = () => {}) {
   const q = (s) => document.querySelector(s),
-    contacts = contactHistory(api, () => load());
+    contacts = contactHistory(api, (result) => {
+      load();
+      if (result.purged) onContactPurge();
+    });
   let offset = 0,
     entryId = '',
     generation = 0,

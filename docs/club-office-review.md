@@ -1,0 +1,262 @@
+# Club Office UI/UX review — October 3, 2026
+
+## Scope and method
+
+Reviewed `https://dallasai-leaderboard.vercel.app/admin/` ("Club Office") from an officer's point
+of view: how it is built, what gets in the way, what is broken and what to change.
+
+- **Production, read only.** Tab switches, scrolling and expanding panels only. Nothing was saved,
+  archived or published. All writes go through one POST helper, so opening a record does not change it.
+- **Local fixture, with changes.** Nine area reviewers (shell, inbox, contacts, events, event
+  surveys, custom surveys, accessibility, visual, reliability) read the code and drove
+  `tests/helpers/office-fixture.mjs` with synthetic records in Playwright. Each area then went to an
+  adversarial verifier, which re-ran the claims, corrected severities and added what was missed.
+- **Result.** 275 findings: 4 critical, 18 high, 139 medium, 114 low. One was refuted. Every item
+  with its file and line, impact, fix and verifier note is in
+  [club-office-review-backlog.md](club-office-review-backlog.md). This page groups them by root cause.
+
+Line numbers refer to commit `957abc6`.
+
+## How it is built
+
+- **Client.** A vanilla-JS single-page app in `backend/admin/`, about 7.7k lines: `index.html`,
+  `index.js`, 17 feature modules and a ~1.7k-line `style.css`. `scripts/build.mjs` bundles it with
+  esbuild into `backend/public/admin/`: a 128.6 KB module, 44 KB gzipped, of which about 30 KB is the
+  better-auth client.
+- **Server.** Vercel Node functions in `backend/api/` call `backend/lib/`, which uses Neon Postgres.
+  Officers sign in with an emailed one-time code through Neon Auth. A session lasts a fixed 72 hours
+  with refresh disabled. Every call also requires the Neon `admin` role.
+- **Requests.** All of them go through `api()` in `index.js:90-130`, which adds a 20 s timeout and
+  friendly errors. Any 401 calls `showLogin()`, which clears every module.
+- **Rendering.** Most modules rebuild their whole area with `replaceChildren()` after each fetch or
+  change. The inbox re-runs `load()` every 60 s (`index.js:814-817`).
+
+## What already works
+
+- **Server-side safety.** Most writes use optimistic revisions plus `requestId`/`commentId`
+  idempotency keys. Every status change, edit, download and comment lands in an attributed activity
+  timeline. Requests are checked for the same Origin, and filters and SQL are parameterized.
+- **Request hygiene.** `sessionGeneration`, stale-filter checks and `reloadPending` drop late or
+  superseded responses.
+- **Inbox.** Archive is reversible. Permanent delete is offered only for archived entries, with Cancel
+  focused first, and expanded rows stay open across reloads.
+- **CSV export.** It has a 10,000-row cap, a BOM for Excel, Central timestamps, formula-injection
+  escaping and an audit entry.
+- **Layout.** Nothing scrolls sideways from 320 px to 1440 px, the dark theme is solid, and all modals
+  are native `<dialog>`.
+
+Any redesign should keep this data model and these guards. The problems below are in the client.
+
+## What officers hit, by root cause
+
+### 1. An expired session wipes unsaved work (critical)
+
+`shell-1`, `events-1`, `events-27`, `reliability-1`, `inbox-27`, `contacts-m2`
+
+Any 401 runs `showLogin()` (`index.js:111-153`), which empties the event editor, survey builder,
+comment drafts and contact notes. The 60-second poll can trigger this while an officer is typing,
+with no click from them. The session is a fixed 72 hours and the client never shows its deadline
+(`shell-2`). An officer who signed in three days ago can lose a 30-minute event draft in one tick.
+
+**Fix.** On a 401, keep the module state in memory. Make `#office` inert and show a sign-in dialog
+over it with the email filled in, then retry the failed request. Clear data only on Sign out or when
+a different account signs in. A 401 from a background poll should show a banner, not sign the
+officer out. Also show "Signed in until …" and warn about 30 minutes before the cutoff. Keep the
+existing privacy test, but change it to expect drafts to survive a same-account sign-in.
+
+### 2. Typed text is dropped in other ways too (high)
+
+`inbox-1`, `inbox-10`, `reliability-8`, `reliability-9`, `reliability-29`, `contacts-4`, `visual-15`, `inbox-31`
+
+- **Status buttons.** Mark reviewed and Archive ignore a comment typed in the same card. The note is
+  never saved, and the hidden draft then freezes auto-refresh (`inbox-8`, `reliability-14`).
+- **Other actions.** Edit response, contact purge, Sign out, the logo link and failed attachment
+  links also drop comment drafts without a prompt.
+
+**Fix.** Offer "Add note & mark reviewed" as one transaction. Otherwise, save the draft first or ask.
+Add a `beforeunload` check that covers comment drafts, and open the logo and attachments in a new tab.
+
+### 3. Every action rebuilds the view, losing focus and scroll position (high)
+
+`a11y-1`, `a11y-3`, `a11y-4`, `event-surveys-5`, `custom-surveys-3`, `custom-surveys-13`,
+`reliability-3`, `reliability-11`, `inbox-17`, `events-12`
+
+Star, Archive, Mark reviewed, roster changes and builder steps all call `load()`/`render()`. Expanded
+cards collapse, the page jumps to the top and focus drops to `<body>`. In one test it took 31 Tab
+presses to get back to a reordered question. The event survey editor already restores focus
+(`survey-editor.js` `renderChoices(focusIndex)`), so the codebase has a pattern to follow.
+
+**Fix.** Update the affected card in place from the POST result. Where a full render is unavoidable,
+use one small helper that records the next focus target by id and restores it after the render.
+
+### 4. The Inbox's layout gets in the way of triage (high)
+
+`inbox-2`, `inbox-3`, `inbox-5`, `visual-1`, `visual-2`, `visual-8`, `visual-10`, `visual-12`,
+`visual-13`, `visual-25`, `inbox-4`, `inbox-11`, `inbox-12`, `inbox-13`
+
+- **Below the fold.** The first submission sits at y=1394 on desktop and y=1604 on a phone. A
+  marketing header, six count cards (which can't be clicked), two explainers, the alerts block,
+  status buttons and the filter form all come first, and none of them stay pinned.
+- **Hidden content.** Collapsed rows show only name, email and time. Reading one message takes two or
+  three disclosure clicks.
+- **No tools.** There is no search, no bulk action, no undo and no sort.
+- **Misfiled questions.** Questions about an event are filed inside that event's RSVP group.
+
+**Fix.**
+- A slim header with the type filters, status (with counts), search, Refresh and Export in a sticky
+  toolbar above a dense list.
+- Each row is about 48 px: a status dot, name, type, a subject or first line of the message, relative
+  time and inline Reviewed/Archive buttons.
+- Opening a row shows the message at once, with the human field labels that already exist in
+  `submission-editor.js:7-26`. Use a reading pane on wide screens and a full-screen sheet on phones.
+- Add checkboxes with bulk Mark reviewed/Archive, backed by `ids[]` in one transaction on the server.
+- Show a "N new — Show" pill instead of rebuilding the list in the background.
+- Move the help text into a "?" popover.
+
+### 5. Navigation state isn't kept (medium)
+
+`shell-8`, `shell-26`, `event-surveys-10`, `event-surveys-27`, `reliability-16`, `visual-26`
+
+- **Back.** Browser Back leaves Club Office.
+- **Reload.** It loses the sub-view, filters and open record.
+- **Tab switch.** It resets Surveys to Event surveys and clears its search and filters.
+
+**Fix.** Put pane, sub-view, filters and the open record in the URL with `history.pushState`, and
+restore from it on load.
+
+### 6. Status messages are hard to trust (medium)
+
+`shell-12`, `a11y-6`, `visual-7`, `reliability-4`, `shell-3`, `shell-4`
+
+- **Stale banner.** The sticky `#status` banner never clears, follows the officer across tabs and
+  looks the same for success and failure.
+- **Misleading sign-in prompts.** A cold-start 5xx shows the sign-in form. An approved email without
+  the Neon `admin` role loops on "Your session ended".
+
+**Fix.** Show messages as toasts with distinct success and error styles that close on their own. Treat
+"could not load" as its own state with a Retry button. Explain the missing role in words.
+
+### 7. The event editor punishes normal habits (high)
+
+`events-2`, `events-3`, `events-5`, `events-6`, `events-7`, `events-9`, `events-13`, `events-28`,
+`reliability-25`, `reliability-26`
+
+- **Enter.** Pressing Enter in any one-line field saves a draft and leaves the editor, because
+  `form.onsubmit` treats it as Save draft (`event-editor.js:492-495`). Enter in "New type name"
+  never adds the type.
+- **Saving.** Every Save or Publish ends editing. Validation comes from the server one error at a
+  time and points at no field. Publish asks for no confirmation.
+- **Hidden actions.** Archive, Unpublish and Duplicate show only in edit mode.
+- **Type change.** Changing Type silently overwrites the .edu email requirement.
+- **Stale event.** Returning to the tab leaves the open event stale, so the next Save hits a
+  guaranteed 409. Event saves have no idempotency key.
+
+**Fix.**
+- Block implicit submit.
+- Stay in edit mode after saving and add autosave to a local backup.
+- Validate on the client per field, and fill in `aria-invalid`.
+- Confirm Publish with a summary of what changes on the live site.
+- Show lifecycle actions in view mode.
+- Refetch the open event when the tab is shown, and add a `requestId` to event saves.
+
+### 8. Surveys answer the wrong questions (high)
+
+`event-surveys-2`, `event-surveys-12`, `event-surveys-13`, `custom-surveys-4`, `custom-surveys-6`,
+`custom-surveys-5`, `custom-surveys-10`, `event-surveys-1`
+
+- **RSVP counts.** No screen answers "how many RSVPs for event X". RSVPs without survey rows drop out
+  of Surveys.
+- **Two archives.** The same RSVP has two unrelated "Archive" states, one in the Inbox and one in
+  Surveys. From Surveys, an RSVP still New in the Inbox can be deleted permanently.
+- **Custom-survey gaps.** Results have no summary or CSV export. Respondents are added one at a time,
+  each add reloads the page, and drafts can't be deleted or duplicated.
+- **Wrong totals.** "Any of these" counting marks contradictory options as chosen.
+
+**Fix.**
+- Make the Event surveys landing an event table: RSVPs, answered surveys, newest RSVP, and links to
+  responses, summary and CSV.
+- Give each RSVP one triage state shared by both views.
+- Reuse the event-survey summary and CSV code for custom surveys, and add a "Paste emails" roster
+  import.
+
+### 9. Contacts sit outside the triage flow (high)
+
+`contacts-1`, `contacts-2`, `contacts-8`, `contacts-11`, `contacts-19`, `contacts-20`
+
+- **Not on Inbox cards.** Inbox cards have no link to the person's history.
+- **Unsafe merge.** Merging the wrong person is easy, the candidate cards look alike and it can't be
+  undone. The original contact row survives a merge, so an unlink is feasible.
+- **Search.** It runs only when the officer presses Search.
+- **Dead end.** "Open submission" closes the dialog with no way back to the person.
+
+**Fix.**
+- Add a "Contact history" button and a "returning contact" line to Inbox cards.
+- Enrich merge candidates, preview the merge and add "Unlink this address".
+- Make search run as the officer types.
+- Turn the person view into a profile with a note composer at the top.
+
+### 10. Visual system and accessibility (medium)
+
+`visual-4`, `visual-5`, `visual-9`, `visual-14`, `visual-16`, `a11y-2`, `a11y-5`, `a11y-7`,
+`a11y-8`, `a11y-9`, `a11y-10`
+
+- **Buttons.** Button weight is close to random. A CSS rule forces everything in `.entry-actions` to
+  the secondary style, so danger buttons look neutral.
+- **Contrast.** Field borders are about 1.3:1, which fails WCAG 1.4.11.
+- **Tabs and headings.** The tabs are `aria-pressed` buttons, not a tablist. The Inbox has no
+  headings below the `h1`.
+- **Hidden focus.** The sticky Save bar hides the focused field.
+- **Selects.** Answer-type selects re-render on `change`, so the arrow keys work once.
+
+**Fix.** Allow one primary action per view and make destructive actions red. Raise the border
+contrast. Use tab semantics or plain links. Add headings and accessible names to groups and entries.
+Add `scroll-padding-bottom` for the sticky bar.
+
+### Security and privacy items
+
+- **`custom-surveys-1` (high).** A public "verified" survey that shares results with respondents shows
+  each respondent's email as their name, because `rememberDevice` stores `user.name || user.email`
+  (`lib/custom-surveys.mjs:112`). Anyone who verifies any email can then read the others. Reproduced
+  in the fixture only. Production depends on whether Neon leaves `user.name` empty for OTP sign-ups.
+- **`event-surveys-13`.** Covered under root cause 8: an RSVP still New in the Inbox can be deleted
+  permanently from Surveys.
+- **`event-surveys-16`.** Survey CSV exports aren't written to the audit log.
+- **`contacts-13`.** Real people have no erasure path, and purges leave no receipt.
+- **`inbox-26`.** "Export filtered CSV" exports the last filters applied, not what the dropdowns
+  show. It can include other events' attendees.
+
+### Seen on production (read-only)
+
+- On a phone, the first inbox entry starts about 1,465 px down.
+- Expanded entries repeat the email and timestamp, show filler such as "Received in club inbox" and
+  nest panels four levels deep.
+- Event dates appear in three different formats.
+- The Active events list includes 19 past events (`events-15`).
+- Reloading the page loses the Custom surveys sub-tab.
+- "Contacts & follow-up" is a whole workspace squeezed into a dialog.
+- Plurals are wrong in places, such as "1 website submissions".
+
+## Strategy
+
+Fix data loss first, then let officers keep their place, then rework the Inbox, then the rest.
+Each phase can ship on its own.
+
+| Phase | Goal | Main items | Size |
+| --- | --- | --- | --- |
+| 0 | Stop losing work and data | Sign-in dialog on 401 with state kept (1). Comment + status in one action, `beforeunload` for drafts (2). Block implicit submit in the event editor. Hide respondent emails (`custom-surveys-1`). Export what the filters show (`inbox-26`). Block permanent delete of New RSVPs from Surveys. Add a `requestId` to event saves | S–M each |
+| 1 | Keep the officer's place | In-place card updates and a focus-restore helper (3). Toasts that clear (6). Navigation state in the URL (5). Separate "could not load" from "signed out" | M |
+| 2 | Rework the Inbox for triage | Slim header, sticky toolbar with search, dense rows with previews, reading pane or sheet, bulk actions, a "N new" pill, help in a popover, questions filed under Questions (4). Contact history on cards (9) | L |
+| 3 | Fix the Events and Surveys workflows | Stay in edit mode after saving, autosave, field-level validation, Publish confirmation, RSVP counts on events (7). Event overview table, one shared RSVP state, custom-survey summary, CSV and roster paste (8) | M–L |
+| 4 | Finish | Contacts profile view, merge preview and unlink, follow-up state (9). Tab semantics, headings, contrast and button hierarchy (10). Erasure path and export auditing | M |
+
+Phase 0 needs no layout changes and closes every critical item. Phase 1's focus helper and in-place
+updates set up Phase 2. Without them, the redesigned Inbox would keep the same focus and scroll bugs.
+
+## Still open
+
+- **Completeness critic.** The workflow's last agent was still running at handoff. Its output is not
+  in this document or the backlog.
+- **Code-quality pass.** The officer also asked how to simplify the code and remove stale code. That
+  analysis had only just started and has no results yet.
+- **Not exercised.** Real Vercel Blob image storage, the public-site preview iframe and production
+  Neon behaviour for `user.name`, because the fixture has no blob token or public site.

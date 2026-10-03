@@ -7,12 +7,14 @@ import { mountEventEditor } from './event-editor.js';
 import { mountBrowserAlerts } from './browser-alerts.js';
 import { submissionActivity } from './submission-activity.js';
 import { activityTime } from './event-activity.js';
+import { submissionEditor } from './submission-editor.js';
 const auth = createAuthClient({ plugins: [emailOTPClient()] }),
   q = (s) => document.querySelector(s);
 const labels = {
   join: 'Club signups',
   subscribe: 'The AI Review subscription',
   rsvp: 'Event RSVPs (upcoming only)',
+  'rsvp-past': 'Event RSVPs (past)',
   contribution: 'AI Review submissions',
   workshop: 'Workshop requests',
   question: 'Questions',
@@ -78,6 +80,7 @@ function showLogin() {
   surveys.clear();
   customSurveys.clear();
   surveyArchive.clear();
+  responses.clear();
   q('#surveys-pane').hidden = true;
 }
 function filters() {
@@ -89,12 +92,21 @@ function filters() {
   if (entry) {
     params.set('id', entry);
     params.delete('status');
+    params.delete('kind');
+    params.delete('eventId');
   }
   return params;
 }
 function renderEntry(entry) {
-  const card = node('article', undefined, 'entry');
+  const card = node('details', undefined, 'entry survey-response');
   card.id = 'entry-' + entry.id;
+  const heading = node('summary');
+  heading.append(
+    node('strong', entry.name || entry.email),
+    node('span', entry.email),
+    node('small', activityTime(entry.created_at)),
+  );
+  card.append(heading);
   const top = node('div', undefined, 'entry-top');
   top.append(
     node(
@@ -102,10 +114,21 @@ function renderEntry(entry) {
       entry.review_status === 'closed' ? 'archived' : entry.review_status,
       'badge ' + entry.review_status,
     ),
-    node('span', labels[entry.kind]),
+    node(
+      'span',
+      entry.kind === 'rsvp' ? 'Event RSVP' : labels[entry.kind],
+    ),
     node('span', activityTime(entry.created_at)),
   );
-  card.append(top, node('h2', entry.name || entry.email));
+  card.append(top);
+  if (entry.edit_revision > 0)
+    card.append(
+      node(
+        'p',
+        'Edited by an admin · ' + activityTime(entry.updated_at),
+        'hint',
+      ),
+    );
   const address = node('a', entry.email);
   address.href = 'mailto:' + entry.email;
   card.append(
@@ -153,6 +176,14 @@ function renderEntry(entry) {
   details.append(node('p', 'Reference: ' + entry.id));
   card.append(details);
   const actions = node('div', undefined, 'entry-actions');
+  const edit = node('button', 'Edit response');
+  edit.onclick = () => responses.open(entry.id);
+  actions.append(edit);
+  if (entry.review_status === 'closed') {
+    const remove = node('button', 'Delete permanently', 'danger');
+    remove.onclick = () => responses.open(entry.id, { remove: true });
+    actions.append(remove);
+  }
   for (const [value, label] of [
     ['reviewed', 'Mark reviewed'],
     ['closed', 'Archive submission'],
@@ -185,13 +216,44 @@ function renderEntry(entry) {
   card.append(actions, submissionActivity(entry, api, commentDrafts));
   return card;
 }
+function groupedEntries(entries) {
+  const groups = new Map();
+  for (const entry of entries) {
+    const key = entry.data.eventId
+      ? 'event:' + entry.data.eventId
+      : 'kind:' + entry.kind;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(entry);
+  }
+  return [...groups].map(([key, rows]) => {
+    const group = node(
+      'details',
+      undefined,
+      'survey-event-group inbox-group',
+    );
+    group.dataset.group = key;
+    group.open = true;
+    group.append(
+      node(
+        'summary',
+        (rows[0].data.eventTitle || labels[rows[0].kind]) +
+          ' · ' +
+          rows.length +
+          ' on this page',
+      ),
+      ...rows.map(renderEntry),
+    );
+    return group;
+  });
+}
 async function load({ background = false } = {}) {
   if (loading) {
     reloadPending ||= !background;
     return;
   }
   loading = true;
-  if (location.hash === '#archived-survey-questions') selectSurveyArchive();
+  if (location.hash === '#archived-survey-questions')
+    selectSurveyArchive();
   const generation = sessionGeneration,
     requestedFilters = filters().toString();
   q('#entries').setAttribute('aria-busy', 'true');
@@ -203,7 +265,14 @@ async function load({ background = false } = {}) {
       reloadPending = true;
       return;
     }
-    const linkedId = new URLSearchParams(location.hash.slice(1)).get('entry');
+    if (!data.entries.length && offset > 0) {
+      offset = Math.max(0, offset - 50);
+      reloadPending = true;
+      return;
+    }
+    const linkedId = new URLSearchParams(location.hash.slice(1)).get(
+      'entry',
+    );
     const linkedEntry =
       linkedId && data.entries.find((entry) => entry.id === linkedId);
     if (linkedEntry) selectInboxStatus(linkedEntry.review_status);
@@ -215,7 +284,8 @@ async function load({ background = false } = {}) {
     q('#identity').textContent = 'Signed in as ' + data.user;
     const newCount = data.counts.reduce((sum, row) => sum + row.new, 0);
     document.title =
-      (newCount ? '(' + newCount + ') ' : '') + 'Club office · Dallas AI Club';
+      (newCount ? '(' + newCount + ') ' : '') +
+      'Club office · Dallas AI Club';
     const latest = Math.max(
       0,
       ...data.counts.map((row) => Date.parse(row.latest) || 0),
@@ -231,16 +301,24 @@ async function load({ background = false } = {}) {
     lastNewCount = newCount;
     lastReceived = latest;
     const eventSelect = q('#filters [name="eventId"]'),
-      selectedEvent = eventSelect.value;
+      selectedEvent = eventSelect.value,
+      past = q('#filters [name="kind"]').value === 'rsvp-past';
     eventSelect.replaceChildren(
-      new Option('All upcoming events', ''),
-      ...(data.events || []).map(
-        (e) =>
-          new Option(e.title + ' · ' + (e.date?.slice(0, 10) || 'TBD'), e.id),
-      ),
+      new Option(past ? 'All past events' : 'All upcoming events', ''),
+      ...(data.events || [])
+        .filter((e) => Boolean(e.past) === past)
+        .map(
+          (e) =>
+            new Option(
+              e.title + ' · ' + (e.date?.slice(0, 10) || 'TBD'),
+              e.id,
+            ),
+        ),
     );
     if (
-      [...eventSelect.options].some((option) => option.value === selectedEvent)
+      [...eventSelect.options].some(
+        (option) => option.value === selectedEvent,
+      )
     )
       eventSelect.value = selectedEvent;
     if (location.hash === '#events' && q('#events-pane').hidden)
@@ -275,33 +353,56 @@ async function load({ background = false } = {}) {
       'Setup still needed: ' + missing.join(', ') + '.';
     if (
       !background ||
-      (!commentDrafts.size && !q('#entries').contains(document.activeElement))
+      (!commentDrafts.size &&
+        !q('#entries').contains(document.activeElement))
     ) {
       const expanded = new Map(
-        [...q('#entries').children].map((card) => [
-          card.id,
-          [...card.querySelectorAll('details')].map((panel) => panel.open),
-        ]),
+        [...q('#entries').querySelectorAll('[id^="entry-"]')].map(
+          (card) => [
+            card.id,
+            [
+              card.open,
+              ...[...card.querySelectorAll('details')].map(
+                (panel) => panel.open,
+              ),
+            ],
+          ],
+        ),
+      );
+      const groupStates = new Map(
+        [...q('#entries').querySelectorAll('[data-group]')].map(
+          (group) => [group.dataset.group, group.open],
+        ),
       );
       q('#entries').replaceChildren(
         ...(data.entries.length
-          ? data.entries.map(renderEntry)
+          ? groupedEntries(data.entries)
           : [node('p', 'No submissions match these filters.')]),
       );
-      for (const card of q('#entries').children)
+      for (const group of q('#entries').querySelectorAll('[data-group]'))
+        group.open = groupStates.get(group.dataset.group) ?? true;
+      for (const card of q('#entries').querySelectorAll(
+        '[id^="entry-"]',
+      )) {
+        card.open = expanded.get(card.id)?.[0] || false;
         [...card.querySelectorAll('details')].forEach((panel, index) => {
-          panel.open = expanded.get(card.id)?.[index] || false;
+          panel.open = expanded.get(card.id)?.[index + 1] || false;
         });
+      }
     }
     q('#previous').disabled = offset === 0;
     q('#next').disabled = !data.hasMore;
     q('#page').textContent = 'Page ' + (offset / 50 + 1);
     q('#export').href = '/api/admin?' + filters() + '&export=csv';
     surveyArchive.load(filters(), { background });
-    const linked = new URLSearchParams(location.hash.slice(1)).get('entry');
+    const linked = new URLSearchParams(location.hash.slice(1)).get(
+      'entry',
+    );
     if (linked) {
       const card = document.getElementById('entry-' + linked);
       if (card) {
+        card.open = true;
+        card.closest('.inbox-group').open = true;
         card.querySelector('details').open = true;
         card.scrollIntoView({ block: 'center' });
         history.replaceState({}, '', location.pathname);
@@ -330,7 +431,8 @@ function selectInboxStatus(value) {
   });
   q('#inbox-view-note').textContent = {
     new: 'New submissions awaiting review.',
-    reviewed: 'Reviewed submissions. Archive them when follow-up is complete.',
+    reviewed:
+      'Reviewed submissions. Archive them when follow-up is complete.',
     closed:
       'Archived submissions. Comments and history are kept. Mark an entry new or reviewed to restore it.',
   }[value];
@@ -397,7 +499,10 @@ async function sendCode(email) {
 }
 q('#login-form').onsubmit = async (event) => {
   event.preventDefault();
-  const email = new FormData(event.target).get('email').trim().toLowerCase();
+  const email = new FormData(event.target)
+    .get('email')
+    .trim()
+    .toLowerCase();
   loginBusy(true);
   status();
   try {
@@ -452,7 +557,8 @@ q('#signout').onclick = async () => {
   sessionGeneration++;
   try {
     const result = await auth.signOut();
-    if (result.error) throw new Error('Could not sign out. Please try again.');
+    if (result.error)
+      throw new Error('Could not sign out. Please try again.');
     showLogin();
     q('#login-form').reset();
     status('Signed out.');
@@ -461,13 +567,28 @@ q('#signout').onclick = async () => {
   }
 };
 const editor = mountEventEditor(api);
-const surveys = mountSurveyResults(api, () => {
+const responses = submissionEditor(api, async (result) => {
+  commentDrafts.delete(result.entryId);
+  await load();
+  status(
+    result.removed
+      ? result.filesCleaned === false
+        ? 'Response deleted. Attachment removal is queued for retry.'
+        : 'Response permanently deleted.'
+      : 'Response updated.',
+  );
+});
+const surveys = mountSurveyResults(api, (result) => {
   offset = 0;
-  commentDrafts.clear();
+  if (result?.entryId) commentDrafts.delete(result.entryId);
+  else commentDrafts.clear();
   load();
 });
 const customSurveys = mountCustomSurveys(q('#custom-surveys-root'), api);
-const surveyArchive = mountSurveyArchive(q('#archived-survey-questions'), api);
+const surveyArchive = mountSurveyArchive(
+  q('#archived-survey-questions'),
+  api,
+);
 function surveyGroup(custom, id = '') {
   q('#custom-surveys-root').hidden = !custom;
   q('#event-surveys-root').hidden = custom;
@@ -484,7 +605,10 @@ function showPane(name, keepHash = false) {
   if (name !== 'events' && !editor.canLeave()) return false;
   for (const pane of ['inbox', 'events', 'surveys']) {
     q('#' + pane + '-pane').hidden = name !== pane;
-    q('#' + pane + '-tab').setAttribute('aria-pressed', String(name === pane));
+    q('#' + pane + '-tab').setAttribute(
+      'aria-pressed',
+      String(name === pane),
+    );
   }
   if (!keepHash)
     history.replaceState(
@@ -531,7 +655,10 @@ window.addEventListener('hashchange', () => {
     showPane('surveys', true);
     return;
   }
-  if (!signedIn || !new URLSearchParams(location.hash.slice(1)).get('entry'))
+  if (
+    !signedIn ||
+    !new URLSearchParams(location.hash.slice(1)).get('entry')
+  )
     return;
   if (showPane('inbox', true) === false) return;
   offset = 0;
@@ -553,9 +680,11 @@ q('#filters').onsubmit = (event) => {
   load();
 };
 q('#filters [name="kind"]').onchange = () => {
-  const rsvp = q('#filters [name="kind"]').value === 'rsvp';
+  const rsvp = ['rsvp', 'rsvp-past'].includes(
+    q('#filters [name="kind"]').value,
+  );
   q('#event-filter-label').hidden = !rsvp;
-  if (!rsvp) q('#filters [name="eventId"]').value = '';
+  q('#filters [name="eventId"]').value = '';
   offset = 0;
   load();
 };
@@ -577,7 +706,8 @@ auth
     if (data?.user) load();
     else {
       showLogin();
-      if (error) status('Could not verify your sign-in. Please try again.');
+      if (error)
+        status('Could not verify your sign-in. Please try again.');
     }
   })
   .catch(() => {

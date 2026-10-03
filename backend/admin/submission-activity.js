@@ -5,6 +5,7 @@ const actions = {
   'review:closed': 'Archived submission',
   'download-attachment': 'Downloaded an attachment',
   'comment-added': 'Added a comment',
+  'submission-edited': 'Edited response',
 };
 const node = (tag, text, className) => {
   const element = document.createElement(tag);
@@ -18,7 +19,7 @@ export function submissionActivity(entry, api, drafts) {
   panel.append(
     node(
       'p',
-      'Visible to all authorized club admins. Status changes, comments, and attachment downloads are recorded here. Times are Central.',
+      'Visible to all authorized club admins. Edits, status changes, comments, and attachment downloads are recorded here. Times are Central.',
       'hint',
     ),
   );

@@ -282,6 +282,7 @@
                 <option value="join">Club signups</option>
                 <option value="subscribe">The AI Review subscription</option>
                 <option value="rsvp">Event RSVPs (upcoming only)</option>
+                <option value="rsvp-past">Event RSVPs (past)</option>
                 <option value="contribution">AI Review submissions</option>
                 <option value="workshop">Workshop requests</option>
                 <option value="question">Questions</option>
@@ -300,7 +301,11 @@
             to 10,000 matching records.
           </p>
           <div id="entries"></div>
-          <section id="archived-survey-questions" aria-label="Archived survey question responses" hidden></section>
+          <section
+            id="archived-survey-questions"
+            aria-label="Archived survey question responses"
+            hidden
+          ></section>
           <nav class="pagination" aria-label="Submission pages">
             <button id="previous">Previous</button><span id="page"></span
             ><button id="next">Next</button>

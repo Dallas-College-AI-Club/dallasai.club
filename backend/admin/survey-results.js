@@ -1,5 +1,6 @@
 import { activityTime } from './event-activity.js';
 import { contactHistory } from './contact-history.js';
+import { submissionEditor } from './submission-editor.js';
 const node = (tag, text, cls) => {
   const el = document.createElement(tag);
   if (text !== undefined) el.textContent = text;
@@ -13,6 +14,15 @@ const button = (text, handler) => {
   return el;
 };
 export function mountSurveyResults(api, onContactPurge = () => {}) {
+  const editor = submissionEditor(api, async (result) => {
+    await load();
+    onContactPurge(result);
+    document.querySelector('#survey-status').textContent = result.removed
+      ? result.filesCleaned === false
+        ? 'Response deleted. Attachment removal is queued for retry.'
+        : 'Response permanently deleted.'
+      : 'Response updated.';
+  });
   const q = (s) => document.querySelector(s),
     contacts = contactHistory(api, (result) => {
       load();
@@ -68,7 +78,12 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
   reportHeading.tabIndex = -1;
   reportDialog.setAttribute('aria-labelledby', reportHeading.id);
   reportStatus.setAttribute('role', 'status');
-  reportHeader.append(reportHeading, reportExport, reportClose, reportStatus);
+  reportHeader.append(
+    reportHeading,
+    reportExport,
+    reportClose,
+    reportStatus,
+  );
   reportDialog.append(reportHeader, report);
   document.body.append(reportDialog);
   function clearReport() {
@@ -300,7 +315,9 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
     status.setAttribute('role', 'status');
     async function manage(action, value) {
       const version = generation;
-      actions.querySelectorAll('button').forEach((b) => (b.disabled = true));
+      actions
+        .querySelectorAll('button')
+        .forEach((b) => (b.disabled = true));
       try {
         await api('/api/surveys', {
           entryId: response.entry_id,
@@ -336,15 +353,33 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
         manage('archive', !response.archived_at),
       ),
       button('Contact history', () => contacts.open(response.email)),
+      button('Edit response', () =>
+        editor.open(response.entry_id, { surface: 'survey' }),
+      ),
     );
+    if (response.archived_at) {
+      const remove = button('Delete permanently', () =>
+        editor.open(response.entry_id, {
+          surface: 'survey',
+          remove: true,
+        }),
+      );
+      remove.classList.add('danger');
+      actions.append(remove);
+    }
     el.append(
       actions,
       status,
-      node('p', 'Event date: ' + (response.event_date?.slice(0, 10) || 'TBD')),
+      node(
+        'p',
+        'Event date: ' + (response.event_date?.slice(0, 10) || 'TBD'),
+      ),
     );
     const answers = node('dl');
     for (const question of response.questions) {
-      const answer = response.answers.find((a) => a.questionId === question.id);
+      const answer = response.answers.find(
+        (a) => a.questionId === question.id,
+      );
       const values = (
         Array.isArray(answer?.value) ? answer.value : [answer?.value || '']
       )
@@ -380,13 +415,17 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
         new Option('All events, including past events', ''),
         ...data.events.map(
           (e) =>
-            new Option(e.title + ' · ' + (e.date?.slice(0, 10) || 'TBD'), e.id),
+            new Option(
+              e.title + ' · ' + (e.date?.slice(0, 10) || 'TBD'),
+              e.id,
+            ),
         ),
       );
       q('#survey-event').value = eventId;
       const groups = new Map();
       for (const response of data.responses) {
-        if (!groups.has(response.event_id)) groups.set(response.event_id, []);
+        if (!groups.has(response.event_id))
+          groups.set(response.event_id, []);
         groups.get(response.event_id).push(response);
       }
       for (const [id, rows] of groups) {
@@ -457,6 +496,7 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
       entryId = '';
       offset = 0;
       contacts.clear();
+      editor.clear();
       closeReport();
       q('#survey-results').replaceChildren();
       q('#survey-event').replaceChildren(

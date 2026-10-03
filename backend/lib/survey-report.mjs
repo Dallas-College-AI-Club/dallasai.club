@@ -4,7 +4,9 @@ import { responseFilter, responseSelect } from './survey-management.mjs';
 export const answerValues = (answer) =>
   (Array.isArray(answer?.value) ? answer.value : [answer?.value || ''])
     .filter(Boolean)
-    .map((value) => (value === '__other__' ? 'Other: ' + answer.other : value));
+    .map((value) =>
+      value === '__other__' ? 'Other: ' + answer.other : value,
+    );
 export async function reportRows(db, filter) {
   const { where, values } = responseFilter(filter);
   // Never silently export or summarize only the visible page.
@@ -36,13 +38,14 @@ export function summarizeResponses(rows) {
           ...q,
           answered: 0,
           skipped: 0,
-          choices: [...q.options, ...(q.allowOther ? ['__other__'] : [])].map(
-            (value) => ({
-              value,
-              label: value === '__other__' ? 'Other' : value,
-              count: 0,
-            }),
-          ),
+          choices: [
+            ...q.options,
+            ...(q.allowOther ? ['__other__'] : []),
+          ].map((value) => ({
+            value,
+            label: value === '__other__' ? 'Other' : value,
+            count: 0,
+          })),
           written: [],
         })),
       });
@@ -90,7 +93,12 @@ export function responsesCSV(rows) {
         ...q,
         version: row.survey_version,
       });
-  const columns = [...questions.values()];
+  const columns = [...questions.values()].flatMap((q) => [
+    { question: q, option: null },
+    ...(q.type === 'multiple'
+      ? q.options.map((option) => ({ question: q, option }))
+      : []),
+  ]);
   const header = [
     'Event',
     'Event date',
@@ -100,7 +108,13 @@ export function responsesCSV(rows) {
     'Starred',
     'Archived',
     'Question version',
-    ...columns.map((q) => q.label + ' [' + q.version.slice(0, 8) + ']'),
+    ...columns.map(
+      ({ question: q, option }) =>
+        (option === null ? q.label : q.label + ' — ' + option) +
+        ' [' +
+        q.version.slice(0, 8) +
+        ']',
+    ),
   ];
   const lines = rows.map((row) => [
     row.event_title,
@@ -111,17 +125,33 @@ export function responsesCSV(rows) {
     row.starred ? 'Yes' : 'No',
     row.archived_at ? 'Yes' : 'No',
     row.survey_version,
-    ...columns.map((q) =>
-      q.version === row.survey_version
-        ? answerValues(row.answers.find((a) => a.questionId === q.id)).join(
-            '\n',
-          )
-        : '',
-    ),
+    ...columns.map(({ question: q, option }) => {
+      if (q.version !== row.survey_version) return '';
+      const answer = row.answers.find((a) => a.questionId === q.id);
+      if (option === null) return answerValues(answer).join('; ');
+      if (!answer?.value?.length) return '';
+      const selected = answer.value.includes(option);
+      const any = answer.value.includes('Any of these');
+      const individual =
+        option !== 'Any of these' && !/^(none\b|not sure\b)/i.test(option);
+      return selected
+        ? 'Yes'
+        : any && individual
+          ? 'Yes (Any of these)'
+          : 'No';
+    }),
   ]);
   return (
     '\uFEFF' +
-    [header, ...lines].map((line) => line.map(csvCell).join(',')).join('\r\n') +
+    [header, ...lines]
+      .map((line) =>
+        line
+          .map((value) =>
+            csvCell(String(value ?? '').replace(/[\r\n]+/g, ' ')),
+          )
+          .join(','),
+      )
+      .join('\r\n') +
     '\r\n'
   );
 }

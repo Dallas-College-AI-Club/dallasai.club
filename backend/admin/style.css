@@ -995,25 +995,6 @@ input::file-selector-button {
   flex: 1;
   min-width: 220px;
 }
-.custom-survey-comparison {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 20px;
-}
-.custom-survey-answer {
-  border-top: 1px solid var(--line, #494454);
-  margin-top: 20px;
-  padding-top: 16px;
-}
-.custom-survey-answer p {
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-@media (max-width: 750px) {
-  .custom-survey-comparison {
-    grid-template-columns: 1fr;
-  }
-}
 .respondent-management {
   margin: 24px 0;
 }
@@ -1297,19 +1278,6 @@ input::file-selector-button {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   line-height: 1.75;
-}
-.response-archive {
-  margin-top: 16px;
-  border-top: 1px solid var(--line);
-  padding-top: 20px;
-}
-.response-archive > summary {
-  cursor: pointer;
-  font-weight: 600;
-  padding: 8px 0;
-}
-.response-archive .response-person {
-  margin-top: 16px;
 }
 .response-empty {
   margin: 12px 0;

@@ -62,7 +62,7 @@ export function mountSurveyArchive(root, api) {
       }
       const pages = node('nav');
       pages.setAttribute('aria-label', 'Archived survey response pages');
-      const pageSize = data.pageSize || 20;
+      const { pageSize } = data;
       for (const [label, disabled, next] of [
         ['Previous archived responses', offset === 0, offset - pageSize],
         ['Next archived responses', !data.hasMore, offset + pageSize],

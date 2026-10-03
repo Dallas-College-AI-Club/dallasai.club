@@ -11,10 +11,7 @@ export function partitionResponses(results) {
     archived: submitted.filter((r) => r.active === false),
   };
 }
-export function responseSections(
-  results,
-  { includeArchived = false, definition } = {},
-) {
+export function responseSections(results, { definition } = {}) {
   const root = node('div', undefined, 'response-groups'),
     groups = partitionResponses(results);
   const questions = definition?.questions || [],
@@ -81,18 +78,5 @@ export function responseSections(
     );
   for (const r of groups.active)
     root.append(person(r, groups.active.length === 1));
-  if (includeArchived && groups.archived.length) {
-    const archive = node('details', undefined, 'response-archive');
-    archive.append(
-      node('summary', `Archived responses (${groups.archived.length})`),
-      node(
-        'p',
-        'Saved responses from archived respondents. Their survey access has ended.',
-        'response-meta',
-      ),
-    );
-    for (const r of groups.archived) archive.append(person(r, false));
-    root.append(archive);
-  }
   return root;
 }

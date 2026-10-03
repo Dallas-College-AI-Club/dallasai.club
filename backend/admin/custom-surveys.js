@@ -73,16 +73,16 @@ export function mountCustomSurveys(root, api) {
               encodeURIComponent(selected),
           );
           if (current !== generation || request !== requestGeneration) return;
+          const survey = surveys.find((s) => s.id === selected);
           content.replaceChildren(
             node(
               'p',
-              'Current shared responses · read-only. Each new submission replaces the advisor’s previous shared summary.',
+              survey.definition
+                ? 'Saved responses · read-only. Each new submission replaces the respondent’s previous response.'
+                : 'Current shared responses · read-only. Each new submission replaces the advisor’s previous shared summary.',
             ),
           );
-          const survey = surveys.find((s) => s.id === selected);
           if (survey.definition) {
-            content.firstChild.textContent =
-              'Saved responses · read-only. Each new submission replaces the respondent’s previous response.';
             if (survey.status === 'draft') {
               const resume = node('button', 'Continue editing draft');
               resume.onclick = () => edit(survey.id);

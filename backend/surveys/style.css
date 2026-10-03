@@ -1872,19 +1872,6 @@ input:invalid {
   overflow-wrap: anywhere;
   line-height: 1.75;
 }
-.response-archive {
-  margin-top: 16px;
-  border-top: 1px solid var(--line);
-  padding-top: 20px;
-}
-.response-archive > summary {
-  cursor: pointer;
-  font-weight: 600;
-  padding: 8px 0;
-}
-.response-archive .response-person {
-  margin-top: 16px;
-}
 .response-empty {
   margin: 12px 0;
   opacity: 0.8;

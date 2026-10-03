@@ -1,3 +1,4 @@
+import { coreEventTypes } from '../lib/event-types.mjs';
 import { node } from './ui.js';
 import { eventOverview } from './event-overview.js';
 import { mountTextFormatting } from './text-formatting.js';
@@ -73,7 +74,7 @@ export function mountEventEditor(api) {
     loadGeneration = 0,
     showArchived = false;
   let images = [],
-    types = ['Workshop', 'Meeting', 'Talk', 'Hackathon', 'Social'],
+    types = [...coreEventTypes],
     previewData = null;
   const frame = q('#site-preview-frame'),
     dialog = q('#site-preview-dialog');
@@ -293,7 +294,6 @@ export function mountEventEditor(api) {
       overview.append(updatedNote, activityPanel);
     }
     q('#event-empty').hidden = true;
-    q('#event-preview').hidden = true;
     images = (row.draft.images || []).map((image) => ({ ...image }));
     renderImages();
     survey.set(row.draft.surveyQuestions);
@@ -361,13 +361,7 @@ export function mountEventEditor(api) {
       const data = await api('/api/events?admin=1');
       if (version !== generation || request !== loadGeneration) return;
       rows = data.events;
-      types = data.types || [
-        'Workshop',
-        'Meeting',
-        'Talk',
-        'Hackathon',
-        'Social',
-      ];
+      types = data.types;
       typeOptions(
         form.elements.category.value ||
           current?.draft.category ||
@@ -644,8 +638,6 @@ export function mountEventEditor(api) {
       form.hidden = true;
       q('#event-empty').hidden = false;
       q('#event-list').replaceChildren();
-      q('#event-preview').replaceChildren();
-      q('#event-preview').hidden = true;
       say();
     },
   };

@@ -1,5 +1,5 @@
 import { Readable } from 'node:stream';
-import { get } from '@vercel/blob';
+import { get, del } from '@vercel/blob';
 import { database } from '../lib/db.mjs';
 import { requireAdmin, adminOrigin } from '../lib/auth.mjs';
 import { send, fail, jsonBody } from '../lib/http.mjs';
@@ -8,6 +8,8 @@ import { kinds, uuid } from '../lib/validation.mjs';
 import { liveEvents } from '../lib/events.mjs';
 import { upcomingEvents, inboxFilter } from '../lib/inbox.mjs';
 import { submissionsCSV } from '../lib/submission-export.mjs';
+import { changeSubmission } from '../lib/submission-management.mjs';
+import { cleanupContactFiles } from '../lib/contacts.mjs';
 import {
   submissionActivity,
   addSubmissionComment,
@@ -17,7 +19,7 @@ export function adminHandler({
   authorize = requireAdmin,
   getDatabase = database,
   getEvents = liveEvents,
-  storage = { get },
+  storage = { get, del },
 } = {}) {
   return async function handler(req, res) {
     try {
@@ -67,7 +69,10 @@ export function adminHandler({
           });
           return;
         }
-        const events = upcomingEvents(await getEvents(db));
+        const savedEvents = (await db.query(`SELECT DISTINCT ON (data->>'eventId') data->>'eventId' AS id,data->>'eventTitle' AS title,data->>'eventDate' AS date,(data->>'potential')='true' AS potential FROM club_forms.entries WHERE kind='rsvp' ORDER BY data->>'eventId',created_at DESC,id`)).rows;
+        const allEvents = [...new Map([...savedEvents,...await getEvents(db)].map(event=>[event.id,event])).values()];
+        const events = upcomingEvents(allEvents);
+        const upcomingIds = events.map(event=>event.id);
         const { values: filters, where } = inboxFilter(
           url.searchParams,
           events,
@@ -104,8 +109,8 @@ export function adminHandler({
         );
         const counts = (
           await db.query(
-            `SELECT kind,count(*)::int AS total,count(*) FILTER (WHERE review_status='new')::int AS new,max(created_at) AS latest FROM club_forms.entries WHERE kind<>'rsvp' OR data->>'eventId'=ANY($1::text[]) GROUP BY kind`,
-            [events.map((e) => e.id)],
+            `SELECT CASE WHEN kind='rsvp' AND NOT(coalesce(data->>'eventId','')=ANY($1::text[])) THEN 'rsvp-past' ELSE kind END AS kind,count(*)::int AS total,count(*) FILTER (WHERE review_status='new')::int AS new,max(created_at) AS latest FROM club_forms.entries GROUP BY 1`,
+            [upcomingIds],
           )
         ).rows;
         return send(res, 200, {
@@ -113,7 +118,7 @@ export function adminHandler({
           entries: result.rows.slice(0, 50),
           hasMore: result.rows.length > 50,
           counts,
-          events: events.map(({ id, title, date }) => ({ id, title, date })),
+          events: allEvents.map(({ id, title, date }) => ({ id, title, date, past:!upcomingIds.includes(id) })),
           notifications: { email: false },
           configured: {
             uploads: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
@@ -123,7 +128,12 @@ export function adminHandler({
       if (req.method !== 'POST')
         throw new RequestError(405, 'Method not allowed.');
       adminOrigin(req);
-      const body = await jsonBody(req, 32768);
+      const body = await jsonBody(req, 400000);
+      if (['edit-submission','delete-submission'].includes(body.action)) {
+        const result = await changeSubmission(db,body,user.email);
+        if(result.deleted) result.filesCleaned = await cleanupContactFiles(db,storage);
+        return send(res,200,result);
+      }
       if (body.action === 'comment') {
         const comment = await addSubmissionComment(db, body, user.email);
         return send(res, 200, { comment });

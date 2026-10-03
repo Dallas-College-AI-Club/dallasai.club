@@ -156,7 +156,9 @@ test('reports include every page, respect filters, preserve versions and escape 
   const csv = responsesCSV(rows);
   assert.ok(csv.startsWith('\uFEFF'));
   assert.ok(csv.includes('"\'=IMPORTDATA'));
-  assert.ok(csv.includes('"\'@formula\n""quoted"",value"'));
+  assert.ok(csv.includes('"\'@formula ""quoted"",value"'));
+  assert.ok(csv.includes('Pick a game — Chess [v1]'));
+  assert.equal(csv.split('\r\n').filter(Boolean).length,54);
   assert.ok(csv.includes('Changed question [v2]'));
   await manageResponse(
     db,

@@ -29,6 +29,7 @@ for (const file of [
   '009_submission_comments.sql',
   '010_event_surveys.sql',
   '014_event_response_management.sql',
+  '015_contact_identity_management.sql',
 ])
   await db.exec(await readFile(new URL('../' + file, import.meta.url), 'utf8'));
 await db.exec(
@@ -475,14 +476,110 @@ try {
     await admin.locator('.survey-report').textContent(),
     /Cards — 1 \(100%\)/,
   );
+  const reportDialog = admin.getByRole('dialog', {
+    name: 'Compiled answers',
+    exact: true,
+  });
+  await reportDialog.waitFor();
+  assert.equal(
+    await admin.locator('#event-surveys-root .survey-report').count(),
+    0,
+  );
+  for (const [width, height] of [
+    [320, 740],
+    [768, 1024],
+    [1440, 950],
+  ]) {
+    await admin.setViewportSize({ width, height });
+    const bounds = await reportDialog.boundingBox();
+    assert.ok(
+      bounds.x >= 0 &&
+        bounds.y >= 0 &&
+        bounds.x + bounds.width <= width &&
+        bounds.y + bounds.height <= height,
+    );
+    assert.equal(
+      await reportDialog.evaluate((el) => el.scrollWidth <= el.clientWidth),
+      true,
+    );
+    assert.equal(
+      await reportDialog
+        .locator('.survey-report')
+        .evaluate((el) => el.scrollWidth <= el.clientWidth),
+      true,
+    );
+    await admin.screenshot({
+      path: path.join(screens, 'compiled-popup-' + width + '.png'),
+    });
+  }
   const downloading = admin.waitForEvent('download');
-  await admin
-    .getByRole('button', { name: 'Export event CSV', exact: true })
+  await reportDialog
+    .getByRole('button', { name: 'Export CSV', exact: true })
     .click();
   const download = await downloading;
   const csv = await readFile(await download.path(), 'utf8');
   assert.match(csv, /mkim23@student.dallascollege.edu/);
   assert.match(csv, /Other: Chess/);
+  await reportDialog
+    .getByText(
+      'CSV downloaded. It includes all matching responses across every page.',
+      { exact: true },
+    )
+    .waitFor();
+  await reportDialog
+    .getByRole('button', { name: 'Close', exact: true })
+    .click();
+  assert.equal(await reportDialog.isVisible(), false);
+  assert.equal(await admin.locator('.survey-report').textContent(), '');
+  assert.match(
+    await admin.evaluate(() => document.activeElement.textContent),
+    /^Compile (event )?summary$/,
+  );
+  // Closing while the server is still compiling must not reopen or retain private results.
+  let releaseSummary;
+  const gate = new Promise((resolve) => (releaseSummary = resolve));
+  const matchSummary = (url) =>
+    url.pathname === '/api/surveys' && url.searchParams.has('summary');
+  await admin.route(matchSummary, async (route) => {
+    await gate;
+    await route.continue();
+  });
+  const requested = admin.waitForRequest((request) =>
+    new URL(request.url()).searchParams.has('summary'),
+  );
+  await admin
+    .getByRole('button', { name: 'Compile summary', exact: true })
+    .click();
+  await requested;
+  await admin.keyboard.press('Escape');
+  const finished = admin.waitForResponse((response) =>
+    new URL(response.url()).searchParams.has('summary'),
+  );
+  releaseSummary();
+  await finished;
+  await admin.waitForTimeout(100);
+  assert.equal(await reportDialog.isVisible(), false);
+  assert.equal(await admin.locator('.survey-report').textContent(), '');
+  assert.equal(
+    await admin.evaluate(() =>
+      document.documentElement.classList.contains('survey-report-open'),
+    ),
+    false,
+  );
+  await admin.unroute(matchSummary);
+  await admin
+    .getByRole('button', { name: 'Compile summary', exact: true })
+    .click();
+  await reportDialog
+    .getByRole('heading', {
+      name: '1 matching responses · all pages',
+      exact: true,
+    })
+    .waitFor();
+  await admin.keyboard.press('Escape');
+  assert.equal(await admin.locator('.survey-report').textContent(), '');
+  await admin.setViewportSize({ width: 320, height: 820 });
+
   await admin.locator('.survey-response > summary').click();
   await admin
     .getByRole('button', { name: 'Contact history', exact: true })
@@ -513,6 +610,139 @@ try {
   await admin.screenshot({
     path: path.join(screens, 'contact-history-mobile.png'),
   });
+  // Contacts are managed through the same authenticated interface an officer uses.
+  for (const [email, name] of [
+    ['e0000001@student.dcccd.edu', 'Full Name Alias'],
+    ['untouched@example.edu', 'Unrelated Member'],
+  ]) {
+    const id = crypto.randomUUID();
+    await db.query(
+      `INSERT INTO club_forms.entries(id,kind,email,name,dedupe_key,data) VALUES($1::uuid,'question',$2,$3,$1::text,'{"question":"Contact history test"}')`,
+      [id, email, name],
+    );
+  }
+  const contacts = admin.locator('.contact-dialog');
+  await contacts
+    .getByRole('button', { name: 'Merge with another contact', exact: true })
+    .click();
+  await contacts
+    .getByLabel('Find the contact to keep', { exact: true })
+    .fill('e0000001');
+  await contacts
+    .getByRole('button', { name: 'Find merge candidates', exact: true })
+    .click();
+  await contacts.getByRole('button', { name: /Full Name Alias/ }).click();
+  await contacts
+    .getByRole('button', { name: 'Confirm merge', exact: true })
+    .click();
+  await contacts
+    .getByText(
+      'Contacts merged. Both email addresses now open the same history.',
+      { exact: true },
+    )
+    .waitFor();
+  assert.match(
+    await contacts.textContent(),
+    /mkim23@student.dallascollege.edu/,
+  );
+  assert.match(await contacts.textContent(), /e0000001@student.dcccd.edu/);
+  for (const [width, height] of [
+    [320, 820],
+    [768, 1024],
+    [1440, 950],
+  ]) {
+    await admin.setViewportSize({ width, height });
+    assert.equal(
+      await contacts.evaluate((el) => el.scrollWidth <= el.clientWidth),
+      true,
+    );
+    await admin.screenshot({
+      path: path.join(screens, 'merged-contacts-' + width + '.png'),
+    });
+  }
+  await contacts
+    .getByRole('button', { name: 'Delete contact', exact: true })
+    .click();
+  await contacts
+    .getByRole('button', { name: 'Confirm delete contact', exact: true })
+    .click();
+  await contacts
+    .getByText(
+      'Contact deleted from the directory. Submissions and notes are preserved.',
+      { exact: true },
+    )
+    .waitFor();
+  assert.equal(
+    (await db.query('SELECT count(*)::int n FROM club_forms.survey_responses'))
+      .rows[0].n,
+    1,
+  );
+  await contacts
+    .getByLabel('Show contacts', { exact: true })
+    .selectOption('deleted');
+  await contacts.getByRole('button', { name: /Full Name Alias/ }).click();
+  await contacts
+    .getByRole('button', { name: 'Restore contact', exact: true })
+    .click();
+  await contacts
+    .getByText('Contact restored to Active.', { exact: true })
+    .waitFor();
+  await contacts
+    .getByRole('button', { name: 'Mark as test', exact: true })
+    .click();
+  await contacts
+    .getByRole('button', { name: 'Confirm mark as test', exact: true })
+    .click();
+  await contacts
+    .getByText('Contact marked as test. No records were deleted.', {
+      exact: true,
+    })
+    .waitFor();
+  await contacts
+    .getByRole('button', {
+      name: 'Permanently delete test contact',
+      exact: true,
+    })
+    .click();
+  const purge = contacts.getByRole('button', {
+    name: 'Delete test contact permanently',
+    exact: true,
+  });
+  assert.equal(await purge.isDisabled(), true);
+  await contacts
+    .getByLabel('Type the primary email to confirm', { exact: true })
+    .fill('e0000001@student.dcccd.edu');
+  await purge.click();
+  await contacts
+    .getByText('Test contact and all linked records permanently deleted.', {
+      exact: true,
+    })
+    .waitFor();
+  await admin.waitForFunction(
+    () =>
+      !document
+        .querySelector('#entries')
+        .textContent.includes('Browser survey test'),
+  );
+  assert.equal(
+    (await db.query('SELECT count(*)::int n FROM club_forms.survey_responses'))
+      .rows[0].n,
+    0,
+  );
+  assert.equal(
+    (await db.query('SELECT count(*)::int n FROM club_forms.contact_notes'))
+      .rows[0].n,
+    0,
+  );
+  assert.deepEqual(
+    (await db.query('SELECT email FROM club_forms.entries')).rows.map(
+      (r) => r.email,
+    ),
+    ['untouched@example.edu'],
+  );
+  await contacts
+    .getByLabel('Show contacts', { exact: true })
+    .selectOption('active');
   await admin
     .locator('.contact-dialog')
     .getByRole('button', { name: 'Close', exact: true })

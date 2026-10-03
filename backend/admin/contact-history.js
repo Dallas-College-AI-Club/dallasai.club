@@ -13,14 +13,14 @@ const labels = {
   workshop: 'Workshop request',
   contribution: 'AI Review submission',
 };
-export function contactHistory(api) {
+export function contactHistory(api, onChange = () => {}) {
   const dialog = node('dialog', undefined, 'contact-dialog');
   dialog.setAttribute('aria-labelledby', 'contact-heading');
   const close = node('button', 'Close', 'secondary'),
     heading = node('h2', 'Contacts'),
     intro = node(
       'p',
-      'Website submissions and officer notes are linked by email. Notes record follow-up; this page does not send or read emails.',
+      'Link a person’s school email addresses to see their website submissions and officer notes together. Notes record follow-up; this page does not send or read emails.',
       'hint',
     );
   heading.id = 'contact-heading';
@@ -29,11 +29,20 @@ export function contactHistory(api) {
   const searchForm = node('form', undefined, 'survey-tools'),
     label = node('label', 'Find a contact by name or email'),
     search = node('input'),
-    find = node('button', 'Search contacts');
+    find = node('button', 'Search contacts'),
+    viewLabel = node('label', 'Show contacts'),
+    view = node('select');
   search.type = 'search';
   search.maxLength = 200;
   label.append(search);
-  searchForm.append(label, find);
+  view.append(
+    new Option('Active', 'active'),
+    new Option('Deleted', 'deleted'),
+    new Option('All contacts', 'all'),
+  );
+  view.setAttribute('aria-label', 'Show contacts');
+  viewLabel.append(view);
+  searchForm.append(label, viewLabel, find);
   const status = node('p');
   status.setAttribute('role', 'status');
   const content = node('div'),
@@ -62,7 +71,7 @@ export function contactHistory(api) {
       const params = new URLSearchParams(
         email
           ? { contact: email, offset }
-          : { contacts: '1', search: search.value, offset },
+          : { contacts: '1', search: search.value, offset, view: view.value },
       );
       const data = await api('/api/surveys?' + params);
       if (version !== generation || !dialog.open) return;
@@ -72,9 +81,13 @@ export function contactHistory(api) {
           const button = node('button', undefined, 'contact-choice secondary');
           button.append(
             node('strong', c.name || c.email),
-            node('span', c.email),
+            node('span', c.emails.join(' · ')),
             node('small', c.submissions + ' website submissions'),
           );
+          if (c.is_test)
+            button.append(node('span', 'Test contact', 'contact-badge'));
+          if (c.deleted_at)
+            button.append(node('span', 'Deleted', 'contact-badge'));
           button.onclick = () => {
             email = c.email;
             offset = 0;
@@ -86,6 +99,7 @@ export function contactHistory(api) {
           ? 'Select a contact to see their history.'
           : 'No matching contacts.';
       } else {
+        email = data.contact.email;
         heading.textContent = data.contact.name || email;
         const back = node('button', '← All contacts', 'secondary');
         back.onclick = () => {
@@ -95,13 +109,19 @@ export function contactHistory(api) {
         };
         content.append(
           back,
-          node('p', email),
+          node('p', 'Primary email: ' + email, 'contact-note-text'),
+          node(
+            'p',
+            'Linked emails: ' + data.contact.emails.join(' · '),
+            'contact-note-text',
+          ),
           node(
             'p',
             'Names used: ' + (data.contact.names || []).join(' · '),
             'hint',
           ),
         );
+        content.append(management(data.contact, version));
         const form = node('form', undefined, 'contact-note-form'),
           noteLabel = node('label', 'Record a follow-up note'),
           note = node('textarea'),
@@ -113,7 +133,7 @@ export function contactHistory(api) {
         noteLabel.append(note);
         noteStatus.setAttribute('role', 'status');
         form.append(noteLabel, save, noteStatus);
-        content.append(form);
+        if (!data.contact.deleted_at) content.append(form);
         let noteId = crypto.randomUUID();
         note.oninput = () => {
           noteId = crypto.randomUUID();
@@ -160,6 +180,8 @@ export function contactHistory(api) {
             ),
           );
           if (item.body) card.append(node('p', item.body, 'contact-note-text'));
+          if (item.source_email)
+            card.append(node('p', item.source_email, 'hint contact-note-text'));
           for (const key of [
             'eventTitle',
             'eventDate',
@@ -182,7 +204,11 @@ export function contactHistory(api) {
           }
           content.append(card);
         }
-        status.textContent = 'History · page ' + (offset / 50 + 1);
+        status.textContent =
+          (data.contact.deleted_at ? 'Deleted contact · ' : '') +
+          (data.contact.is_test ? 'Test contact · ' : '') +
+          'History · page ' +
+          (offset / 50 + 1);
       }
       prev.disabled = offset === 0;
       next.disabled = !data.hasMore;
@@ -190,8 +216,240 @@ export function contactHistory(api) {
       if (version === generation) status.textContent = error.message;
     }
   }
+  function management(contact, version) {
+    const panel = node('section', undefined, 'contact-management'),
+      actions = node('div', undefined, 'survey-response-actions'),
+      test = node(
+        'button',
+        contact.is_test ? 'Unmark as test' : 'Mark as test',
+        'secondary',
+      ),
+      remove = node(
+        'button',
+        contact.is_test ? 'Permanently delete test contact' : 'Delete contact',
+        'secondary danger',
+      ),
+      restore = node('button', 'Restore contact', 'secondary'),
+      merge = node('button', 'Merge with another contact', 'secondary'),
+      details = node('div', undefined, 'contact-confirmation');
+    const actionButton = (text, fn, cls = 'secondary') => {
+      const el = node('button', text, cls);
+      el.type = 'button';
+      el.onclick = fn;
+      return el;
+    };
+    const fresh = () => version === generation && dialog.open;
+    async function save(body, message) {
+      if (!fresh()) return;
+      const controls = [...panel.querySelectorAll('button, input')];
+      controls.forEach((el) => (el.disabled = true));
+      status.textContent = 'Saving contact changes…';
+      try {
+        const result = await api('/api/surveys', {
+          email: contact.email,
+          revision: contact.revision,
+          ...body,
+        });
+        if (!fresh()) return;
+        if (result.purged || result.deleted) email = '';
+        else email = result.email;
+        offset = 0;
+        await load();
+        if (dialog.open)
+          status.textContent =
+            result.purged && !result.filesDeleted
+              ? 'Test contact and saved records permanently deleted. Attachment cleanup is pending and will retry automatically.'
+              : message;
+        onChange(result);
+      } catch (error) {
+        if (fresh()) {
+          status.textContent = error.message;
+          controls.forEach((el) => (el.disabled = false));
+        }
+      }
+    }
+    function confirm(
+      title,
+      description,
+      label,
+      body,
+      message,
+      requireEmail = false,
+    ) {
+      const heading = node('h3', title),
+        row = node('div', undefined, 'survey-response-actions');
+      heading.tabIndex = -1;
+      details.replaceChildren(heading, node('p', description));
+      let input;
+      const accept = actionButton(
+        label,
+        () => {
+          if (requireEmail && input.value.trim() !== contact.email) return;
+          save(
+            {
+              ...body,
+              ...(requireEmail ? { confirmEmail: input.value.trim() } : {}),
+            },
+            message,
+          );
+        },
+        'danger',
+      );
+      if (requireEmail) {
+        const label = node('label', 'Type the primary email to confirm');
+        input = node('input');
+        input.type = 'email';
+        input.autocomplete = 'off';
+        label.append(input);
+        details.append(label);
+        accept.disabled = true;
+        input.oninput = () =>
+          (accept.disabled = input.value.trim() !== contact.email);
+      }
+      row.append(
+        accept,
+        actionButton('Cancel', () => {
+          details.replaceChildren();
+          merge.focus();
+        }),
+      );
+      details.append(row);
+      heading.focus();
+    }
+    test.onclick = () =>
+      confirm(
+        contact.is_test
+          ? 'Remove test flag?'
+          : 'Mark this person as a test contact?',
+        contact.is_test
+          ? 'Deleting this contact will keep their submissions and allow restoration.'
+          : 'This applies to every linked email. Deleting a test contact permanently erases its submissions, survey answers, comments, attachments and follow-up notes. Marking it does not delete anything yet.',
+        contact.is_test ? 'Confirm unmark as test' : 'Confirm mark as test',
+        { action: 'contact-test', value: !contact.is_test },
+        contact.is_test
+          ? 'Test flag removed.'
+          : 'Contact marked as test. No records were deleted.',
+      );
+    restore.onclick = () =>
+      save({ action: 'contact-restore' }, 'Contact restored to Active.');
+    remove.onclick = () =>
+      confirm(
+        contact.is_test
+          ? 'Permanently delete this test contact?'
+          : 'Delete this contact from the directory?',
+        contact.is_test
+          ? `${contact.name || contact.email}: ${contact.emails.length} linked email address(es), ${contact.submissions} website submission(s), ${contact.notes} follow-up note(s) and ${contact.attachments} attachment(s). Their survey answers and comments will also be deleted. This cannot be undone.`
+          : 'Their submissions, survey answers and notes will stay saved. Find this person under Deleted to restore them.',
+        contact.is_test
+          ? 'Delete test contact permanently'
+          : 'Confirm delete contact',
+        { action: contact.is_test ? 'contact-purge' : 'contact-delete' },
+        contact.is_test
+          ? 'Test contact and all linked records permanently deleted.'
+          : 'Contact deleted from the directory. Submissions and notes are preserved.',
+        contact.is_test,
+      );
+    merge.onclick = () => {
+      const form = node('form', undefined, 'contact-merge-search'),
+        label = node('label', 'Find the contact to keep'),
+        input = node('input'),
+        find = node('button', 'Find merge candidates'),
+        results = node('div'),
+        hint = node(
+          'p',
+          'Choose the same person’s other contact. Its primary email and name will be kept; both histories remain unchanged.',
+          'hint',
+        );
+      input.type = 'search';
+      input.maxLength = 200;
+      input.required = true;
+      label.append(input);
+      form.append(label, find);
+      details.replaceChildren(
+        node('h3', 'Merge contacts'),
+        hint,
+        form,
+        results,
+      );
+      input.focus();
+      let searchVersion = 0;
+      form.onsubmit = async (event) => {
+        event.preventDefault();
+        const attempt = ++searchVersion;
+        results.textContent = 'Finding contacts…';
+        find.disabled = true;
+        try {
+          const data = await api(
+            '/api/surveys?' +
+              new URLSearchParams({
+                contacts: '1',
+                search: input.value.trim(),
+              }),
+          );
+          if (!fresh() || attempt !== searchVersion || !form.isConnected)
+            return;
+          const candidates = data.contacts.filter(
+            (c) => c.email !== contact.email,
+          );
+          results.replaceChildren();
+          for (const candidate of candidates) {
+            const choose = actionButton(
+              '',
+              () =>
+                confirm(
+                  'Confirm these contacts are the same person',
+                  `Keep ${candidate.name || candidate.email} (${candidate.email}) and link ${contact.emails.join(', ')}. ${candidate.submissions + contact.submissions} website submission(s) will appear together. No original answers, emails or notes will be rewritten.`,
+                  'Confirm merge',
+                  {
+                    action: 'contact-merge',
+                    targetEmail: candidate.email,
+                    targetRevision: candidate.revision,
+                  },
+                  'Contacts merged. Both email addresses now open the same history.',
+                ),
+              'contact-choice secondary',
+            );
+            choose.append(
+              node('strong', candidate.name || candidate.email),
+              node('span', candidate.emails.join(' · ')),
+              node(
+                'small',
+                candidate.is_test ? 'Test contact' : 'Regular contact',
+              ),
+            );
+            results.append(choose);
+          }
+          if (!candidates.length)
+            results.textContent =
+              'No other active contacts match. Try their other email address.';
+          if (data.hasMore)
+            results.append(
+              node(
+                'p',
+                'More contacts match. Narrow your search to find the person.',
+              ),
+            );
+        } catch (error) {
+          if (fresh()) results.textContent = error.message;
+        } finally {
+          find.disabled = false;
+        }
+      };
+    };
+    actions.append(test);
+    if (!contact.deleted_at) actions.append(merge);
+    if (contact.deleted_at) actions.append(restore);
+    if (!contact.deleted_at || contact.is_test) actions.append(remove);
+    panel.append(actions, details);
+    return panel;
+  }
   searchForm.onsubmit = (event) => {
     event.preventDefault();
+    email = '';
+    offset = 0;
+    load();
+  };
+  view.onchange = () => {
     email = '';
     offset = 0;
     load();
@@ -207,6 +465,7 @@ export function contactHistory(api) {
   return {
     open(address = '') {
       email = address;
+      view.value = 'active';
       offset = 0;
       if (!dialog.open) dialog.showModal();
       load();

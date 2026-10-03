@@ -76,6 +76,15 @@ The original `provision.mjs` bootstraps only part of the current schema and refu
 to overwrite existing credentials. Never treat rerunning it as an upgrade; review
 and apply the remaining migrations. Preserve additive migrations on code rollback.
 
+## Read-only production checks
+
+From `backend/`, `node scripts/club-db-read.mjs "SELECT kind, count(*) FROM club_forms.entries GROUP BY kind"`
+runs one statement against production and prints the rows. It reads `FORMS_DATABASE_URL` from
+`%LOCALAPPDATA%/dallasai-club-website/secrets.env.forms` (created from `vercel env pull`), refuses
+any database other than `dallasai_club`, and runs inside a READ ONLY transaction that is always
+rolled back. `verify-connections.mjs` and `verify-storage.mjs` also touch production; read them
+before running.
+
 ## Verification and release
 
 From `backend/` run:

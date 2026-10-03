@@ -403,8 +403,8 @@ and CSV and HTML import before Word and PDF.
 
 ## Still open
 
-- **Code-quality pass.** The officer also asked how to simplify the code and remove stale code. Two
-  analyses are running. Their combined results will go in `docs/club-office-cleanup.md`.
+- **Code-quality pass.** Done. See [club-office-cleanup.md](club-office-cleanup.md) for what was
+  removed, the bugs fixed along the way, and what is left.
 - **Not exercised.** These need production or a real device:
   - Real Vercel Blob image storage.
   - The public-site preview iframe.

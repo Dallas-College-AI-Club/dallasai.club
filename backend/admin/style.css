@@ -984,3 +984,89 @@ input::file-selector-button {
 .office-tabs {
   flex-wrap: wrap;
 }
+
+.formatting-editor {
+  margin: -4px 0 20px;
+  min-width: 0;
+}
+.formatting-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--line, #ced5cd);
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+}
+.formatting-toolbar button {
+  padding: 8px 12px;
+  min-height: 40px;
+  font-size: 12px;
+}
+.formatting-editor textarea {
+  border-radius: 0 0 10px 10px;
+  margin: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.formatting-editor .formatting-hint {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.event-overview {
+  overflow-wrap: anywhere;
+  min-width: 0;
+  padding: 20px 0;
+}
+.event-overview > h3 {
+  font-size: clamp(23px, 3vw, 30px);
+  line-height: 1.3;
+  margin: 8px 0 16px;
+}
+.event-overview-section {
+  border-top: 1px solid var(--line, #ced5cd);
+  padding: 20px 0 0;
+  margin-top: 20px;
+}
+.event-overview-section h4 {
+  font-size: 15px;
+  margin: 0 0 12px;
+}
+.event-overview .event-richtext {
+  line-height: 1.65;
+}
+.event-overview .event-richtext p {
+  white-space: normal;
+}
+.event-overview .event-agenda-list {
+  list-style: none;
+  padding: 0;
+}
+.event-overview .event-agenda-list li {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr);
+  gap: 16px;
+  padding: 14px 0;
+  border-top: 1px solid var(--line, #ced5cd);
+}
+.event-overview .event-agenda-list p {
+  margin: 4px 0 0;
+}
+.event-overview .agenda-duration {
+  font-size: 12px;
+}
+
+.event-overview-gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
+  gap: 12px;
+  margin-top: 24px;
+}
+.event-overview-gallery img {
+  max-width: 100%;
+  width: 320px;
+  max-height: 220px;
+  object-fit: contain;
+  border-radius: 12px;
+}

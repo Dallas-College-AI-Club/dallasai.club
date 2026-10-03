@@ -201,6 +201,7 @@ try {
   assert.equal((await liveEvents(db, [])).length, 0);
   await admin.reload();
   await admin.locator('.event-choice').click();
+  await admin.locator('#edit-selected-event').click();
   assert.equal(await admin.locator('.survey-editor-question').count(), 3);
   await admin
     .getByRole('button', { name: 'Publish event', exact: true })

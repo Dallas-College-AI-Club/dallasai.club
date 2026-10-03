@@ -13,3 +13,10 @@ enableRobotsTXT = true
 [outputs]
   home = ["HTML"]
   section = ["HTML"]
+
+[[module.mounts]]
+  source = "static"
+  target = "static"
+[[module.mounts]]
+  source = "backend/lib/event-format.mjs"
+  target = "static/app/event-format.js"

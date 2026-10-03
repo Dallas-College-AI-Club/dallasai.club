@@ -1,3 +1,4 @@
+import { eventText } from './event-format.js';
 import {
   identityFields,
   formFooter,
@@ -106,7 +107,9 @@ export function rsvpDialog(root) {
         ? '<p>This records your interest. Final details and seats are not yet confirmed.</p>'
         : '') +
       (event.surveyIntro
-        ? '<p class="survey-intro">' + h(event.surveyIntro) + '</p>'
+        ? '<div class="survey-intro event-richtext">' +
+          eventText(event.surveyIntro) +
+          '</div>'
         : '') +
       '<form id="event-rsvp" class="club-form">' +
       identityFields(event.requireEduEmail === true) +

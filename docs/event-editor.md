@@ -21,7 +21,7 @@ entire event or only its changes are unpublished.
 Choose a shared **Type** from the dropdown. **Manage event types → Add type**
 adds a grouping for all officers. Case and extra spaces do not create duplicates.
 The server rejects unregistered free-text types.
-The standard groups are **Workshop, Meeting, Talk, and Hackathon**. Older club
+The standard groups are **Workshop, Meeting, Talk, Hackathon, and Social**. Older club
 and project meetings map to Meeting; conversations and presentations to Talk;
 skills sessions, project workshops, and user testing to Workshop. Event details
 and original history remain intact. Adding an old label reuses its standard group.
@@ -39,7 +39,7 @@ again on unpublish or archive. Stored files remain available for edit history.
   navigation are disabled inside the preview. Draft content is passed only between
   the officer's browser windows, without putting it in a public URL or API.
 - **Publish event** updates the public calendar, event search, Latest, and RSVP
-  eligibility. A date is required. Times are optional.
+  eligibility. Scheduled events require a date; potential events may show TBD. Times are optional.
 - Clear **Accept RSVPs** and publish to close new registrations.
 - **Unpublish** removes the event from the public calendar and prevents new
   registrations. Draft content, previous RSVPs, and edit history are retained.
@@ -144,3 +144,13 @@ retained images and RSVPs, unpublishing, the approved Studio design and office
 logo at desktop and mobile widths, and sign-out/sign-in. Unit tests cover transactional history, validation, public
 versus private data, authorization, Central daylight-saving changes, and RSVPs.
 Live checks must not publish synthetic test events or send emails.
+
+## Reading and formatting events
+
+Selecting an existing event opens a read-only details view, including its saved content and activity history. Choose **Edit event** before changing fields, or **Cancel editing** to return to saved details. Creating a new event opens the editor directly. Save and Publish remain explicit actions.
+
+Select text in Description, audience, or the RSVP introduction and use **Bold**, **Italic**, **Heading**, **Bullets**, or **Numbered list**. Blank lines separate paragraphs. The controls insert simple text markers; **Preview** displays the formatted result. HTML and embedded content are shown as text. The same safe renderer serves public details, private previews, and the office read-only view.
+
+Learning outcomes, agenda, and preparation keep one item per line, with Bold and Italic controls. Agenda lines such as `20 minutes · Welcome · Meet the team` display the duration beside the activity and its description. Existing plain text remains supported.
+
+The public Events page uses normal page scrolling, compact monthly lists, and potential events above the calendar. Selecting an event on smaller screens jumps to its details; the RSVP button appears near the title.

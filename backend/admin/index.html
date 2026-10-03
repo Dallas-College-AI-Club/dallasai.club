@@ -41,6 +41,7 @@
     </header>
     <main>
       <p id="session-loading" role="status">Checking your sign-in…</p>
+      <p id="status" role="status" aria-live="polite"></p>
       <section id="login" hidden>
         <p class="eyebrow">FOR CLUB OFFICERS</p>
         <h1>Good things start here.</h1>
@@ -300,7 +301,11 @@
             to 10,000 matching records.
           </p>
           <div id="entries"></div>
-          <section id="archived-survey-questions" aria-label="Archived survey question responses" hidden></section>
+          <section
+            id="archived-survey-questions"
+            aria-label="Archived survey question responses"
+            hidden
+          ></section>
           <nav class="pagination" aria-label="Submission pages">
             <button id="previous">Previous</button><span id="page"></span
             ><button id="next">Next</button>
@@ -624,7 +629,6 @@
           </div>
         </section>
       </section>
-      <p id="status" role="status" aria-live="polite"></p>
       <dialog id="site-preview-dialog" aria-labelledby="site-preview-title">
         <div class="heading">
           <h2 id="site-preview-title">Website preview · draft</h2>

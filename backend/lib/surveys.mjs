@@ -135,6 +135,15 @@ export function validateSurvey(body, event) {
         (question.required && !values.length)
       )
         throw new RequestError(400, 'Choose an answer for: ' + question.label);
+      if (
+        question.type === 'multiple' &&
+        values.length > 1 &&
+        values.some((choice) => choice.trim().toLowerCase() === 'any of these')
+      )
+        throw new RequestError(
+          400,
+          'Choose “Any of these” by itself for: ' + question.label,
+        );
       if (values.includes('__other__') !== Boolean(other))
         throw new RequestError(
           400,

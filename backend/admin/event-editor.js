@@ -1,7 +1,7 @@
-import { eventOverview } from "./event-overview.js";
-import { mountTextFormatting } from "./text-formatting.js";
-import { surveyEditor } from "./survey-editor.js";
-import { mountEventActivity, activityTime } from "./event-activity.js";
+import { eventOverview } from './event-overview.js';
+import { mountTextFormatting } from './text-formatting.js';
+import { surveyEditor } from './survey-editor.js';
+import { mountEventActivity, activityTime } from './event-activity.js';
 const node = (tag, text, className) => {
   const el = document.createElement(tag);
   if (text !== undefined) el.textContent = text;
@@ -11,20 +11,20 @@ const node = (tag, text, className) => {
 const blank = () => ({
   potential: false,
   requireEduEmail: false,
-  surveyIntro: "",
+  surveyIntro: '',
   surveyQuestions: [],
-  title: "",
-  category: "Workshop",
-  date: "",
-  startTime: "",
-  endDate: "",
-  endTime: "",
-  location: "",
-  meetingUrl: "",
-  summary: "",
+  title: '',
+  category: 'Workshop',
+  date: '',
+  startTime: '',
+  endDate: '',
+  endTime: '',
+  location: '',
+  meetingUrl: '',
+  summary: '',
   agenda: [],
   preparation: [],
-  targetAudience: "",
+  targetAudience: '',
   learningOutcomes: [],
   registrationOpen: true,
   images: [],
@@ -32,23 +32,23 @@ const blank = () => ({
 
 export function mountEventEditor(api) {
   const q = (s) => document.querySelector(s);
-  const form = q("#event-form");
+  const form = q('#event-form');
   mountTextFormatting(form);
   const survey = surveyEditor(
-    q("#survey-questions"),
-    q("#add-survey-question"),
+    q('#survey-questions'),
+    q('#add-survey-question'),
   );
   const activity = mountEventActivity(api);
-  const overview = node("article", undefined, "event-overview");
-  overview.id = "event-overview";
+  const overview = node('article', undefined, 'event-overview');
+  overview.id = 'event-overview';
   overview.hidden = true;
   form.before(overview);
-  const activityPanel = q("#event-activity"),
-    updatedNote = q("#event-updated");
-  const cancel = node("button", "Cancel editing", "secondary");
-  cancel.type = "button";
-  cancel.id = "cancel-event-edit";
-  form.querySelector(".editor-heading").append(cancel);
+  const activityPanel = q('#event-activity'),
+    updatedNote = q('#event-updated');
+  const cancel = node('button', 'Cancel editing', 'secondary');
+  cancel.type = 'button';
+  cancel.id = 'cancel-event-edit';
+  form.querySelector('.editor-heading').append(cancel);
   let editing = false;
   cancel.onclick = () => {
     if (!canLeave()) return;
@@ -62,8 +62,8 @@ export function mountEventEditor(api) {
       form.hidden = true;
       overview.hidden = true;
       activity.clear();
-      saved = "";
-      q("#event-empty").hidden = false;
+      saved = '';
+      q('#event-empty').hidden = false;
       list();
       say();
       return;
@@ -72,41 +72,41 @@ export function mountEventEditor(api) {
   }
   let rows = [],
     current = null,
-    saved = "",
+    saved = '',
     busy = false,
     generation = 0,
     loadGeneration = 0,
     showArchived = false;
   let images = [],
-    types = ["Workshop", "Meeting", "Talk", "Hackathon", "Social"],
+    types = ['Workshop', 'Meeting', 'Talk', 'Hackathon', 'Social'],
     previewData = null;
-  const frame = q("#site-preview-frame"),
-    dialog = q("#site-preview-dialog");
+  const frame = q('#site-preview-frame'),
+    dialog = q('#site-preview-dialog');
   const previewOrigin = new URL(frame.dataset.siteOrigin).origin;
-  window.addEventListener("message", (event) => {
+  window.addEventListener('message', (event) => {
     if (
       event.origin === previewOrigin &&
       event.source === frame.contentWindow &&
-      event.data?.type === "club:preview-ready" &&
+      event.data?.type === 'club:preview-ready' &&
       previewData &&
       dialog.open
     )
       frame.contentWindow.postMessage(
-        { type: "club:event-preview", event: previewData },
+        { type: 'club:event-preview', event: previewData },
         previewOrigin,
       );
   });
-  q("#close-site-preview").onclick = () => dialog.close();
-  dialog.addEventListener("close", () => {
-    frame.removeAttribute("src");
+  q('#close-site-preview').onclick = () => dialog.close();
+  dialog.addEventListener('close', () => {
+    frame.removeAttribute('src');
     previewData = null;
   });
-  q("#preview-desktop").onclick = () => {
-    frame.classList.remove("mobile-preview");
+  q('#preview-desktop').onclick = () => {
+    frame.classList.remove('mobile-preview');
     frame.src = frame.src;
   };
-  q("#preview-mobile").onclick = () => {
-    frame.classList.add("mobile-preview");
+  q('#preview-mobile').onclick = () => {
+    frame.classList.add('mobile-preview');
     frame.src = frame.src;
   };
   const dataUrl = (blob) =>
@@ -122,31 +122,31 @@ export function mountEventEditor(api) {
     );
     form.elements.category.value =
       types.find(
-        (type) => type.toLowerCase() === (selected || "").toLowerCase(),
+        (type) => type.toLowerCase() === (selected || '').toLowerCase(),
       ) || types[0];
   }
   function renderImages() {
-    q("#event-images").replaceChildren(
+    q('#event-images').replaceChildren(
       ...images.map((image, index) => {
-        const box = node("div", undefined, "event-image-item"),
-          img = node("img");
-        img.src = "/api/events?image=" + encodeURIComponent(image.id);
-        img.alt = image.alt || "Uploaded event image";
+        const box = node('div', undefined, 'event-image-item'),
+          img = node('img');
+        img.src = '/api/events?image=' + encodeURIComponent(image.id);
+        img.alt = image.alt || 'Uploaded event image';
         const label = node(
-            "label",
-            "Image " + (index + 1) + " description (optional)",
+            'label',
+            'Image ' + (index + 1) + ' description (optional)',
           ),
-          input = node("input");
-        input.value = image.alt || "";
+          input = node('input');
+        input.value = image.alt || '';
         input.maxLength = 300;
-        input.placeholder = "Describe what the image shows";
+        input.placeholder = 'Describe what the image shows';
         input.oninput = () => {
           image.alt = input.value;
           img.alt = input.value;
         };
         label.append(input);
-        const remove = node("button", "Remove image", "secondary");
-        remove.type = "button";
+        const remove = node('button', 'Remove image', 'secondary');
+        remove.type = 'button';
         remove.onclick = () => {
           images.splice(index, 1);
           renderImages();
@@ -156,8 +156,8 @@ export function mountEventEditor(api) {
       }),
     );
   }
-  const say = (message = "") => {
-    q("#event-status").textContent = message;
+  const say = (message = '') => {
+    q('#event-status').textContent = message;
   };
   function values() {
     const content = Object.fromEntries(new FormData(form));
@@ -168,27 +168,31 @@ export function mountEventEditor(api) {
     content.images = images.map((image) => ({ ...image }));
     return content;
   }
-  const dirty = () => editing && current && JSON.stringify(values()) !== saved;
+  const dirty = () =>
+    editing && current && JSON.stringify(values()) !== saved;
   const canLeave = () =>
-    !busy && (!dirty() || confirm("Discard your unsaved event changes?"));
+    !busy && (!dirty() || confirm('Discard your unsaved event changes?'));
   const state = (row) =>
     row.archived_at
-      ? "Archived · hidden from the website. You can edit and save here, or restore as a draft."
+      ? 'Archived · hidden from the website. You can edit and save here, or restore as a draft.'
       : !row.published
-        ? "Draft · not visible on the website"
+        ? 'Draft · not visible on the website'
         : row.revision === row.published_revision
-          ? "Published"
-          : "Published · draft changes waiting";
+          ? 'Published'
+          : 'Published · draft changes waiting';
   function list() {
-    q("#active-events").setAttribute("aria-pressed", String(!showArchived));
-    q("#archived-events").setAttribute("aria-pressed", String(showArchived));
-    q("#active-event-count").textContent = rows.filter(
+    q('#active-events').setAttribute('aria-pressed', String(!showArchived));
+    q('#archived-events').setAttribute(
+      'aria-pressed',
+      String(showArchived),
+    );
+    q('#active-event-count').textContent = rows.filter(
       (r) => !r.archived_at,
     ).length;
-    q("#archived-event-count").textContent = rows.filter(
+    q('#archived-event-count').textContent = rows.filter(
       (r) => r.archived_at,
     ).length;
-    const search = q("#event-search").value.toLowerCase().trim();
+    const search = q('#event-search').value.toLowerCase().trim();
     const matches = rows
       .filter((r) => Boolean(r.archived_at) === showArchived)
       .filter((r) => r.draft.title.toLowerCase().includes(search))
@@ -198,62 +202,67 @@ export function mountEventEditor(api) {
             Number(Boolean(a.draft.potential)) ||
           Number(!b.published || b.revision !== b.published_revision) -
             Number(!a.published || a.revision !== a.published_revision) ||
-          (b.draft.date || "").localeCompare(a.draft.date || ""),
+          (b.draft.date || '').localeCompare(a.draft.date || ''),
       );
     const listItems = [];
-    let previousGroup = "";
+    let previousGroup = '';
     for (const row of matches) {
       const isDraft =
         !row.archived_at &&
         (!row.published || row.revision !== row.published_revision);
       const group = row.archived_at
-        ? "Archived events"
+        ? 'Archived events'
         : row.draft.potential
-          ? "Potential events · gather interest"
+          ? 'Potential events · gather interest'
           : isDraft
-            ? "Drafts & unpublished changes"
-            : "Published events";
+            ? 'Drafts & unpublished changes'
+            : 'Published events';
       if (group !== previousGroup) {
-        listItems.push(node("h3", group, "event-list-group"));
+        listItems.push(node('h3', group, 'event-list-group'));
         previousGroup = group;
       }
-      const button = node("button", undefined, "event-choice");
-      button.classList.toggle("has-draft", isDraft);
-      button.classList.toggle("potential-choice", Boolean(row.draft.potential));
-      button.type = "button";
-      button.setAttribute("aria-pressed", String(row.id === current?.id));
+      const button = node('button', undefined, 'event-choice');
+      button.classList.toggle('has-draft', isDraft);
+      button.classList.toggle(
+        'potential-choice',
+        Boolean(row.draft.potential),
+      );
+      button.type = 'button';
+      button.setAttribute('aria-pressed', String(row.id === current?.id));
       button.append(
-        node("strong", row.draft.title),
-        node("span", row.draft.date || "Date to be decided"),
+        node('strong', row.draft.title),
+        node('span', row.draft.date || 'Date to be decided'),
         node(
-          "small",
+          'small',
           row.archived_at
-            ? "Archived · kept for later"
+            ? 'Archived · kept for later'
             : isDraft
-              ? "DRAFT · " +
-                (!row.published ? "Not published" : "Changes not published")
-              : "Published",
-          row.archived_at ? "archived-badge" : isDraft ? "draft-badge" : "",
+              ? 'DRAFT · ' +
+                (!row.published ? 'Not published' : 'Changes not published')
+              : 'Published',
+          row.archived_at ? 'archived-badge' : isDraft ? 'draft-badge' : '',
         ),
       );
       button.onclick = () => {
         if (canLeave()) edit(row);
       };
       if (activityTime(row.updated_at))
-        button.append(node("span", "Updated " + activityTime(row.updated_at)));
+        button.append(
+          node('span', 'Updated ' + activityTime(row.updated_at)),
+        );
       listItems.push(button);
     }
-    q("#event-list").replaceChildren(...listItems);
+    q('#event-list').replaceChildren(...listItems);
     if (!matches.length)
-      q("#event-list").append(
+      q('#event-list').append(
         node(
-          "p",
+          'p',
           search
-            ? "No matching events."
+            ? 'No matching events.'
             : showArchived
-              ? "No archived events yet."
-              : "No active events yet.",
-          "hint",
+              ? 'No archived events yet.'
+              : 'No active events yet.',
+          'hint',
         ),
       );
   }
@@ -264,8 +273,8 @@ export function mountEventEditor(api) {
     form.hidden = !editing;
     overview.hidden = editing;
     if (editing) {
-      q(".editor-heading").append(updatedNote);
-      q(".editor-heading").after(activityPanel);
+      q('.editor-heading').append(updatedNote);
+      q('.editor-heading').after(activityPanel);
     } else {
       activityPanel.remove();
       updatedNote.remove();
@@ -273,14 +282,14 @@ export function mountEventEditor(api) {
         eventOverview(row, state(row), () => {
           if (!busy) {
             edit(current, true);
-            q("#event-heading").focus();
+            q('#event-heading').focus();
           }
         }),
       );
       overview.append(updatedNote, activityPanel);
     }
-    q("#event-empty").hidden = true;
-    q("#event-preview").hidden = true;
+    q('#event-empty').hidden = true;
+    q('#event-preview').hidden = true;
     images = (row.draft.images || []).map((image) => ({ ...image }));
     renderImages();
     survey.set(row.draft.surveyQuestions);
@@ -290,34 +299,37 @@ export function mountEventEditor(api) {
       ...row.draft,
     })) {
       const input = form.elements.namedItem(key);
-      if (!input || key === "category") continue;
-      if (input.type === "checkbox") input.checked = value !== false;
-      else input.value = Array.isArray(value) ? value.join("\n") : value || "";
+      if (!input || key === 'category') continue;
+      if (input.type === 'checkbox') input.checked = value !== false;
+      else
+        input.value = Array.isArray(value) ? value.join('\n') : value || '';
     }
     if (row.draft.requireEduEmail === undefined)
       form.elements.requireEduEmail.checked =
-        row.draft.category?.toLowerCase() === "social";
+        row.draft.category?.toLowerCase() === 'social';
     saved = JSON.stringify(values());
-    q("#event-heading").textContent = row.archived_at
-      ? "Edit archived event"
+    q('#event-heading').textContent = row.archived_at
+      ? 'Edit archived event'
       : row.revision || row.published
-        ? "Edit event"
-        : "New event";
-    q("#event-state").textContent = state(row);
+        ? 'Edit event'
+        : 'New event';
+    q('#event-state').textContent = state(row);
     activity.show(row);
-    q("#event-state").className = row.archived_at
-      ? "archived-notice"
+    q('#event-state').className = row.archived_at
+      ? 'archived-notice'
       : !row.published || row.revision !== row.published_revision
-        ? "draft-notice"
-        : "published-notice";
-    q("#unpublish-event").hidden = !row.published;
-    q("#archive-event").hidden =
+        ? 'draft-notice'
+        : 'published-notice';
+    q('#unpublish-event').hidden = !row.published;
+    q('#archive-event').hidden =
       Boolean(row.archived_at) || (!row.revision && !row.published);
-    q("#restore-event").hidden = !row.archived_at;
-    form.querySelector('[value="publish"]').hidden = Boolean(row.archived_at);
-    q("#view-event").hidden = !row.published;
-    q("#view-event").href =
-      "https://dallasai.club/club.html?mode=events&event=" +
+    q('#restore-event').hidden = !row.archived_at;
+    form.querySelector('[value="publish"]').hidden = Boolean(
+      row.archived_at,
+    );
+    q('#view-event').hidden = !row.published;
+    q('#view-event').href =
+      'https://dallasai.club/club.html?mode=events&event=' +
       encodeURIComponent(row.id);
     list();
     say();
@@ -325,7 +337,7 @@ export function mountEventEditor(api) {
   function newEvent(content = blank()) {
     edit(
       {
-        id: "event-" + crypto.randomUUID(),
+        id: 'event-' + crypto.randomUUID(),
         revision: 0,
         published_revision: 0,
         published: null,
@@ -338,25 +350,28 @@ export function mountEventEditor(api) {
   async function load() {
     const version = generation,
       request = ++loadGeneration;
-    say("Loading events…");
+    say('Loading events…');
     try {
-      const data = await api("/api/events?admin=1");
+      const data = await api('/api/events?admin=1');
       if (version !== generation || request !== loadGeneration) return;
       rows = data.events;
       types = data.types || [
-        "Workshop",
-        "Meeting",
-        "Talk",
-        "Hackathon",
-        "Social",
+        'Workshop',
+        'Meeting',
+        'Talk',
+        'Hackathon',
+        'Social',
       ];
       typeOptions(
-        form.elements.category.value || current?.draft.category || "Workshop",
+        form.elements.category.value ||
+          current?.draft.category ||
+          'Workshop',
       );
       list();
       say();
     } catch (e) {
-      if (version === generation && request === loadGeneration) say(e.message);
+      if (version === generation && request === loadGeneration)
+        say(e.message);
     }
   }
   async function preview(event) {
@@ -366,11 +381,13 @@ export function mountEventEditor(api) {
       images: await Promise.all(
         (event.images || []).map(async (image) => {
           const response = await fetch(
-            "/api/events?image=" + encodeURIComponent(image.id),
-            { credentials: "same-origin" },
+            '/api/events?image=' + encodeURIComponent(image.id),
+            { credentials: 'same-origin' },
           );
           if (!response.ok)
-            throw Error("Could not load the preview image. Please try again.");
+            throw Error(
+              'Could not load the preview image. Please try again.',
+            );
           return {
             ...image,
             previewSrc: await dataUrl(await response.blob()),
@@ -380,7 +397,7 @@ export function mountEventEditor(api) {
     };
     if (version !== generation) return;
     previewData = data;
-    frame.src = previewOrigin + "/club.html?mode=events&preview=1";
+    frame.src = previewOrigin + '/club.html?mode=events&preview=1';
     dialog.showModal();
   }
   async function save(action) {
@@ -395,17 +412,19 @@ export function mountEventEditor(api) {
       revision: current.revision,
       event: values(),
     };
-    const controls = [...form.querySelectorAll("input,textarea,select,button")];
+    const controls = [
+      ...form.querySelectorAll('input,textarea,select,button'),
+    ];
     controls.forEach((input) => {
       input.disabled = true;
     });
-    say(action === "preview" ? "Preparing preview…" : "Saving…");
+    say(action === 'preview' ? 'Preparing preview…' : 'Saving…');
     try {
-      const data = await api("/api/events", body);
+      const data = await api('/api/events', body);
       if (version !== generation) return;
-      if (action === "preview") {
+      if (action === 'preview') {
         await preview(data.event);
-        say("Preview only. Your changes have not been saved.");
+        say('Preview only. Your changes have not been saved.');
       } else {
         rows = [data.event, ...rows.filter((r) => r.id !== data.event.id)];
         // Re-enable before computing the saved FormData.
@@ -414,32 +433,36 @@ export function mountEventEditor(api) {
         });
         edit(data.event);
         say(
-          action === "publish"
-            ? "Published successfully — live on the website. Editing is complete."
-            : action === "archive"
-              ? "Archived. Content, images, and RSVPs are kept. You can edit this event here or restore it as a draft."
-              : action === "restore"
-                ? "Restored as a draft. Review your details, then publish when ready."
-                : action === "unpublish"
-                  ? "Unpublished. Your draft and existing RSVPs are kept."
+          action === 'publish'
+            ? 'Published successfully — live on the website. Editing is complete.'
+            : action === 'archive'
+              ? 'Archived. Content, images, and RSVPs are kept. You can edit this event here or restore it as a draft.'
+              : action === 'restore'
+                ? 'Restored as a draft. Review your details, then publish when ready.'
+                : action === 'unpublish'
+                  ? 'Unpublished. Your draft and existing RSVPs are kept.'
                   : data.event.archived_at
-                    ? "Changes saved. This event is still archived and private."
-                    : "Draft saved successfully. These saved changes are private until you publish. Editing is complete.",
+                    ? 'Changes saved. This event is still archived and private.'
+                    : 'Draft saved successfully. These saved changes are private until you publish. Editing is complete.',
         );
-        const confirmation = node("div", undefined, "event-save-confirmation");
-        confirmation.setAttribute("role", "status");
+        const confirmation = node(
+          'div',
+          undefined,
+          'event-save-confirmation',
+        );
+        confirmation.setAttribute('role', 'status');
         confirmation.tabIndex = -1;
         confirmation.append(
-          node("strong", q("#event-status").textContent),
+          node('strong', q('#event-status').textContent),
           node(
-            "p",
+            'p',
             data.event.draft.title +
-              " · Saved " +
+              ' · Saved ' +
               activityTime(data.event.updated_at),
           ),
         );
         overview.prepend(confirmation);
-        confirmation.scrollIntoView({ block: "start" });
+        confirmation.scrollIntoView({ block: 'start' });
         confirmation.focus({ preventScroll: true });
       }
     } catch (e) {
@@ -453,45 +476,46 @@ export function mountEventEditor(api) {
   }
   form.elements.category.onchange = () => {
     form.elements.requireEduEmail.checked =
-      form.elements.category.value.toLowerCase() === "social";
+      form.elements.category.value.toLowerCase() === 'social';
   };
   form.onsubmit = (event) => {
     event.preventDefault();
-    save(event.submitter?.value || "draft");
+    save(event.submitter?.value || 'draft');
   };
-  q("#new-event").onclick = () => {
+  q('#new-event').onclick = () => {
     if (canLeave()) newEvent();
   };
-  q("#duplicate-event").onclick = () => {
+  q('#duplicate-event').onclick = () => {
     if (!canLeave()) return;
-    newEvent({ ...values(), title: values().title + " (copy)" });
+    newEvent({ ...values(), title: values().title + ' (copy)' });
   };
-  q("#unpublish-event").onclick = () => {
+  q('#unpublish-event').onclick = () => {
     if (busy || !current?.published) return;
     if (
       confirm(
-        "Remove this event from the public calendar? Existing RSVPs will be kept. Unsaved edits will be discarded.",
+        'Remove this event from the public calendar? Existing RSVPs will be kept. Unsaved edits will be discarded.',
       )
     )
-      save("unpublish");
+      save('unpublish');
   };
-  q("#archive-event").onclick = () => {
+  q('#archive-event').onclick = () => {
     if (busy || !current || current.archived_at) return;
     if (dirty())
       return say(
-        "Save your draft before archiving so your latest edits are kept.",
+        'Save your draft before archiving so your latest edits are kept.',
       );
     if (
       confirm(
-        "Archive this event? It will be hidden from the website. Its content, images, and RSVPs will be kept, and you can edit or restore it later.",
+        'Archive this event? It will be hidden from the website. Its content, images, and RSVPs will be kept, and you can edit or restore it later.',
       )
     )
-      save("archive");
+      save('archive');
   };
-  q("#restore-event").onclick = () => {
+  q('#restore-event').onclick = () => {
     if (busy || !current?.archived_at) return;
-    if (dirty()) return say("Save your changes before restoring this event.");
-    save("restore");
+    if (dirty())
+      return say('Save your changes before restoring this event.');
+    save('restore');
   };
   function changeCollection(archived) {
     if (showArchived === archived || !canLeave()) return;
@@ -500,44 +524,44 @@ export function mountEventEditor(api) {
     editing = false;
     overview.hidden = true;
     activity.clear();
-    saved = "";
+    saved = '';
     form.hidden = true;
-    q("#event-empty").hidden = false;
-    q("#event-search").value = "";
+    q('#event-empty').hidden = false;
+    q('#event-search').value = '';
     list();
     say();
   }
-  q("#active-events").onclick = () => changeCollection(false);
-  q("#archived-events").onclick = () => changeCollection(true);
-  q("#reload-events").onclick = async () => {
+  q('#active-events').onclick = () => changeCollection(false);
+  q('#archived-events').onclick = () => changeCollection(true);
+  q('#reload-events').onclick = async () => {
     if (!canLeave()) return;
     const id = current?.id;
     await load();
     const updated = rows.find((r) => r.id === id);
     if (updated) edit(updated, editing);
   };
-  q("#event-search").oninput = list;
-  q("#add-type").onclick = async () => {
+  q('#event-search').oninput = list;
+  q('#add-type').onclick = async () => {
     if (busy) return;
-    const button = q("#add-type");
+    const button = q('#add-type');
     button.disabled = true;
     try {
-      const data = await api("/api/events", {
-        action: "add-type",
-        name: q("#new-type-name").value,
+      const data = await api('/api/events', {
+        action: 'add-type',
+        name: q('#new-type-name').value,
       });
       types = data.types;
       typeOptions(data.selected);
       form.elements.category.onchange();
-      q("#new-type-name").value = "";
-      q("#type-status").textContent = "Type is available to all admins.";
+      q('#new-type-name').value = '';
+      q('#type-status').textContent = 'Type is available to all admins.';
     } catch (error) {
-      q("#type-status").textContent = error.message;
+      q('#type-status').textContent = error.message;
     } finally {
       button.disabled = false;
     }
   };
-  q("#event-image-upload").onchange = async (event) => {
+  q('#event-image-upload').onchange = async (event) => {
     if (busy) return;
     const files = [...event.target.files];
     if (
@@ -545,42 +569,44 @@ export function mountEventEditor(api) {
       files.some(
         (file) =>
           file.size > 2097152 ||
-          !["image/jpeg", "image/png", "image/webp"].includes(file.type),
+          !['image/jpeg', 'image/png', 'image/webp'].includes(file.type),
       )
     ) {
-      q("#image-status").textContent =
-        "Choose up to three JPG, PNG, or WebP images under 2 MB each.";
-      event.target.value = "";
+      q('#image-status').textContent =
+        'Choose up to three JPG, PNG, or WebP images under 2 MB each.';
+      event.target.value = '';
       return;
     }
     busy = true;
     const version = generation;
-    const controls = [...form.querySelectorAll("input,textarea,select,button")];
+    const controls = [
+      ...form.querySelectorAll('input,textarea,select,button'),
+    ];
     controls.forEach((input) => (input.disabled = true));
-    q("#image-status").textContent = "Uploading images…";
+    q('#image-status').textContent = 'Uploading images…';
     try {
       for (const file of files) {
-        const result = await api("/api/events?upload=1", {
-          content: (await dataUrl(file)).split(",")[1],
+        const result = await api('/api/events?upload=1', {
+          content: (await dataUrl(file)).split(',')[1],
         });
         if (version !== generation) return;
-        images.push({ ...result.image, alt: "" });
+        images.push({ ...result.image, alt: '' });
       }
-      q("#image-status").textContent =
-        "Uploaded. Save your draft to keep these images. Descriptions are optional.";
+      q('#image-status').textContent =
+        'Uploaded. Save your draft to keep these images. Descriptions are optional.';
     } catch (error) {
-      q("#image-status").textContent = error.message;
+      q('#image-status').textContent = error.message;
     } finally {
       busy = false;
       controls.forEach((input) => (input.disabled = false));
-      event.target.value = "";
+      event.target.value = '';
       if (version === generation) renderImages();
     }
   };
-  window.addEventListener("beforeunload", (event) => {
+  window.addEventListener('beforeunload', (event) => {
     if (dirty() || busy) {
       event.preventDefault();
-      event.returnValue = "";
+      event.returnValue = '';
     }
   });
   return {
@@ -597,8 +623,8 @@ export function mountEventEditor(api) {
       editing = false;
       overview.hidden = true;
       // Preserve activity nodes before clearing private content.
-      q(".editor-heading").append(updatedNote);
-      q(".editor-heading").after(activityPanel);
+      q('.editor-heading').append(updatedNote);
+      q('.editor-heading').after(activityPanel);
       overview.replaceChildren();
       activity.clear();
       showArchived = false;
@@ -606,14 +632,14 @@ export function mountEventEditor(api) {
       images = [];
       renderImages();
       if (dialog.open) dialog.close();
-      saved = "";
+      saved = '';
       form.reset();
       survey.set();
       form.hidden = true;
-      q("#event-empty").hidden = false;
-      q("#event-list").replaceChildren();
-      q("#event-preview").replaceChildren();
-      q("#event-preview").hidden = true;
+      q('#event-empty').hidden = false;
+      q('#event-list').replaceChildren();
+      q('#event-preview').replaceChildren();
+      q('#event-preview').hidden = true;
       say();
     },
   };

@@ -1,17 +1,17 @@
-import { questionFields } from "../surveys/form-ui.js";
+import { questionFields } from '../surveys/form-ui.js';
 const node = (tag, text) => {
   const e = document.createElement(tag);
   if (text !== undefined) e.textContent = text;
   return e;
 };
 export function surveyTrial(definition) {
-  const root = node("details");
-  root.className = "survey-trial";
-  root.append(node("summary", "Try the form and preview results"));
+  const root = node('details');
+  root.className = 'survey-trial';
+  root.append(node('summary', 'Try the form and preview results'));
   root.append(
     node(
-      "p",
-      "Preview only. These trial answers stay on this page and are never submitted.",
+      'p',
+      'Preview only. These trial answers stay on this page and are never submitted.',
     ),
   );
   const values = {};
@@ -21,38 +21,38 @@ export function surveyTrial(definition) {
       onChange: (id, value) => (values[id] = value),
     }),
   );
-  const preview = node("button", "Preview how results will look");
-  preview.type = "button";
+  const preview = node('button', 'Preview how results will look');
+  preview.type = 'button';
   preview.onclick = () => {
-    const dialog = node("dialog");
-    dialog.className = "survey-trial-results";
-    const title = node("h3", "Example admin results");
-    title.id = "trial-results-title";
-    dialog.setAttribute("aria-labelledby", title.id);
-    const close = node("button", "Close results preview");
-    close.type = "button";
+    const dialog = node('dialog');
+    dialog.className = 'survey-trial-results';
+    const title = node('h3', 'Example admin results');
+    title.id = 'trial-results-title';
+    dialog.setAttribute('aria-labelledby', title.id);
+    const close = node('button', 'Close results preview');
+    close.type = 'button';
     close.onclick = () => dialog.close();
-    const header = node("div");
-    header.className = "survey-trial-header";
+    const header = node('div');
+    header.className = 'survey-trial-header';
     header.append(title, close);
     dialog.append(
       header,
-      node("p", "Trial respondent · preview only · no saved response"),
+      node('p', 'Trial respondent · preview only · no saved response'),
     );
     for (const q of definition.questions) {
       const v = values[q.id];
-      let answer = "Not answered";
-      if (v !== undefined && v !== "" && (!Array.isArray(v) || v.length))
+      let answer = 'Not answered';
+      if (v !== undefined && v !== '' && (!Array.isArray(v) || v.length))
         answer =
-          q.type === "text"
+          q.type === 'text'
             ? v
-            : q.type === "scale"
-              ? v + " / 5"
-              : (q.type === "single" ? [v] : v)
+            : q.type === 'scale'
+              ? v + ' / 5'
+              : (q.type === 'single' ? [v] : v)
                   .map((i) => q.options[i])
-                  .join("\n");
-      const card = node("section");
-      card.append(node("h4", q.title), node("p", answer));
+                  .join('\n');
+      const card = node('section');
+      card.append(node('h4', q.title), node('p', answer));
       dialog.append(card);
     }
     root.append(dialog);

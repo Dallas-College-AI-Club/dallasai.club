@@ -2,6 +2,8 @@ import { database } from '../lib/db.mjs';
 import { requireAdmin, adminOrigin } from '../lib/auth.mjs';
 import { send, fail, jsonBody } from '../lib/http.mjs';
 import { RequestError } from '../lib/errors.mjs';
+import { changeSubmission } from '../lib/submission-management.mjs';
+import { cleanupContactFiles } from '../lib/contacts.mjs';
 import { surveyResults } from '../lib/surveys.mjs';
 import { manageResponse } from '../lib/survey-management.mjs';
 import {
@@ -25,8 +27,18 @@ export function surveysHandler({
       const user = await authorize(req);
       if (req.method === 'POST') {
         adminOrigin(req);
-        const body = await jsonBody(req, 10000),
+        const body = await jsonBody(req, 400000),
           db = getDatabase();
+        if (
+          ['edit-submission', 'delete-submission'].includes(body.action)
+        ) {
+          const result = await changeSubmission(db, body, user.email, {
+            surface: 'survey',
+          });
+          if (result.deleted)
+            result.filesCleaned = await cleanupContactFiles(db, storage);
+          return send(res, 200, result);
+        }
         const result =
           body.action === 'contact-note'
             ? await addContactNote(db, body, user.email)
@@ -37,7 +49,8 @@ export function surveysHandler({
       }
       if (req.method !== 'GET')
         throw new RequestError(405, 'Method not allowed.');
-      const params = new URL(req.url, 'https://admin.invalid').searchParams;
+      const params = new URL(req.url, 'https://admin.invalid')
+        .searchParams;
       const db = getDatabase(),
         offset = Number(params.get('offset') || 0);
       if (params.has('contact'))

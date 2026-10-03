@@ -86,7 +86,7 @@ The office tabs are **Inbox**, **Events**, and **Surveys**. In Events, check **P
 
 Name and email are built in. The RSVP survey editor adds up to 20 written-answer, choose-one, or choose-several questions with help text, required answers and an optional Other field. Choice questions allow 2–30 options. Publish changes to make them available; saving a draft leaves the current form unchanged.
 
-Migration 010 stores one immutable question/answer snapshot per RSVP in `club_forms.survey_responses`. Basic RSVP and answers commit in one transaction. A duplicate email/event cannot overwrite answers; the confirmation explains that the original is saved. A changed question version causes an open old form to request reopening before submitting. Contact an officer to change or cancel an existing response.
+Migration 010 stores the original question snapshot and answers per RSVP in `club_forms.survey_responses`. Basic RSVP and answers commit in one transaction. A duplicate email/event cannot overwrite answers; the confirmation explains that the original is saved. A changed question version causes an open old form to request reopening before submitting. Authorized admins can correct saved answers through **Edit response**; the original questions and version stay unchanged.
 
 Inbox shows event, date/TBD, name and email with a link to **View survey answers**. Surveys shows complete responses, filtered by event or RSVP and paginated by 50, including responses to past or archived events. Only authenticated officers can read this API. Question and event snapshots retain their original wording after edits. Event surveys include plain summaries and CSV exports; graphical analytics are tracked in [issue #34](https://github.com/Dallas-College-AI-Club/dallasai.club/issues/34). No email notifications are sent.
 
@@ -107,7 +107,11 @@ and clears the compiled view; it does not occupy space on the response list.
 filters across all pages. Each event also has summary/export buttons. Changed question versions remain
 separate. Choice percentages use the people who answered that question as the
 denominator; multi-select totals can exceed 100%. Written and Other answers are
-collapsible. CSV preserves multiline answers and neutralizes spreadsheet formulas.
+collapsible. CSV exports each response on one line, with semicolon-separated answers
+and separate Yes/No columns for every multiple-choice option. This makes each date
+and time visible in its own column. A selection of **Any of these** marks ordinary
+choices **Yes (Any of these)** while keeping None and Not sure unselected. Formula
+values are escaped. CSV does not control Excel's column widths or wrap settings.
 Reports refuse more than 10,000 matches explicitly; narrow the event/search rather
 than receiving a silently incomplete export.
 
@@ -146,10 +150,36 @@ those accounts.
 Apply `backend/014_event_response_management.sql` after migrations 009 and 010,
 before deploying these controls. It backfills contacts from existing entries and
 captures future submissions with a trigger. State is kept in `survey_response_state`
-separately from immutable `survey_responses`; notes are append-only. Keep this
+separately from `survey_responses`; notes are append-only. Keep this
 additive migration on a code rollback. It does not delete or archive existing data.
 
 Answer choices can be edited individually and reordered using drag handles or
 keyboard-accessible arrow buttons. Bulk entry with one option per line still works.
 In the event preview, try answers and open **Preview admin result** to review a
 clearly labeled sample. Those trial answers are never submitted or saved to Neon.
+
+## Editing and deleting submissions
+
+Inbox groups submissions by event, or by form type when there is no event. Expand
+a person to read details, edit, or change their review status. **Event RSVPs (past)**
+is separate from the upcoming filter. **All submissions** includes both, and past
+RSVP links and exports remain available.
+
+**Edit response** is available in Inbox and Event surveys. It opens the saved
+name, email and response fields; event answers use their original questions.
+Changes require an explicit save, are logged with the acting admin, and reject
+stale edits. Retries do not duplicate a change. Changing an email removes its old
+verification flag; existing responses with the same email/event cannot be overwritten.
+
+In Archived, **Delete permanently** opens a warning with Cancel selected first.
+Confirmation removes the entry from both Inbox and Event surveys, including its
+answers, comments and attachments. Its contact and linked aliases are removed only
+when no other submission, contact note or custom survey membership uses them.
+Deletion receipts retain only identifiers, the admin, time and a digest. Private
+Advisor Studio responses remain read-only and use their separate archive.
+
+Apply `backend/016_submission_management.sql` after migration 015 before deploying.
+This additive migration preserves existing data. Attachment deletion is queued in
+the database transaction, attempted immediately, and retried by maintenance on failure.
+For local browser checks, build then run `node tests/serve-submission-management.mjs`;
+its records are synthetic and kept only in memory at `http://127.0.0.1:4194/admin/`.

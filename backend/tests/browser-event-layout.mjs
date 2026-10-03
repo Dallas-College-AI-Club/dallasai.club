@@ -196,6 +196,41 @@ try {
     'officer@example.com',
     [],
   );
+  const poster = await sharp({
+    create: {
+      width: 800,
+      height: 1100,
+      channels: 3,
+      background: '#527b62',
+    },
+  })
+    .webp()
+    .toBuffer();
+  const upload = await fetch(origin + '/api/events?upload=1', {
+    method: 'POST',
+    headers: {
+      origin,
+      'content-type': 'application/json',
+      cookie: 'test-officer=signed-in',
+    },
+    body: JSON.stringify({ content: poster.toString('base64') }),
+  });
+  assert.equal(upload.status, 200);
+  const uploaded = (await upload.json()).image;
+  const row = (
+    await db.query("SELECT * FROM club_forms.events WHERE id='layout-workshop'")
+  ).rows[0];
+  await saveEvent(
+    db,
+    {
+      action: 'publish',
+      id: row.id,
+      revision: row.revision,
+      event: { ...row.draft, images: [{ id: uploaded.id, alt: '' }] },
+    },
+    'officer@example.com',
+    [],
+  );
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1100 },
   });
@@ -277,7 +312,10 @@ try {
     '## Heading\n- first\n- second',
   );
   await admin
-    .getByRole('button', { name: 'Numbered list in Description', exact: true })
+    .getByRole('button', {
+      name: 'Numbered list in Description',
+      exact: true,
+    })
     .click();
   assert.equal(
     await admin.locator('[name=summary]').inputValue(),
@@ -311,12 +349,15 @@ try {
     .getByRole('button', { name: 'Publish event', exact: true })
     .click();
   await admin
+    .locator('#event-status')
     .getByText(
-      'Published. The website will show this event on its next refresh.',
+      'Published successfully — live on the website. Editing is complete.',
       { exact: true },
     )
     .waitFor();
   assert.equal(writes, 1);
+  assert.equal(await admin.locator('#event-form').isVisible(), false);
+  await admin.locator('#edit-selected-event').click();
   await admin.getByRole('button', { name: 'Preview', exact: true }).click();
   const preview = admin.frameLocator('#site-preview-frame');
   await preview
@@ -348,7 +389,15 @@ try {
   await page.route(
     'https://dallasai-leaderboard.vercel.app/api/events*',
     async (route) => {
-      const response = await fetch(origin + '/api/events');
+      const response = await fetch(
+        origin + '/api/events' + new URL(route.request().url()).search,
+      );
+      if (new URL(route.request().url()).searchParams.has('image'))
+        return route.fulfill({
+          status: response.status,
+          contentType: 'image/webp',
+          body: Buffer.from(await response.arrayBuffer()),
+        });
       await route.fulfill({
         status: response.status,
         contentType: 'application/json',
@@ -431,6 +480,67 @@ try {
     if ([1440, 390, 320].includes(width))
       await page.screenshot({
         path: path.join(screens, 'event-layout-' + width + '.png'),
+        fullPage: true,
+      });
+    const gallery = page.locator('.event-gallery img');
+    await gallery.scrollIntoViewIfNeeded();
+    await page.waitForFunction(
+      () => document.querySelector('.event-gallery img')?.naturalWidth > 0,
+    );
+    const imageBox = await gallery.boundingBox(),
+      detailBox = await page.locator('#event-detail').boundingBox();
+    assert.ok(
+      imageBox.width >= detailBox.width * (width <= 600 ? 0.9 : 0.45),
+      'Poster uses a substantial share of the details width',
+    );
+    await page.locator('.event-image-open').click();
+    await page.locator('.event-image-viewer[open]').waitFor();
+    assert.equal(
+      await page
+        .locator('.event-image-viewer')
+        .evaluate((el) => el.scrollWidth <= el.clientWidth),
+      true,
+    );
+    const enlarged = await page
+      .locator('.event-image-viewer img')
+      .boundingBox();
+    assert.ok(
+      enlarged.x >= 0 &&
+        enlarged.y >= 0 &&
+        enlarged.x + enlarged.width <= width + 1 &&
+        enlarged.y + enlarged.height <= height + 1,
+    );
+    await page.keyboard.press('Escape');
+    assert.equal(
+      await page.locator('.event-image-viewer').getAttribute('open'),
+      null,
+    );
+    assert.equal(await page.locator('#event-going').count(), 0);
+    assert.equal(await page.locator('#event-rsvp-action').count(), 1);
+    await page.locator('.footer-signature').scrollIntoViewIfNeeded();
+    await page.evaluate(() => document.fonts.ready);
+    const footerWidths = await page
+      .locator('.footer-signature')
+      .evaluate((el) => {
+        const word = el
+          .querySelector('.coladde-wordmark')
+          .getBoundingClientRect();
+        const p = el.querySelector('p').getBoundingClientRect();
+        return {
+          word: word.width,
+          tag: p.width,
+          center: Math.abs(word.x + word.width / 2 - p.x - p.width / 2),
+        };
+      });
+    assert.ok(
+      footerWidths.tag / footerWidths.word < 1.15 &&
+        footerWidths.tag / footerWidths.word > 0.9,
+      'Tagline matches wordmark width',
+    );
+    assert.ok(footerWidths.center < 2, 'Wordmark and tagline are centered');
+    if (width === 1440 || width === 390)
+      await page.screenshot({
+        path: path.join(screens, 'event-polish-' + width + '.png'),
         fullPage: true,
       });
     await admin.setViewportSize({ width, height });

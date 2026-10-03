@@ -59,9 +59,93 @@ export function surveyEditor(root, addButton) {
           input.rows = 6;
           input.maxLength = 6029;
           input.value = question.options.join('\n');
-          input.oninput = () => (question.options = input.value.split('\n'));
+          const choices = node('div');
+          choices.className = 'survey-choice-editor';
+          function renderChoices(focusIndex) {
+            choices.replaceChildren(
+              ...question.options.map((choice, i) => {
+                const row = node('div');
+                row.className = 'survey-option-row';
+                row.dataset.index = i;
+                const handle = node('button', '↕');
+                handle.type = 'button';
+                handle.className = 'secondary choice-drag';
+                handle.setAttribute(
+                  'aria-label',
+                  'Drag choice ' + (i + 1) + ' to reorder',
+                );
+                let dragging = false;
+                handle.onpointerdown = (event) => {
+                  if (event.button !== 0) return;
+                  dragging = true;
+                  handle.setPointerCapture(event.pointerId);
+                  row.classList.add('dragging');
+                };
+                handle.onpointercancel = () => {
+                  dragging = false;
+                  row.classList.remove('dragging');
+                };
+                handle.onpointerup = (event) => {
+                  if (!dragging) return;
+                  dragging = false;
+                  row.classList.remove('dragging');
+                  const target = document
+                    .elementFromPoint(event.clientX, event.clientY)
+                    ?.closest('.survey-option-row');
+                  if (target && choices.contains(target))
+                    move(i, Number(target.dataset.index));
+                };
+                const answer = node('input');
+                answer.value = choice;
+                answer.maxLength = 200;
+                answer.setAttribute('aria-label', 'Answer choice ' + (i + 1));
+                answer.oninput = () => {
+                  question.options[i] = answer.value;
+                  input.value = question.options.join('\n');
+                };
+                row.append(handle, answer);
+                for (const [text, delta] of [
+                  ['↑', -1],
+                  ['↓', 1],
+                ]) {
+                  const button = node('button', text);
+                  button.type = 'button';
+                  button.className = 'secondary';
+                  button.setAttribute(
+                    'aria-label',
+                    'Move choice ' + (i + 1) + (delta < 0 ? ' up' : ' down'),
+                  );
+                  button.disabled =
+                    i + delta < 0 || i + delta >= question.options.length;
+                  button.onclick = () => move(i, i + delta);
+                  row.append(button);
+                }
+                return row;
+              }),
+            );
+            if (focusIndex !== undefined)
+              choices.children[focusIndex]?.querySelector('input').focus();
+          }
+          function move(from, to) {
+            if (from === to || to < 0 || to >= question.options.length) return;
+            question.options.splice(to, 0, question.options.splice(from, 1)[0]);
+            input.value = question.options.join('\n');
+            renderChoices(to);
+          }
+          input.oninput = () => {
+            question.options = input.value.split('\n');
+            renderChoices();
+          };
+          renderChoices();
           wrapper.append(input);
-          box.append(wrapper);
+          box.append(
+            wrapper,
+            node(
+              'p',
+              'Edit choices below. Drag ↕ to reorder, or use the arrow buttons.',
+            ),
+            choices,
+          );
           check('Allow an Other answer', 'allowOther');
         }
         const actions = node('div');

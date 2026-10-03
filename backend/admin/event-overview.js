@@ -103,7 +103,7 @@ export function eventOverview(row, status, startEditing) {
     for (const image of event.images) {
       const img = node('img');
       img.src = '/api/events?image=' + encodeURIComponent(image.id);
-      img.alt = image.alt;
+      img.alt = image.alt || event.title + ' — event image';
       img.loading = 'lazy';
       gallery.append(img);
     }

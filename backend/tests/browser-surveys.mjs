@@ -28,6 +28,7 @@ for (const file of [
   '007_office_tools.sql',
   '009_submission_comments.sql',
   '010_event_surveys.sql',
+  '014_event_response_management.sql',
 ])
   await db.exec(await readFile(new URL('../' + file, import.meta.url), 'utf8'));
 await db.exec(
@@ -192,9 +193,74 @@ try {
       await box.getByLabel('Allow an Other answer').setChecked(other);
     }
   }
+  // Choice order supports keyboard buttons and pointer dragging without losing text.
+  const choiceBox = admin.locator('.survey-editor-question').last();
+  await choiceBox
+    .getByRole('button', { name: 'Move choice 2 up', exact: true })
+    .click();
+  assert.equal(
+    await choiceBox.getByLabel('Answer choice 1', { exact: true }).inputValue(),
+    'Puzzles',
+  );
+  await choiceBox
+    .getByRole('button', { name: 'Drag choice 1 to reorder', exact: true })
+    .dragTo(choiceBox.locator('.survey-option-row').nth(1));
+  assert.equal(
+    await choiceBox.getByLabel('Answer choice 1', { exact: true }).inputValue(),
+    'Cards',
+  );
+  let previewSubmits = 0;
+  admin.on('request', (r) => {
+    if (r.method() === 'POST' && r.url().includes('/api/forms'))
+      previewSubmits++;
+  });
+  await admin.getByRole('button', { name: 'Preview', exact: true }).click();
+  const preview = admin.frameLocator('#site-preview-frame');
+  await preview.locator('#open-rsvp').click();
+  await preview
+    .getByLabel('Friend name', { exact: true })
+    .fill('Preview answer only');
+  await preview.getByLabel('Friday', { exact: true }).check();
+  await preview.getByLabel('Cards', { exact: true }).check();
+  await preview
+    .getByRole('button', { name: 'Preview admin result', exact: true })
+    .click();
+  await preview.locator('.rsvp-answer-preview[open]').waitFor();
+  assert.match(
+    await preview.locator('.rsvp-answer-preview').textContent(),
+    /Preview answer only/,
+  );
+  assert.match(
+    await preview.locator('.rsvp-answer-preview').textContent(),
+    /not been submitted or saved/,
+  );
+  assert.equal(previewSubmits, 0);
+  assert.equal(
+    (await db.query('SELECT count(*)::int AS count FROM club_forms.entries'))
+      .rows[0].count,
+    0,
+  );
+  await preview
+    .getByRole('button', { name: 'Back to preview', exact: true })
+    .click();
+  await preview.getByLabel('Saturday', { exact: true }).check();
+  await preview
+    .getByRole('button', { name: 'Preview admin result', exact: true })
+    .click();
+  assert.match(
+    await preview.locator('.rsvp-answer-preview').textContent(),
+    /Saturday/,
+  );
+  await admin
+    .getByRole('button', { name: 'Close preview', exact: true })
+    .click();
   await admin.getByRole('button', { name: 'Save draft', exact: true }).click();
   await admin
-    .getByText('Draft saved. The website has not changed.', { exact: true })
+    .locator('#event-status')
+    .getByText(
+      'Draft saved successfully. These saved changes are private until you publish. Editing is complete.',
+      { exact: true },
+    )
     .waitFor();
   const stored = (await db.query('SELECT * FROM club_forms.events')).rows[0];
   assert.equal(stored.draft.surveyQuestions.length, 3);
@@ -207,8 +273,9 @@ try {
     .getByRole('button', { name: 'Publish event', exact: true })
     .click();
   await admin
+    .locator('#event-status')
     .getByText(
-      'Published. The website will show this event on its next refresh.',
+      'Published successfully — live on the website. Editing is complete.',
       { exact: true },
     )
     .waitFor();
@@ -300,7 +367,9 @@ try {
       .evaluate((el) => el.scrollWidth <= el.clientWidth),
     true,
   );
-  await page.screenshot({ path: path.join(screens, 'survey-rsvp-mobile.png') });
+  await page.screenshot({
+    path: path.join(screens, 'survey-rsvp-mobile.png'),
+  });
   await page.locator('#event-rsvp button[type=submit]').click();
   await page
     .getByRole('heading', { name: 'RSVP received', exact: true })
@@ -365,6 +434,108 @@ try {
     path: path.join(screens, 'survey-results-mobile.png'),
     fullPage: true,
   });
+  await admin.locator('#survey-view').selectOption('active');
+  await admin.locator('.survey-response').waitFor();
+  assert.equal(
+    await admin.locator('.survey-response').getAttribute('open'),
+    null,
+  );
+  await admin.locator('.survey-response > summary').click();
+  await admin.getByRole('button', { name: '☆ Star', exact: true }).click();
+  await admin.getByText('Response starred.', { exact: true }).waitFor();
+  await admin.locator('#survey-starred').check();
+  await admin.locator('.survey-response').waitFor();
+  await admin.locator('.survey-response > summary').click();
+  await admin.getByRole('button', { name: 'Archive', exact: true }).click();
+  await admin
+    .getByText('Response archived. Find it under Archived to restore it.', {
+      exact: true,
+    })
+    .waitFor();
+  assert.equal(await admin.locator('.survey-response').count(), 0);
+  await admin.locator('#survey-view').selectOption('archived');
+  await admin.locator('.survey-response > summary').click();
+  await admin.getByRole('button', { name: 'Restore', exact: true }).click();
+  await admin
+    .getByText('Response restored to Active.', { exact: true })
+    .waitFor();
+  await admin.locator('#survey-view').selectOption('active');
+  await admin.locator('#survey-search').fill('MKim23@Student');
+  await admin.locator('.survey-response').waitFor();
+  await admin
+    .getByRole('button', { name: 'Compile event summary', exact: true })
+    .click();
+  await admin
+    .getByRole('heading', {
+      name: '1 matching responses · all pages',
+      exact: true,
+    })
+    .waitFor();
+  assert.match(
+    await admin.locator('.survey-report').textContent(),
+    /Cards — 1 \(100%\)/,
+  );
+  const downloading = admin.waitForEvent('download');
+  await admin
+    .getByRole('button', { name: 'Export event CSV', exact: true })
+    .click();
+  const download = await downloading;
+  const csv = await readFile(await download.path(), 'utf8');
+  assert.match(csv, /mkim23@student.dallascollege.edu/);
+  assert.match(csv, /Other: Chess/);
+  await admin.locator('.survey-response > summary').click();
+  await admin
+    .getByRole('button', { name: 'Contact history', exact: true })
+    .click();
+  await admin
+    .locator('.contact-note-form textarea')
+    .fill('Called to confirm the preferred date.');
+  await admin.getByRole('button', { name: 'Save note', exact: true }).click();
+  await admin.getByText('Follow-up note saved.', { exact: true }).waitFor();
+  assert.match(
+    await admin.locator('.contact-dialog').textContent(),
+    /Called to confirm/,
+  );
+  assert.equal(
+    (
+      await db.query(
+        'SELECT count(*)::int AS count FROM club_forms.contact_notes',
+      )
+    ).rows[0].count,
+    1,
+  );
+  assert.equal(
+    await admin
+      .locator('.contact-dialog')
+      .evaluate((el) => el.scrollWidth <= el.clientWidth),
+    true,
+  );
+  await admin.screenshot({
+    path: path.join(screens, 'contact-history-mobile.png'),
+  });
+  await admin
+    .locator('.contact-dialog')
+    .getByRole('button', { name: 'Close', exact: true })
+    .click();
+  await admin.locator('#survey-search').fill('no-such-person');
+  await admin
+    .getByText(
+      '0 matching saved responses. Expand a person to read answers or manage their response.',
+      { exact: true },
+    )
+    .waitFor();
+  assert.equal(await admin.locator('.survey-response').count(), 0);
+  await admin
+    .getByRole('button', { name: 'Contacts & follow-up', exact: true })
+    .click();
+  await admin
+    .getByRole('button', { name: 'Search contacts', exact: true })
+    .click();
+  await admin.locator('.contact-choice').waitFor();
+  await admin
+    .locator('.contact-dialog')
+    .getByRole('button', { name: 'Close', exact: true })
+    .click();
   const anonymous = await fetch(origin + '/api/surveys');
   assert.equal(anonymous.status, 401);
   await admin.getByRole('button', { name: 'Sign out', exact: true }).click();

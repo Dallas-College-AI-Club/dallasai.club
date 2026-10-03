@@ -1,3 +1,8 @@
+import {
+  responseFilter,
+  responseSelect,
+  responseFrom,
+} from './survey-management.mjs';
 import { createHash } from 'node:crypto';
 import { RequestError } from './errors.mjs';
 const questionId =
@@ -163,34 +168,27 @@ export async function saveSurveyResponse(tx, entry, response) {
     ],
   );
 }
-export async function surveyResults(
-  db,
-  { eventId = '', entryId = '', offset = 0 } = {},
-) {
-  if (
-    (eventId && !/^[a-z0-9][a-z0-9-]{0,99}$/.test(eventId)) ||
-    (entryId && !questionId.test(entryId)) ||
-    !Number.isSafeInteger(offset) ||
-    offset < 0 ||
-    offset > 100000
-  )
-    throw new RequestError(400, 'Invalid survey filter.');
+export async function surveyResults(db, filter = {}) {
+  const { where, values, offset } = responseFilter(filter);
   const result = await db.query(
-    `SELECT s.*,e.name,e.email,e.review_status FROM club_forms.survey_responses s
-     JOIN club_forms.entries e ON e.id=s.entry_id
-     WHERE ($1='' OR s.event_id=$1) AND ($2='' OR s.entry_id::text=$2)
-     ORDER BY s.created_at DESC,s.entry_id LIMIT 51 OFFSET $3`,
-    [eventId, entryId, offset],
+    `${responseSelect} ${where} ORDER BY s.created_at DESC,s.entry_id LIMIT 51 OFFSET $6`,
+    [...values, offset],
   );
+  const total = (
+    await db.query(
+      `SELECT count(*)::int AS count ${responseFrom} ${where}`,
+      values,
+    )
+  ).rows[0].count;
   const events = (
     await db.query(
-      `SELECT DISTINCT ON (event_id) event_id AS id,event_title AS title,event_date AS date
-     FROM club_forms.survey_responses ORDER BY event_id,created_at DESC,entry_id`,
+      `SELECT DISTINCT ON (event_id) event_id AS id,event_title AS title,event_date AS date FROM club_forms.survey_responses ORDER BY event_id,created_at DESC,entry_id`,
     )
   ).rows;
   return {
     responses: result.rows.slice(0, 50),
     hasMore: result.rows.length > 50,
     events,
+    total,
   };
 }

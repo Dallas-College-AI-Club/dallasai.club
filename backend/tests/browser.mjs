@@ -91,7 +91,7 @@ try {
     },
   );
   const identity = async () => {
-    await page.getByLabel('Your name', { exact: true }).fill('Test Student');
+    await page.getByLabel('Your full name', { exact: true }).fill('Test Student');
     await page
       .getByLabel('Email address', { exact: true })
       .fill('student@example.com');
@@ -305,7 +305,7 @@ try {
     .click();
   await page.locator('.form-error').waitFor();
   assert.equal(
-    await page.getByLabel('Your name', { exact: true }).inputValue(),
+    await page.getByLabel('Your full name', { exact: true }).inputValue(),
     'Test Student',
   );
   assert.equal(
@@ -352,7 +352,7 @@ try {
     .waitFor();
   assert.equal(await page.locator('.form-confirmation').count(), 0);
   assert.equal(
-    await page.getByLabel('Your name', { exact: true }).inputValue(),
+    await page.getByLabel('Your full name', { exact: true }).inputValue(),
     'Test Student',
   );
   invalidResponse = false;

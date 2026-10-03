@@ -14,12 +14,13 @@ const button = (text, handler) => {
 };
 export function mountSurveyResults(api) {
   const q = (s) => document.querySelector(s),
-    contacts = contactHistory(api);
+    contacts = contactHistory(api, () => load());
   let offset = 0,
     entryId = '',
     generation = 0,
     reportGeneration = 0,
-    timer;
+    timer,
+    reportReturnFocus;
   const tools = node('div', undefined, 'survey-tools'),
     searchLabel = node('label', 'Name or email'),
     search = node('input'),
@@ -53,12 +54,63 @@ export function mountSurveyResults(api) {
     button('Contacts & follow-up', () => contacts.open()),
   );
   const reportTools = node('div', undefined, 'survey-tools'),
-    report = node('div', undefined, 'survey-report');
+    report = node('div', undefined, 'survey-report'),
+    reportDialog = node('dialog', undefined, 'survey-report-dialog'),
+    reportHeader = node('div', undefined, 'survey-report-header'),
+    reportHeading = node('h2', 'Compiled answers'),
+    reportStatus = node('p', '', 'survey-report-status'),
+    reportExport = button('Export CSV', () => {}),
+    reportClose = button('Close', () => closeReport());
+  reportHeading.id = 'survey-report-heading';
+  reportHeading.tabIndex = -1;
+  reportDialog.setAttribute('aria-labelledby', reportHeading.id);
+  reportStatus.setAttribute('role', 'status');
+  reportHeader.append(reportHeading, reportExport, reportClose, reportStatus);
+  reportDialog.append(reportHeader, report);
+  document.body.append(reportDialog);
+  function clearReport() {
+    reportGeneration++;
+    report.replaceChildren();
+    reportStatus.textContent = '';
+    reportExport.disabled = true;
+    reportExport.onclick = null;
+    document.documentElement.classList.remove('survey-report-open');
+    if (reportReturnFocus) {
+      const target = reportReturnFocus.isConnected
+        ? reportReturnFocus
+        : reportTools.querySelector('button');
+      if (target?.getClientRects().length)
+        target.focus({ preventScroll: true });
+      reportReturnFocus = null;
+    }
+  }
+  function closeReport() {
+    if (reportDialog.open) reportDialog.close();
+    clearReport();
+  }
+  reportDialog.addEventListener('close', () => {
+    if (!reportDialog.open) clearReport();
+  });
+  reportDialog.addEventListener('cancel', (event) => {
+    event.preventDefault();
+    closeReport();
+  });
+  reportDialog.addEventListener('click', (event) => {
+    if (event.target !== reportDialog) return;
+    const bounds = reportDialog.getBoundingClientRect();
+    if (
+      event.clientX < bounds.left ||
+      event.clientX > bounds.right ||
+      event.clientY < bounds.top ||
+      event.clientY > bounds.bottom
+    )
+      closeReport();
+  });
   reportTools.append(
     button('Compile summary', () => summary()),
     button('Export matching CSV', () => download()),
   );
-  q('#survey-status').after(reportTools, report);
+  q('#survey-status').after(reportTools);
   const filters = (eventId = q('#survey-event').value) =>
     new URLSearchParams({
       eventId,
@@ -67,13 +119,16 @@ export function mountSurveyResults(api) {
       view: view.value,
       starred: String(star.checked),
     });
-  async function download(eventId) {
+  async function download(
+    eventId,
+    { scope, status = q('#survey-status'), isCurrent = () => true } = {},
+  ) {
+    if (timer) await reset();
     const version = generation,
-      params = filters(eventId);
+      params = scope ? new URLSearchParams(scope) : filters(eventId);
     if (eventId) params.delete('entryId');
     params.set('export', 'csv');
-    q('#survey-status').textContent =
-      'Preparing CSV for all matching responses…';
+    status.textContent = 'Preparing CSV for all matching responses…';
     try {
       const response = await fetch('/api/surveys?' + params, {
         credentials: 'same-origin',
@@ -84,29 +139,54 @@ export function mountSurveyResults(api) {
         throw Error(data.error || 'Could not export responses.');
       }
       const blob = await response.blob();
-      if (version !== generation) return;
+      if (version !== generation || !isCurrent()) return;
       const link = node('a');
       link.href = URL.createObjectURL(blob);
       link.download = (eventId || 'event-surveys') + '-responses.csv';
+      link.hidden = true;
+      (reportDialog.open ? reportDialog : document.body).append(link);
       link.click();
+      link.remove();
       setTimeout(() => URL.revokeObjectURL(link.href), 1000);
-      q('#survey-status').textContent =
+      status.textContent =
         'CSV downloaded. It includes all matching responses across every page.';
     } catch (error) {
-      if (version === generation)
-        q('#survey-status').textContent = error.message;
+      if (version === generation && isCurrent())
+        status.textContent = error.message;
     }
   }
   async function summary(eventId) {
+    const trigger = document.activeElement;
+    if (timer) await reset();
+    reportReturnFocus = trigger;
     const version = generation,
       params = filters(eventId);
     const reportVersion = ++reportGeneration;
     if (eventId) params.delete('entryId');
+    const scope = new URLSearchParams(params);
+    const isCurrent = () =>
+      reportDialog.open &&
+      version === generation &&
+      reportVersion === reportGeneration;
+    report.replaceChildren();
+    reportStatus.textContent = 'Compiling all matching responses…';
+    reportExport.disabled = true;
+    reportExport.onclick = async () => {
+      if (!isCurrent()) return;
+      reportExport.disabled = true;
+      await download(eventId, { scope, status: reportStatus, isCurrent });
+      if (isCurrent()) reportExport.disabled = false;
+    };
+    document.documentElement.classList.add('survey-report-open');
+    if (!reportDialog.open) reportDialog.showModal();
+    reportHeading.focus({ preventScroll: true });
+    report.scrollTop = 0;
     params.set('summary', '1');
-    report.replaceChildren(node('p', 'Compiling all matching responses…'));
     try {
       const data = await api('/api/surveys?' + params);
-      if (version !== generation || reportVersion !== reportGeneration) return;
+      if (!isCurrent()) return;
+      reportStatus.textContent = '';
+      reportExport.disabled = data.total === 0;
       report.replaceChildren(
         node('h3', data.total + ' matching responses · all pages'),
         node(
@@ -191,8 +271,7 @@ export function mountSurveyResults(api) {
         report.append(section);
       }
     } catch (error) {
-      if (version === generation && reportVersion === reportGeneration)
-        report.replaceChildren(node('p', error.message));
+      if (isCurrent()) reportStatus.textContent = error.message;
     }
   }
   function card(response) {
@@ -280,7 +359,8 @@ export function mountSurveyResults(api) {
     const version = ++generation,
       eventId = q('#survey-event').value;
     clearTimeout(timer);
-    report.replaceChildren();
+    timer = null;
+    closeReport();
     q('#survey-status').textContent = 'Loading survey results…';
     q('#survey-results').replaceChildren();
     q('#survey-previous').disabled = q('#survey-next').disabled = true;
@@ -339,12 +419,12 @@ export function mountSurveyResults(api) {
     entryId = '';
     offset = 0;
     history.replaceState({}, '', '#surveys');
-    load();
+    return load();
   }
   search.oninput = () => {
     clearTimeout(timer);
     generation++;
-    report.replaceChildren();
+    closeReport();
     timer = setTimeout(reset, 250);
   };
   view.onchange = star.onchange = q('#survey-event').onchange = reset;
@@ -374,7 +454,7 @@ export function mountSurveyResults(api) {
       entryId = '';
       offset = 0;
       contacts.clear();
-      report.replaceChildren();
+      closeReport();
       q('#survey-results').replaceChildren();
       q('#survey-event').replaceChildren(
         new Option('All events, including past events', ''),

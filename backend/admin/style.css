@@ -1298,3 +1298,112 @@ input::file-selector-button {
 .survey-option-row.dragging {
   outline: 2px dashed var(--accent);
 }
+/* Compiled event answers stay in a dismissible report, outside the response list. */
+html.survey-report-open {
+  overflow: hidden;
+}
+.survey-report-dialog {
+  box-sizing: border-box;
+  width: min(960px, 94vw);
+  max-width: 94vw;
+  max-height: 90dvh;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--page);
+  color: var(--text);
+  overflow: hidden;
+}
+.survey-report-dialog[open] {
+  display: flex;
+  flex-direction: column;
+}
+.survey-report-dialog::backdrop {
+  background: #0009;
+}
+.survey-report-header {
+  display: flex;
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--line);
+}
+.survey-report-header h2 {
+  flex: 1;
+  min-width: 180px;
+  margin: 0;
+  font-size: 1.35rem;
+}
+.survey-report-header button {
+  min-height: 44px;
+}
+.survey-report-status {
+  flex-basis: 100%;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.survey-report-status:empty {
+  display: none;
+}
+.survey-report-dialog .survey-report {
+  padding: 0 24px 20px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+  overflow-wrap: anywhere;
+}
+.survey-report-dialog .survey-report:empty {
+  padding-bottom: 0;
+}
+@media (max-width: 600px) {
+  .survey-report-header {
+    padding: 14px;
+  }
+  .survey-report-dialog .survey-report {
+    padding-inline: 14px;
+  }
+  .survey-report-header h2 {
+    flex-basis: 100%;
+  }
+}
+.contact-management {
+  margin-block: 18px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+.contact-confirmation:empty {
+  display: none;
+}
+.contact-confirmation {
+  margin-top: 16px;
+  overflow-wrap: anywhere;
+}
+.contact-confirmation label {
+  display: block;
+}
+.contact-confirmation input {
+  width: 100%;
+  margin-block: 8px 14px;
+}
+.contact-confirmation .survey-response-actions {
+  margin-top: 12px;
+}
+.contact-management button {
+  white-space: normal;
+  min-height: 44px;
+}
+.contact-badge {
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+.contact-merge-search {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.contact-dialog .danger {
+  border-color: #c76570;
+}

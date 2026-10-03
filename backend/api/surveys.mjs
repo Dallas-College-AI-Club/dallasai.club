@@ -13,10 +13,12 @@ import {
   contactList,
   contactHistory,
   addContactNote,
+  manageContact,
 } from '../lib/contacts.mjs';
 export function surveysHandler({
   authorize = requireAdmin,
   getDatabase = database,
+  storage,
 } = {}) {
   return async function handler(req, res) {
     try {
@@ -28,7 +30,9 @@ export function surveysHandler({
         const result =
           body.action === 'contact-note'
             ? await addContactNote(db, body, user.email)
-            : await manageResponse(db, body, user.email);
+            : body.action?.startsWith('contact-')
+              ? await manageContact(db, body, user.email, storage)
+              : await manageResponse(db, body, user.email);
         return send(res, 200, result);
       }
       if (req.method !== 'GET')
@@ -51,6 +55,7 @@ export function surveysHandler({
           200,
           await contactList(db, {
             search: params.get('search') || '',
+            view: params.get('view') || 'active',
             offset,
           }),
         );

@@ -50,6 +50,7 @@ before(async () => {
     '009_submission_comments.sql',
     '010_event_surveys.sql',
     '014_event_response_management.sql',
+    '015_contact_identity_management.sql',
   ])
     await db.exec(await readFile(new URL('../' + f, import.meta.url), 'utf8'));
 });

@@ -323,6 +323,16 @@ test('custom results paginate with own answers always available and enforce acce
       adminPage.results.every((r) => r.active),
       true,
     );
+    for (const malformed of ['-'.repeat(36), 'a'.repeat(36)])
+      assert.equal(
+        (
+          await fetch(
+            origin + '/api/custom-surveys?action=results&id=' + malformed,
+            { headers: { Cookie: 'test-officer=yes' } },
+          )
+        ).status,
+        400,
+      );
     await f.db.query(
       "UPDATE club_forms.custom_surveys SET definition=jsonb_set(definition,'{permissions,results}','\"admins\"') WHERE id=$1",
       [id],

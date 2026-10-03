@@ -11,6 +11,7 @@ import { surveyResultPage } from '../lib/survey-results.mjs';
 import {
   respondentList,
   changeRespondent,
+  surveyId,
 } from '../lib/survey-respondents.mjs';
 import {
   linkedSurvey,
@@ -110,9 +111,7 @@ export function customSurveysHandler({
             surveys: await surveyCatalog(db),
           });
         }
-        const id = url.searchParams.get('id');
-        if (!/^[0-9a-f-]{36}$/i.test(id || ''))
-          throw new RequestError(400, 'Choose a survey.');
+        const id = surveyId(url.searchParams.get('id'));
         const survey = (
           await db.query(
             'SELECT id,title,status,content_version,definition FROM club_forms.custom_surveys WHERE id=$1',

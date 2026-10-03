@@ -1,8 +1,4 @@
-const node = (tag, text) => {
-  const e = document.createElement(tag);
-  if (text !== undefined) e.textContent = text;
-  return e;
-};
+import { node } from './ui.js';
 export function choiceEditor(question, onChange) {
   const root = node('div');
   root.className = 'survey-choice-editor';

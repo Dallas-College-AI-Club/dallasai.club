@@ -1,3 +1,4 @@
+import { node } from './ui.js';
 import { activityTime } from './event-activity.js';
 const actions = {
   'review:new': 'Marked new',
@@ -6,12 +7,6 @@ const actions = {
   'download-attachment': 'Downloaded an attachment',
   'comment-added': 'Added a comment',
   'submission-edited': 'Edited response',
-};
-const node = (tag, text, className) => {
-  const element = document.createElement(tag);
-  if (text !== undefined) element.textContent = text;
-  if (className) element.className = className;
-  return element;
 };
 export function submissionActivity(entry, api, drafts) {
   const panel = node('details', undefined, 'submission-activity');

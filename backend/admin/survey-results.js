@@ -1,18 +1,7 @@
+import { node, button } from './ui.js';
 import { activityTime } from './event-activity.js';
 import { contactHistory } from './contact-history.js';
 import { submissionEditor } from './submission-editor.js';
-const node = (tag, text, cls) => {
-  const el = document.createElement(tag);
-  if (text !== undefined) el.textContent = text;
-  if (cls) el.className = cls;
-  return el;
-};
-const button = (text, handler) => {
-  const el = node('button', text, 'secondary');
-  el.type = 'button';
-  el.onclick = handler;
-  return el;
-};
 export function mountSurveyResults(api, onContactPurge = () => {}) {
   const editor = submissionEditor(api, async (result) => {
     await load();

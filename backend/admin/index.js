@@ -1,3 +1,4 @@
+import { node } from './ui.js';
 import { mountSurveyResults } from './survey-results.js';
 import { createAuthClient } from 'better-auth/client';
 import { mountCustomSurveys } from './custom-surveys.js';
@@ -30,12 +31,6 @@ const alerts = mountBrowserAlerts(
   q('#enable-alerts'),
   q('#notification-status'),
 );
-function node(tag, text, className) {
-  const element = document.createElement(tag);
-  if (text !== undefined) element.textContent = text;
-  if (className) element.className = className;
-  return element;
-}
 function status(message = '') {
   q('#status').textContent = message;
 }

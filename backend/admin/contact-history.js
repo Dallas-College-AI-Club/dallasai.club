@@ -1,11 +1,6 @@
+import { button, node } from './ui.js';
 import { activityTime } from './event-activity.js';
 import { contactProfile } from './contact-profile.js';
-const node = (tag, text, cls) => {
-  const el = document.createElement(tag);
-  if (text !== undefined) el.textContent = text;
-  if (cls) el.className = cls;
-  return el;
-};
 const labels = {
   join: 'Club signup',
   subscribe: 'The AI Review subscription',
@@ -295,12 +290,6 @@ export function contactHistory(api, onChange = () => {}) {
       merge = node('button', 'Merge with another contact', 'secondary'),
       edit = node('button', 'Edit contact', 'secondary'),
       details = node('div', undefined, 'contact-confirmation');
-    const actionButton = (text, fn, cls = 'secondary') => {
-      const el = node('button', text, cls);
-      el.type = 'button';
-      el.onclick = fn;
-      return el;
-    };
     const fresh = () => version === generation && dialog.open;
     async function save(body, message) {
       if (!fresh()) return;
@@ -364,7 +353,7 @@ export function contactHistory(api, onChange = () => {}) {
       heading.tabIndex = -1;
       details.replaceChildren(heading, node('p', description));
       let input;
-      const accept = actionButton(
+      const accept = button(
         label,
         () => {
           if (requireEmail && input.value.trim() !== contact.email) return;
@@ -393,7 +382,7 @@ export function contactHistory(api, onChange = () => {}) {
       }
       row.append(
         accept,
-        actionButton('Cancel', () => {
+        button('Cancel', () => {
           details.replaceChildren();
           merge.focus();
         }),
@@ -480,7 +469,7 @@ export function contactHistory(api, onChange = () => {}) {
           );
           results.replaceChildren();
           for (const candidate of candidates) {
-            const choose = actionButton(
+            const choose = button(
               '',
               () =>
                 confirm(

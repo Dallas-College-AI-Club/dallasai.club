@@ -1,15 +1,4 @@
-const node = (tag, text, cls) => {
-  const el = document.createElement(tag);
-  if (text !== undefined) el.textContent = text;
-  if (cls) el.className = cls;
-  return el;
-};
-const button = (text, action) => {
-  const el = node('button', text, 'secondary');
-  el.type = 'button';
-  el.onclick = action;
-  return el;
-};
+import { node, button } from './ui.js';
 export function contactProfile(
   contact,
   save,

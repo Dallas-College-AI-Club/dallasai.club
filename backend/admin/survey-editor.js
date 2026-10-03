@@ -1,8 +1,4 @@
-const node = (tag, text) => {
-  const el = document.createElement(tag);
-  if (text !== undefined) el.textContent = text;
-  return el;
-};
+import { node } from './ui.js';
 export function surveyEditor(root, addButton) {
   let questions = [];
   function render() {

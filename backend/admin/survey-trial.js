@@ -1,9 +1,5 @@
+import { node } from './ui.js';
 import { questionFields } from '../surveys/form-ui.js';
-const node = (tag, text) => {
-  const e = document.createElement(tag);
-  if (text !== undefined) e.textContent = text;
-  return e;
-};
 export function surveyTrial(definition) {
   const root = node('details');
   root.className = 'survey-trial';

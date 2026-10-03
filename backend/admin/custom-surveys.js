@@ -1,12 +1,7 @@
+import { node } from './ui.js';
 import { mountRespondents } from './survey-respondents.js';
 import { mountSurveyBuilder } from './survey-builder.js';
 import { responseSections } from '../surveys/results-ui.js';
-function node(tag, text, className) {
-  const el = document.createElement(tag);
-  if (text !== undefined) el.textContent = text;
-  if (className) el.className = className;
-  return el;
-}
 export function mountCustomSurveys(root, api) {
   let generation = 0,
     selected = '',

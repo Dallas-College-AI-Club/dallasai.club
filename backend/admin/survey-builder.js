@@ -1,12 +1,7 @@
+import { button, node } from './ui.js';
 import { mountRespondents } from './survey-respondents.js';
 import { surveyTrial } from './survey-trial.js';
 import { choiceEditor } from './survey-choices.js';
-const node = (tag, text, cls) => {
-  const e = document.createElement(tag);
-  if (text !== undefined) e.textContent = text;
-  if (cls) e.className = cls;
-  return e;
-};
 const audienceNames = {
   students: 'Dallas College students',
   staff: 'Dallas College staff',
@@ -79,12 +74,6 @@ export function mountSurveyBuilder(root, api, onDone, id) {
       }
     }
     render();
-  }
-  function button(label, fn, cls = 'secondary') {
-    const b = node('button', label, cls);
-    b.type = 'button';
-    b.onclick = fn;
-    return b;
   }
   function field(
     label,

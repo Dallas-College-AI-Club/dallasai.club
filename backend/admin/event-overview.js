@@ -1,10 +1,5 @@
+import { node } from './ui.js';
 import { eventText, eventList, eventAgenda } from '../lib/event-format.mjs';
-const node = (tag, text, cls) => {
-  const el = document.createElement(tag);
-  if (text !== undefined) el.textContent = text;
-  if (cls) el.className = cls;
-  return el;
-};
 export function eventOverview(row, status, startEditing) {
   const event = row.draft,
     fragment = document.createDocumentFragment();

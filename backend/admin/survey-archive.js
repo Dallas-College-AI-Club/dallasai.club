@@ -1,9 +1,5 @@
+import { node } from './ui.js';
 import { responseSections } from '../surveys/results-ui.js';
-const node = (tag, text) => {
-  const e = document.createElement(tag);
-  if (text !== undefined) e.textContent = text;
-  return e;
-};
 export function mountSurveyArchive(root, api) {
   let generation = 0,
     offset = 0,

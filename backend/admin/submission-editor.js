@@ -1,9 +1,4 @@
-const node = (tag, text, className) => {
-  const el = document.createElement(tag);
-  if (text !== undefined) el.textContent = text;
-  if (className) el.className = className;
-  return el;
-};
+import { node } from './ui.js';
 const fields = {
   subscribe: [],
   rsvp: [],

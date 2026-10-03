@@ -1,9 +1,4 @@
-const node = (tag, text, className) => {
-  const element = document.createElement(tag);
-  if (text !== undefined) element.textContent = text;
-  if (className) element.className = className;
-  return element;
-};
+import { node } from './ui.js';
 export async function mountRespondents(root, surveyId, api, onChanged) {
   root.append(node('p', 'Loading respondents…'));
   try {

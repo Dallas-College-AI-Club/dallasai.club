@@ -1,13 +1,8 @@
+import { node } from './ui.js';
 import { eventOverview } from './event-overview.js';
 import { mountTextFormatting } from './text-formatting.js';
 import { surveyEditor } from './survey-editor.js';
 import { mountEventActivity, activityTime } from './event-activity.js';
-const node = (tag, text, className) => {
-  const el = document.createElement(tag);
-  if (text !== undefined) el.textContent = text;
-  if (className) el.className = className;
-  return el;
-};
 const blank = () => ({
   potential: false,
   requireEduEmail: false,

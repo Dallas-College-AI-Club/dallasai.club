@@ -58,6 +58,7 @@ export async function proxyNeonAuth(
   req,
   res,
   {
+    approvedEmail = (email) => emailList(process.env.ADMIN_EMAILS).includes(email),
     rateLimit = (request, path) =>
       limit(
         database(),
@@ -93,7 +94,7 @@ export async function proxyNeonAuth(
     if (path !== 'sign-out') {
       const email =
         typeof input.email === 'string' ? input.email.trim().toLowerCase() : '';
-      if (!emailList(process.env.ADMIN_EMAILS).includes(email)) {
+      if (!(await approvedEmail(email))) {
         if (path.startsWith('email-otp/'))
           return send(res, 200, { success: true });
         throw new RequestError(

@@ -984,6 +984,36 @@ input::file-selector-button {
 .office-tabs {
   flex-wrap: wrap;
 }
+.custom-survey-controls {
+  display: flex;
+  align-items: end;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 24px 0;
+}
+.custom-survey-controls label {
+  flex: 1;
+  min-width: 220px;
+}
+.custom-survey-comparison {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+.custom-survey-answer {
+  border-top: 1px solid var(--line, #494454);
+  margin-top: 20px;
+  padding-top: 16px;
+}
+.custom-survey-answer p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 750px) {
+  .custom-survey-comparison {
+    grid-template-columns: 1fr;
+  }
+}
 
 .formatting-editor {
   margin: -4px 0 20px;

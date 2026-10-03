@@ -14,6 +14,33 @@ const user = {
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
 };
+test('survey code requests use the scoped advisor allowlist without granting or requesting an admin role', async (t) => {
+  const requests = [];
+  t.mock.method(globalThis, 'fetch', async (url, options) => {
+    requests.push(JSON.parse(options.body));
+    return Response.json({ success: true });
+  });
+  const req = {
+    url: '/api/auth/email-otp/send-verification-otp',
+    method: 'POST',
+    headers: {
+      origin: process.env.AUTH_BASE_URL,
+      'content-type': 'application/json',
+    },
+    body: { email: 'advisor@example.com', role: 'admin' },
+  };
+  const res = { setHeader() {}, end() {} };
+  await proxyNeonAuth(req, res, {
+    approvedEmail: async (email) => email === 'advisor@example.com',
+    rateLimit: async () => {},
+  });
+  assert.deepEqual(requests, [
+    { email: 'advisor@example.com', type: 'sign-in' },
+  ]);
+  requests.length = 0;
+  await proxyNeonAuth(req, res, { rateLimit: async () => {} });
+  assert.equal(requests.length, 0);
+});
 test('Neon authorization rechecks the upstream session, provisioned admin role, and current officer allowlist', async (t) => {
   let data = {
     user,

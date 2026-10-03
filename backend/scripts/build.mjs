@@ -52,6 +52,21 @@ await build({
   minify: true,
   outfile: path.join(root, 'public/admin/index.js'),
 });
+await mkdir(path.join(root, 'public/surveys'), { recursive: true });
+for (const file of ['index.html', 'style.css'])
+  await cp(
+    path.join(root, 'surveys', file),
+    path.join(root, 'public/surveys', file),
+  );
+await build({
+  entryPoints: [path.join(root, 'surveys/index.js')],
+  bundle: true,
+  splitting: true,
+  format: 'esm',
+  target: 'es2022',
+  minify: true,
+  outdir: path.join(root, 'public/surveys'),
+});
 await writeFile(
   path.join(root, 'public/index.html'),
   '<!doctype html><html lang="en"><title>Dallas AI Club services</title><a href="https://dallasai.club">Club website</a> · <a href="/admin/">Club office</a></html>',

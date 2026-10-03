@@ -7,9 +7,11 @@ import admin from '../api/admin.mjs';
 import maintenance from '../api/maintenance.mjs';
 import auth from '../api/auth.mjs';
 import events from '../api/events.mjs';
+import customSurveys from '../api/custom-surveys.mjs';
 import surveys from '../api/surveys.mjs';
 const root = fileURLToPath(new URL('../public', import.meta.url));
 const handlers = {
+  '/api/custom-surveys': customSurveys,
   '/api/forms': forms,
   '/api/admin': admin,
   '/api/events': events,

@@ -542,6 +542,16 @@
 .event-richtext > :first-child {
   margin-top: 0;
 }
+.content .event-detail .event-richtext > :is(ul, ol) {
+  margin-block: 8px 16px;
+}
+.content .event-detail .event-richtext li {
+  line-height: 1.5;
+  margin-bottom: 3px;
+}
+.content .event-detail .event-richtext li:last-child {
+  margin-bottom: 0;
+}
 .event-richtext h4 {
   font-size: 15px;
   margin: 20px 0 8px;

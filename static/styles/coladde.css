@@ -32,10 +32,10 @@ body button.coladde-wordmark {
   justify-content: start;
   padding: 0;
   font:
-    40px/1.1 'Instrument Serif',
+    48px/1.1 'Instrument Serif',
     Georgia,
     serif;
-  letter-spacing: -0.035em;
+  letter-spacing: 0.01em;
 }
 .coladde-reveal {
   position: fixed;

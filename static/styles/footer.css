@@ -11,7 +11,7 @@
 }
 .footer-main {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(150px, 1fr) minmax(0, auto);
   align-items: center;
   gap: 28px;
 }
@@ -80,6 +80,7 @@
   transform: translateY(-2px);
 }
 .site-footer nav svg {
+  flex: 0 0 16px;
   width: 16px;
   height: 16px;
   fill: none;
@@ -115,7 +116,7 @@ body[data-space='summary'] .site-footer {
 }
 @media (max-width: 1080px) {
   .footer-main {
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
   }
   .site-footer .footer-thought {
     grid-column: 1 / -1;

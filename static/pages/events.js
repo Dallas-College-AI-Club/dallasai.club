@@ -60,7 +60,7 @@ export function eventsMarkup() {
       </button>
     </div>
     <p id="event-freshness" role="status"></p>
-    ${ADMIN_URL ? '<p><a class="outline-link" href="' + escapeHTML(ADMIN_URL) + '">Admin sign in ↗</a></p>' : ''}
+    ${ADMIN_URL ? '<p><a class="outline-link" target="_blank" rel="noopener noreferrer" aria-label="Admin sign in (opens in a new tab)" href="' + escapeHTML(ADMIN_URL) + '">Admin sign in ↗</a></p>' : ''}
     <div class="events-layout">
       <aside class="events-browser" aria-label="Find an event">
         <section

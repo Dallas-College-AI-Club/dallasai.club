@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { requireAdmin } from '../lib/auth.mjs';
+import { requireAdmin, adminOrigin } from '../lib/auth.mjs';
 import { proxyNeonAuth } from '../lib/neon-auth.mjs';
 process.env.NEON_AUTH_URL = 'https://auth.example.com/neondb/auth';
 process.env.NEON_AUTH_COOKIE_SECRET = 'test-only-' + 'x'.repeat(40);
@@ -368,5 +368,14 @@ test('session refresh returns the original deadline and caps renewed cookies to 
       Date.parse(JSON.parse(response.body).session.expiresAt) -
         (now + 86400000),
     ) < 1000,
+  );
+});
+test('admin mutations require the admin origin', () => {
+  assert.throws(
+    () => adminOrigin({ headers: { origin: 'https://evil.example' } }),
+    /admin page/,
+  );
+  assert.doesNotThrow(() =>
+    adminOrigin({ headers: { origin: process.env.AUTH_BASE_URL } }),
   );
 });

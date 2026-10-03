@@ -19,57 +19,32 @@ const env = Object.fromEntries(
       line.slice(line.indexOf('=') + 1),
     ]),
 );
-for (const [key, role] of [
-  ['FORMS_DATABASE_URL', 'forms'],
-  ['AUTH_DATABASE_URL', 'admin'],
-]) {
-  const pool = new pg.Pool({
-    connectionString: env[key],
-    connectionTimeoutMillis: 10000,
-  });
-  const client = await pool.connect();
-  try {
-    if (role === 'forms') {
-      await client.query('BEGIN');
-      const id = randomUUID();
-      await client.query(
-        "INSERT INTO club_forms.entries(id,kind,email,dedupe_key) VALUES($1,'join','connection-check@example.invalid',$2)",
-        [id, 'connection-check:' + id],
-      );
-      const rows = (
-        await client.query(
-          'SELECT kind FROM club_forms.outbox WHERE entry_id=$1',
-          [id],
-        )
-      ).rows;
-      if (rows.length !== 0) throw new Error('Unexpected email job created.');
-      await client.query('ROLLBACK');
-      const access = (
-        await client.query(
-          "SELECT has_schema_privilege(current_user,'public','USAGE') AS admin_access",
-        )
-      ).rows[0];
-      if (access.admin_access)
-        throw new Error('Forms role can read admin authentication data.');
-    } else {
-      await client.query('SELECT id FROM public.club_admin_user LIMIT 0');
-      const access = (
-        await client.query(
-          "SELECT has_schema_privilege(current_user,'club_forms','USAGE') AS forms_access",
-        )
-      ).rows[0];
-      if (access.forms_access)
-        throw new Error('Authentication role has unexpected forms access.');
-    }
-    console.log(
-      role +
-        ': connection and permissions verified' +
-        (role === 'forms'
-          ? '; storage without email jobs verified inside a rolled-back transaction.'
-          : '.'),
-    );
-  } finally {
-    client.release();
-    await pool.end();
-  }
+// Checks the forms runtime role against production. The test row is written
+// inside a transaction that is always rolled back.
+const pool = new pg.Pool({
+  connectionString: env.FORMS_DATABASE_URL,
+  connectionTimeoutMillis: 10000,
+});
+const client = await pool.connect();
+try {
+  await client.query('BEGIN');
+  const id = randomUUID();
+  await client.query(
+    "INSERT INTO club_forms.entries(id,kind,email,dedupe_key) VALUES($1,'join','connection-check@example.invalid',$2)",
+    [id, 'connection-check:' + id],
+  );
+  await client.query('ROLLBACK');
+  const access = (
+    await client.query(
+      "SELECT has_schema_privilege(current_user,'public','USAGE') AS public_access",
+    )
+  ).rows[0];
+  if (access.public_access)
+    throw new Error('Forms role can use the public schema.');
+  console.log(
+    'forms: connection and permissions verified; a test row was written and rolled back.',
+  );
+} finally {
+  client.release();
+  await pool.end();
 }

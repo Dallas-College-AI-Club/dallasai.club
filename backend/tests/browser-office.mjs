@@ -603,6 +603,159 @@ try {
       }
     },
   );
+  await check(
+    'Contact profiles consolidate primary identity, retain drafts and clean unused aliases',
+    async (page) => {
+      await page
+        .locator('#inbox-pane')
+        .getByRole('button', { name: 'Contacts & follow-up', exact: true })
+        .click();
+      const dialog = page.locator(
+        '.contact-dialog:not(.submission-dialog)',
+      );
+      await dialog
+        .getByRole('button', { name: /join@example.edu/ })
+        .click();
+      await dialog
+        .getByLabel('Record a follow-up note', { exact: true })
+        .fill('Keep this draft during contact corrections');
+      await dialog
+        .getByRole('button', { name: 'Edit contact', exact: true })
+        .click();
+      await dialog
+        .getByLabel('Contact name', { exact: true })
+        .fill('Corrected profile');
+      await dialog
+        .getByLabel('Primary email', { exact: true })
+        .fill('preferred-profile@example.edu');
+      await dialog
+        .getByRole('button', { name: 'Save contact changes', exact: true })
+        .click();
+      await expect(
+        dialog.getByRole('heading', {
+          name: 'Corrected profile',
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        dialog.getByLabel('Record a follow-up note', { exact: true }),
+      ).toHaveValue('Keep this draft during contact corrections');
+      await dialog
+        .getByRole('button', { name: 'Edit contact', exact: true })
+        .click();
+      await dialog
+        .getByLabel('Contact name', { exact: true })
+        .fill('Unsaved profile name');
+      await dialog
+        .getByRole('button', { name: 'Close', exact: true })
+        .click();
+      await page
+        .locator('#inbox-pane')
+        .getByRole('button', { name: 'Contacts & follow-up', exact: true })
+        .click();
+      await dialog
+        .getByRole('button', {
+          name: /Corrected profile preferred-profile@example.edu/,
+        })
+        .click();
+      await dialog
+        .getByRole('button', { name: 'Edit contact', exact: true })
+        .click();
+      await expect(
+        dialog.getByLabel('Contact name', { exact: true }),
+      ).toHaveValue('Unsaved profile name');
+      await dialog
+        .getByRole('button', { name: 'Cancel', exact: true })
+        .click();
+      await dialog
+        .getByRole('button', { name: 'Edit contact', exact: true })
+        .click();
+      await expect(
+        dialog.getByLabel('Contact name', { exact: true }),
+      ).toHaveValue('Corrected profile');
+      await dialog
+        .getByLabel('Primary email', { exact: true })
+        .fill('final-profile@example.edu');
+      await dialog
+        .getByRole('button', { name: 'Save contact changes', exact: true })
+        .click();
+      await expect(
+        dialog.getByText('Primary email: final-profile@example.edu', {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await dialog
+        .getByRole('button', { name: 'Edit contact', exact: true })
+        .click();
+      const unused = dialog
+        .locator('.contact-alias-row')
+        .filter({ hasText: 'preferred-profile@example.edu' });
+      await unused
+        .getByRole('button', {
+          name: 'Remove unused address',
+          exact: true,
+        })
+        .click();
+      await unused
+        .getByRole('button', { name: 'Cancel removal', exact: true })
+        .click();
+      await expect(
+        unused.getByRole('button', {
+          name: 'Remove unused address',
+          exact: true,
+        }),
+      ).toBeEnabled();
+      await unused
+        .getByRole('button', {
+          name: 'Remove unused address',
+          exact: true,
+        })
+        .click();
+      await unused
+        .getByRole('button', {
+          name: 'Confirm remove address',
+          exact: true,
+        })
+        .click();
+      await expect(
+        dialog.getByText('Other linked emails: join@example.edu', {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await dialog
+        .getByRole('button', { name: 'Edit contact', exact: true })
+        .click();
+      await expect(
+        dialog
+          .locator('.contact-alias-row')
+          .filter({ hasText: 'join@example.edu' })
+          .getByRole('button', {
+            name: 'Remove unused address',
+            exact: true,
+          }),
+      ).toBeDisabled();
+      for (const width of [320, 768, 1440]) {
+        await page.setViewportSize({ width, height: 900 });
+        assert.ok(
+          await dialog.evaluate((el) => el.scrollWidth <= el.clientWidth),
+        );
+      }
+      const canonical = (
+        await fixture.db.query(
+          "SELECT contact_email FROM club_forms.contact_emails WHERE email='join@example.edu'",
+        )
+      ).rows[0].contact_email;
+      assert.equal(canonical, 'final-profile@example.edu');
+      assert.equal(
+        (
+          await fixture.db.query(
+            "SELECT email FROM club_forms.contacts WHERE email='preferred-profile@example.edu'",
+          )
+        ).rows.length,
+        0,
+      );
+    },
+  );
 } finally {
   await browser.close();
   await fixture.close();

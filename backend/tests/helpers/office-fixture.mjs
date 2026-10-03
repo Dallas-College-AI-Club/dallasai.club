@@ -20,6 +20,7 @@ export async function officeFixture() {
     '014_event_response_management.sql',
     '015_contact_identity_management.sql',
     '016_submission_management.sql',
+    '017_contact_profile_editing.sql',
   ])
     await db.exec(await readFile(path.join(backend, name), 'utf8'));
   const workshop = JSON.parse(

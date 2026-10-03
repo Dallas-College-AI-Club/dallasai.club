@@ -14,8 +14,8 @@ Central time, location, meeting link, description, audience, learning outcomes,
 agenda, and preparation. Each learning outcome or agenda item goes on its own
 line; agenda lines can include a duration, module, and activity.
 
-Drafts and events with unpublished changes appear in a separate section at the
-top of the list, with a visible DRAFT label. The form also explains whether the
+Potential events appear first in a distinct group. Other drafts and events with
+unpublished changes appear next, with a visible DRAFT label. The form also explains whether the
 entire event or only its changes are unpublished.
 
 Choose a shared **Type** from the dropdown. **Manage event types → Add type**
@@ -28,15 +28,17 @@ and original history remain intact. Adding an old label reuses its standard grou
 
 **Upload event images** accepts up to three still JPG, PNG, or WebP images, each
 under 2 MB and 25 megapixels. Images are decoded, resized to fit 1800 pixels,
-converted to WebP, and stripped of metadata. Add an image description before
-publishing. Removing an image from a draft does not alter the published event.
+converted to WebP, and stripped of metadata. Image descriptions are optional;
+an event-title fallback labels images when blank. Public posters use about half
+the detail column on desktop, full width on phones, and open larger when clicked. Removing an image from a draft does not alter the published event.
 Images remain private until referenced by a published event, and become private
 again on unpublish or archive. Stored files remain available for edit history.
 
 - **Save draft** keeps changes private. A date is optional until publication.
 - **Preview** opens the actual public website in a private desktop/mobile preview,
-  including unsaved text and images. Nothing is saved or published; forms and
-  navigation are disabled inside the preview. Draft content is passed only between
+  including unsaved text and images. **Try RSVP preview** lets you fill in answers
+  and choose **Preview admin result** to see a sample response. Trial answers stay
+  in memory and never call the submission API. Other navigation stays disabled. Draft content is passed only between
   the officer's browser windows, without putting it in a public URL or API.
 - **Publish event** updates the public calendar, event search, Latest, and RSVP
   eligibility. Scheduled events require a date; potential events may show TBD. Times are optional.
@@ -147,7 +149,7 @@ Live checks must not publish synthetic test events or send emails.
 
 ## Reading and formatting events
 
-Selecting an existing event opens a read-only details view, including its saved content and activity history. Choose **Edit event** before changing fields, or **Cancel editing** to return to saved details. Creating a new event opens the editor directly. Save and Publish remain explicit actions.
+Selecting an existing event opens a read-only details view, including its saved content and activity history. Choose **Edit event** before changing fields, or **Cancel editing** to return to saved details. Creating a new event opens the editor directly. Successful saves and publication return to read-only details with a focused confirmation showing the event name and Central timestamp. Drafts are explicitly private until published.
 
 Select text in Description, audience, or the RSVP introduction and use **Bold**, **Italic**, **Heading**, **Bullets**, or **Numbered list**. Blank lines separate paragraphs. The controls insert simple text markers; **Preview** displays the formatted result. HTML and embedded content are shown as text. The same safe renderer serves public details, private previews, and the office read-only view.
 

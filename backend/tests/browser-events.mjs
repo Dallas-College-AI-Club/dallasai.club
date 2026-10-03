@@ -165,7 +165,11 @@ try {
   await page.evaluate(() =>
     localStorage.setItem(
       'club-office-appearance',
-      JSON.stringify({ theme: 'garden', font: 'serif', layout: 'comfortable' }),
+      JSON.stringify({
+        theme: 'garden',
+        font: 'serif',
+        layout: 'comfortable',
+      }),
     ),
   );
   await page.reload();
@@ -208,6 +212,8 @@ try {
     else await input.fill(Array.isArray(value) ? value.join('\n') : value);
   }
   await page.getByText('Manage event types', { exact: true }).click();
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page.locator('#new-type-name').fill('Study group');
   await page.getByRole('button', { name: 'Add type', exact: true }).click();
   await page
@@ -219,7 +225,12 @@ try {
   );
   await page.locator('[name="category"]').selectOption(workshop.category);
   const image = await sharp({
-    create: { width: 400, height: 200, channels: 3, background: '#447799' },
+    create: {
+      width: 400,
+      height: 200,
+      channels: 3,
+      background: '#447799',
+    },
   })
     .png()
     .toBuffer();
@@ -230,16 +241,20 @@ try {
   });
   await page
     .getByText(
-      'Uploaded. Add a description for each image, then save your draft.',
+      'Uploaded. Save your draft to keep these images. Descriptions are optional.',
       { exact: true },
     )
     .waitFor();
   await page
-    .getByLabel('Image 1 description', { exact: true })
+    .getByLabel('Image 1 description (optional)', { exact: true })
     .fill('Workshop illustration');
   await page.getByRole('button', { name: 'Save draft', exact: true }).click();
   await page
-    .getByText('Draft saved. The website has not changed.', { exact: true })
+    .locator('#event-status')
+    .getByText(
+      'Draft saved successfully. These saved changes are private until you publish. Editing is complete.',
+      { exact: true },
+    )
     .waitFor();
   let records = (await db.query('SELECT * FROM club_forms.events')).rows;
   assert.equal(records.length, 1);
@@ -301,6 +316,8 @@ try {
     0,
   );
   await page.setViewportSize({ width: 1440, height: 1250 });
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page.getByRole('button', { name: 'Preview', exact: true }).click();
   await page
     .frameLocator('#site-preview-frame')
@@ -359,10 +376,13 @@ try {
     true,
   );
   const previewImage = await gallery.locator('img').boundingBox();
-  assert.ok(previewImage.height <= 220 && previewImage.width <= 320);
-  await page
-    .locator('#site-preview-dialog')
-    .screenshot({ path: path.join(screens, 'preview-calendar-and-image.png') });
+  assert.ok(
+    previewImage.width >= panelBefore.width * 0.45 &&
+      previewImage.width <= panelBefore.width,
+  );
+  await page.locator('#site-preview-dialog').screenshot({
+    path: path.join(screens, 'preview-calendar-and-image.png'),
+  });
   await page.getByRole('button', { name: 'Mobile', exact: true }).click();
   await page
     .frameLocator('#site-preview-frame')
@@ -390,6 +410,8 @@ try {
     await page.locator('[name="targetAudience"]').inputValue(),
     workshop.targetAudience,
   );
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page
     .getByRole('button', { name: 'Publish event', exact: true })
     .click();
@@ -398,15 +420,24 @@ try {
     await page.locator('[name="title"]').inputValue(),
     workshop.title,
   );
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page.locator('[name="date"]').fill('2099-10-02');
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page.locator('[name="startTime"]').fill('16:00');
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page.locator('[name="endTime"]').fill('20:00');
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page
     .getByRole('button', { name: 'Publish event', exact: true })
     .click();
   await page
+    .locator('#event-status')
     .getByText(
-      'Published. The website will show this event on its next refresh.',
+      'Published successfully — live on the website. Editing is complete.',
       { exact: true },
     )
     .waitFor();
@@ -452,10 +483,16 @@ try {
   );
   await publicPage.locator('#open-rsvp').click();
   await publicPage.locator('#event-rsvp [name="name"]').fill('Keep my details');
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page.locator('[name="title"]').fill('Private draft title');
   await page.getByRole('button', { name: 'Save draft', exact: true }).click();
   await page
-    .getByText('Draft saved. The website has not changed.', { exact: true })
+    .locator('#event-status')
+    .getByText(
+      'Draft saved successfully. These saved changes are private until you publish. Editing is complete.',
+      { exact: true },
+    )
     .waitFor();
   await publicPage.evaluate(async () => {
     const events = await import('/content/events.js');
@@ -469,15 +506,20 @@ try {
     await publicPage.locator('#event-rsvp [name="name"]').inputValue(),
     'Keep my details',
   );
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page
     .locator('[name="title"]')
     .fill('<img src=x onerror=alert(1)> Safe workshop');
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page
     .getByRole('button', { name: 'Publish event', exact: true })
     .click();
   await page
+    .locator('#event-status')
     .getByText(
-      'Published. The website will show this event on its next refresh.',
+      'Published successfully — live on the website. Editing is complete.',
       { exact: true },
     )
     .waitFor();
@@ -503,6 +545,8 @@ try {
     'UPDATE club_forms.events SET revision=revision+1 WHERE id=$1',
     [id],
   );
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page.locator('[name="title"]').fill('Keep this unsaved edit');
   await page.getByRole('button', { name: 'Save draft', exact: true }).click();
   await page.getByText(/Another admin updated this event/).waitFor();
@@ -516,13 +560,18 @@ try {
       .querySelector('#event-form [name="title"]')
       .value.includes('Safe workshop'),
   );
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page.locator('[name="registrationOpen"]').uncheck();
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page
     .getByRole('button', { name: 'Publish event', exact: true })
     .click();
   await page
+    .locator('#event-status')
     .getByText(
-      'Published. The website will show this event on its next refresh.',
+      'Published successfully — live on the website. Editing is complete.',
       { exact: true },
     )
     .waitFor();
@@ -534,13 +583,18 @@ try {
     .getByText('RSVPs are closed for this event.', { exact: true })
     .waitFor();
   assert.equal(await publicPage.locator('#event-rsvp:visible').count(), 0);
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page.locator('[name="title"]').fill(workshop.title);
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page
     .getByRole('button', { name: 'Publish event', exact: true })
     .click();
   await page
+    .locator('#event-status')
     .getByText(
-      'Published. The website will show this event on its next refresh.',
+      'Published successfully — live on the website. Editing is complete.',
       { exact: true },
     )
     .waitFor();
@@ -557,10 +611,13 @@ try {
     },
     [{ ...(await liveEvents(db, []))[0], registrationOpen: true }],
   );
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page
     .getByRole('button', { name: 'Archive event', exact: true })
     .click();
   await page
+    .locator('#event-status')
     .getByText(
       'Archived. Content, images, and RSVPs are kept. You can edit this event here or restore it as a draft.',
       { exact: true },
@@ -600,9 +657,12 @@ try {
     await page.locator('[name="title"]').inputValue(),
     workshop.title,
   );
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page.locator('[name="title"]').fill('Saved in the archive');
   await page.getByRole('button', { name: 'Save draft', exact: true }).click();
   await page
+    .locator('#event-status')
     .getByText('Changes saved. This event is still archived and private.', {
       exact: true,
     })
@@ -618,10 +678,13 @@ try {
       await page.locator('#event-activity-list strong').allTextContents()
     ).includes('Archived'),
   );
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page
     .getByRole('button', { name: 'Restore as draft', exact: true })
     .click();
   await page
+    .locator('#event-status')
     .getByText(
       'Restored as a draft. Review your details, then publish when ready.',
       { exact: true },
@@ -652,13 +715,18 @@ try {
     ).rows[0].id,
     registration.id,
   );
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page.locator('[name="title"]').fill(workshop.title);
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page
     .getByRole('button', { name: 'Publish event', exact: true })
     .click();
   await page
+    .locator('#event-status')
     .getByText(
-      'Published. The website will show this event on its next refresh.',
+      'Published successfully — live on the website. Editing is complete.',
       { exact: true },
     )
     .waitFor();
@@ -694,8 +762,11 @@ try {
     path: path.join(screens, 'calendar-mobile.png'),
     fullPage: true,
   });
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
   await page.getByRole('button', { name: 'Unpublish', exact: true }).click();
   await page
+    .locator('#event-status')
     .getByText('Unpublished. Your draft and existing RSVPs are kept.', {
       exact: true,
     })

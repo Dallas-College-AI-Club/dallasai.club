@@ -5,14 +5,57 @@ import {
   mountForm,
   escapeHTML as h,
 } from './form-client.js';
-export function rsvpDialog(root) {
+export function rsvpDialog(root, { preview = false } = {}) {
   const dialog = document.createElement('dialog');
   dialog.className = 'workshop-dialog rsvp-dialog';
   dialog.setAttribute('aria-labelledby', 'rsvp-heading');
   root.append(dialog);
+  const mock = document.createElement('dialog');
+  mock.className = 'workshop-dialog rsvp-answer-preview';
+  mock.setAttribute('aria-label', 'Sample admin response — not saved');
+  root.append(mock);
+  function previewResult(event, data, answers) {
+    const el = (tag, text) => {
+      const n = document.createElement(tag);
+      n.textContent = text;
+      return n;
+    };
+    const close = el('button', 'Back to preview');
+    close.type = 'button';
+    close.className = 'outline-link';
+    close.onclick = () => mock.close();
+    mock.replaceChildren(
+      close,
+      el('h2', 'Sample admin response'),
+      el('p', 'PREVIEW ONLY · These answers have not been submitted or saved.'),
+      el('h3', event.title),
+      el('p', 'Event date: ' + (event.date || 'TBD')),
+      el('p', data.get('name')),
+      el('p', data.get('email')),
+    );
+    const list = document.createElement('dl');
+    for (const question of event.surveyQuestions || []) {
+      const answer = answers.find((a) => a.questionId === question.id);
+      const values = (
+        Array.isArray(answer?.value) ? answer.value : [answer?.value || '']
+      )
+        .filter(Boolean)
+        .map((value) =>
+          value === '__other__' ? 'Other: ' + answer.other : value,
+        );
+      list.append(
+        el('dt', question.label),
+        el('dd', values.length ? values.join('\n') : 'No answer'),
+      );
+    }
+    mock.append(list);
+    mock.showModal();
+  }
+  mock.addEventListener('close', () => mock.replaceChildren());
   let stop = () => {},
     eventId = '';
   function close() {
+    if (mock.open) mock.close();
     if (dialog.open) dialog.close();
   }
   function open(event) {
@@ -103,6 +146,9 @@ export function rsvpDialog(root) {
       '<h2 id="rsvp-heading">' +
       h(event.title) +
       '</h2>' +
+      (preview
+        ? '<p class="potential-notice">PREVIEW ONLY · Try the form below. Nothing will be submitted or saved.</p>'
+        : '') +
       (event.potential
         ? '<p>This records your interest. Final details and seats are not yet confirmed.</p>'
         : '') +
@@ -114,10 +160,12 @@ export function rsvpDialog(root) {
       '<form id="event-rsvp" class="club-form">' +
       identityFields(event.requireEduEmail === true) +
       fields +
-      formFooter(
-        'Submit RSVP',
-        'I agree that club officers may use my RSVP and answers to plan this event and contact me about it.',
-      ) +
+      (preview
+        ? '<button type="submit" class="solid-link">Preview admin result</button>'
+        : formFooter(
+            'Submit RSVP',
+            'I agree that club officers may use my RSVP and answers to plan this event and contact me about it.',
+          )) +
       '</form>';
     dialog.querySelector('.dialog-close').onclick = close;
     const form = dialog.querySelector('form');
@@ -155,20 +203,35 @@ export function rsvpDialog(root) {
       };
     });
     validateChoices();
-    stop = mountForm(form, {
-      kind: 'rsvp',
-      extra: { eventId, surveyVersion: event.surveyVersion || '' },
-      serialize: (data) => ({
-        answers: questions.map((question) => ({
-          questionId: question.id,
-          value:
-            question.type === 'multiple'
-              ? data.getAll('answer-' + question.id)
-              : data.get('answer-' + question.id) || '',
-          other: data.get('answer-' + question.id + '-other') || '',
-        })),
-      }),
+    const serialize = (data) => ({
+      answers: questions.map((question) => ({
+        questionId: question.id,
+        value:
+          question.type === 'multiple'
+            ? data.getAll('answer-' + question.id)
+            : data.get('answer-' + question.id) || '',
+        other: data.get('answer-' + question.id + '-other') || '',
+      })),
     });
+    if (preview) {
+      form.elements.name.value = 'Preview participant';
+      form.elements.email.value = 'preview@example.edu';
+      form.onsubmit = (eventClick) => {
+        eventClick.preventDefault();
+        validateChoices();
+        if (!form.reportValidity()) return;
+        const data = new FormData(form);
+        previewResult(event, data, serialize(data).answers);
+      };
+      stop = () => {
+        form.onsubmit = null;
+      };
+    } else
+      stop = mountForm(form, {
+        kind: 'rsvp',
+        extra: { eventId, surveyVersion: event.surveyVersion || '' },
+        serialize,
+      });
     if (!dialog.open) dialog.showModal();
     dialog.scrollTop = 0;
   }
@@ -184,6 +247,7 @@ export function rsvpDialog(root) {
       stop();
       close();
       dialog.remove();
+      mock.remove();
     },
   };
 }

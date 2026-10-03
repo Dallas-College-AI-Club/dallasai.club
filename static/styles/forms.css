@@ -223,3 +223,21 @@
 .rsvp-dialog {
   width: min(680px, calc(100vw - 32px));
 }
+.survey-intro.event-richtext p:has(> strong:only-child) {
+  padding: 14px;
+  background: var(--surface-alt, #e8eee1);
+  border-left: 3px solid #427769;
+  border-radius: 5px;
+}
+.rsvp-answer-preview dl {
+  margin-top: 24px;
+}
+.rsvp-answer-preview dt {
+  font-weight: 600;
+  margin-top: 18px;
+}
+.rsvp-answer-preview dd {
+  margin: 6px 0 16px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

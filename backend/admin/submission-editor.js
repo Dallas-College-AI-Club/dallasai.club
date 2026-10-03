@@ -1,4 +1,4 @@
-import { node } from './ui.js';
+import { lock, node } from './ui.js';
 const fields = {
   subscribe: [],
   rsvp: [],
@@ -204,13 +204,7 @@ export function submissionEditor(api, onSaved) {
           requestId = crypto.randomUUID();
         }
         busy = true;
-        const controls = [
-          ...form.querySelectorAll('input,textarea,select,button'),
-        ];
-        const disabled = controls.map((control) => control.disabled);
-        controls.forEach((control) => {
-          control.disabled = true;
-        });
+        const unlock = lock(form);
         message.textContent = remove ? 'Deleting…' : 'Saving…';
         try {
           const result = await api(
@@ -228,9 +222,7 @@ export function submissionEditor(api, onSaved) {
           if (version === generation) {
             message.textContent = error.message;
             busy = false;
-            controls.forEach((control, index) => {
-              control.disabled = disabled[index];
-            });
+            unlock();
           }
         }
       };

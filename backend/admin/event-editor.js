@@ -1,5 +1,5 @@
 import { coreEventTypes } from '../lib/event-types.mjs';
-import { node } from './ui.js';
+import { lock, node } from './ui.js';
 import { eventOverview } from './event-overview.js';
 import { mountTextFormatting } from './text-formatting.js';
 import { surveyEditor } from './survey-editor.js';
@@ -412,12 +412,7 @@ export function mountEventEditor(api) {
       revision: current.revision,
       event: values(),
     };
-    const controls = [
-      ...form.querySelectorAll('input,textarea,select,button'),
-    ];
-    controls.forEach((input) => {
-      input.disabled = true;
-    });
+    const unlock = lock(form);
     say(action === 'preview' ? 'Preparing preview…' : 'Saving…');
     try {
       const data = await api('/api/events', body);
@@ -428,9 +423,7 @@ export function mountEventEditor(api) {
       } else {
         rows = [data.event, ...rows.filter((r) => r.id !== data.event.id)];
         // Re-enable before computing the saved FormData.
-        controls.forEach((input) => {
-          input.disabled = false;
-        });
+        unlock();
         edit(data.event);
         say(
           action === 'publish'
@@ -469,9 +462,7 @@ export function mountEventEditor(api) {
       if (version === generation) say(e.message);
     } finally {
       busy = false;
-      controls.forEach((input) => {
-        input.disabled = false;
-      });
+      unlock();
     }
   }
   form.elements.category.onchange = () => {
@@ -579,10 +570,7 @@ export function mountEventEditor(api) {
     }
     busy = true;
     const version = generation;
-    const controls = [
-      ...form.querySelectorAll('input,textarea,select,button'),
-    ];
-    controls.forEach((input) => (input.disabled = true));
+    const unlock = lock(form);
     q('#image-status').textContent = 'Uploading images…';
     try {
       for (const file of files) {
@@ -598,7 +586,7 @@ export function mountEventEditor(api) {
       q('#image-status').textContent = error.message;
     } finally {
       busy = false;
-      controls.forEach((input) => (input.disabled = false));
+      unlock();
       event.target.value = '';
       if (version === generation) renderImages();
     }

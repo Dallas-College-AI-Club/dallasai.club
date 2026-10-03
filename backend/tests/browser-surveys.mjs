@@ -256,6 +256,14 @@ try {
   await admin
     .getByRole('button', { name: 'Close preview', exact: true })
     .click();
+  // Preview locks the form while it runs. Unlocking must not enable the
+  // reorder buttons that were already disabled at the ends of the list.
+  assert.equal(
+    await choiceBox
+      .getByRole('button', { name: 'Move choice 1 up', exact: true })
+      .isDisabled(),
+    true,
+  );
   await admin.getByRole('button', { name: 'Save draft', exact: true }).click();
   await admin
     .locator('#event-status')

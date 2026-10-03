@@ -1,4 +1,4 @@
-import { node } from './ui.js';
+import { lock, node } from './ui.js';
 export async function mountRespondents(root, surveyId, api, onChanged) {
   root.append(node('p', 'Loading respondents…'));
   try {
@@ -28,7 +28,7 @@ export async function mountRespondents(root, surveyId, api, onChanged) {
         return;
       }
       busy = true;
-      root.querySelectorAll('button').forEach((b) => (b.disabled = true));
+      const unlock = lock(root, 'button');
       pending ||= {
         serialized,
         body: {
@@ -53,9 +53,7 @@ export async function mountRespondents(root, surveyId, api, onChanged) {
         if (error.status && error.status < 500) pending = null;
       } finally {
         busy = false;
-        root
-          .querySelectorAll('button')
-          .forEach((b) => (b.disabled = false));
+        unlock();
       }
     }
     const active = node('div', undefined, 'respondent-list');

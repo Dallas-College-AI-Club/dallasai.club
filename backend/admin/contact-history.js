@@ -1,4 +1,4 @@
-import { button, node } from './ui.js';
+import { button, lock, node } from './ui.js';
 import { activityTime } from './event-activity.js';
 import { contactProfile } from './contact-profile.js';
 const labels = {
@@ -293,9 +293,7 @@ export function contactHistory(api, onChange = () => {}) {
     const fresh = () => version === generation && dialog.open;
     async function save(body, message) {
       if (!fresh()) return;
-      const controls = [...panel.querySelectorAll('button, input')];
-      const disabled = controls.map((control) => control.disabled);
-      controls.forEach((el) => (el.disabled = true));
+      const unlock = lock(panel, 'button, input');
       status.textContent = 'Saving contact changes…';
       try {
         const result = await api('/api/surveys', {
@@ -336,7 +334,7 @@ export function contactHistory(api, onChange = () => {}) {
       } catch (error) {
         if (fresh()) {
           status.textContent = error.message;
-          controls.forEach((el, index) => (el.disabled = disabled[index]));
+          unlock();
         }
       }
     }

@@ -1,4 +1,4 @@
-import { node, button } from './ui.js';
+import { button, lock, node } from './ui.js';
 import { activityTime } from './event-activity.js';
 import { contactHistory } from './contact-history.js';
 import { submissionEditor } from './submission-editor.js';
@@ -303,10 +303,8 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
       status = node('p');
     status.setAttribute('role', 'status');
     async function manage(action, value) {
-      const version = generation;
-      actions
-        .querySelectorAll('button')
-        .forEach((b) => (b.disabled = true));
+      const version = generation,
+        unlock = lock(actions, 'button');
       try {
         await api('/api/surveys', {
           entryId: response.entry_id,
@@ -326,9 +324,7 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
       } catch (error) {
         if (version === generation) {
           status.textContent = error.message;
-          actions
-            .querySelectorAll('button')
-            .forEach((b) => (b.disabled = false));
+          unlock();
         }
       }
     }

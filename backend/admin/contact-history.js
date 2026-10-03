@@ -8,7 +8,7 @@ const node = (tag, text, cls) => {
 };
 const labels = {
   join: 'Club signup',
-  subscribe: 'Newsletter subscription',
+  subscribe: 'The AI Review subscription',
   rsvp: 'Event RSVP',
   question: 'Question',
   workshop: 'Workshop request',

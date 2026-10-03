@@ -76,6 +76,9 @@ export async function officeFixture() {
             hasSurvey: true,
           }
         : {
+            ...(kind === 'join'
+              ? { campus: 'Richland', interests: '' }
+              : {}),
             message: 'Saved ' + kind + ' example',
             topic: 'Example topic',
           };

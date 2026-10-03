@@ -13,6 +13,7 @@ import { LAB_CASES } from './lab-cases.js';
 import { GAMES } from '../games/registry.js';
 import { RECORDINGS, INTRO_SECONDS } from './chatbot-recordings.js';
 import { PUBLISHED } from './published.js';
+import { eventsStatus } from './events.js';
 
 // Dated publications sort by publication date. Undated editions retain their source order.
 export function selectArticle(articles, now) {
@@ -43,6 +44,7 @@ export function buildLatest(now = new Date(), snapshot = PUBLISHED) {
   const [month, day = ''] = next ? eventDate(next).split(' ') : [];
   return {
     checkedAt: now.toISOString(),
+    eventStatus: eventsStatus,
     event: next
       ? {
           id: next.id,

@@ -131,19 +131,38 @@ export function renderViews(data) {
             <h3>${escape(event.title)}</h3>
             <p>${escape(event.summary)}</p>
             <div class="r95-event-action">
-              ${buttonLink(event.url, 'View event →')}<span>${escape(event.category)}</span>
+              ${buttonLink(event.url, 'View event →')}<span
+                >${escape(event.category)}</span
+              >
             </div>
           </div>`
-        : /* HTML */ `<div class="r95-event-content">
-            <span class="r95-kicker">CLUB CALENDAR</span>
-            <h3>More good things are coming.</h3>
-            <p>
-              There are no upcoming events on the calendar yet. Explore what we’ve been learning
-              together.
-            </p>
-            ${buttonLink(page('events'), 'Explore past meetings →')}
-          </div>`,
-      footer: event ? 'Next on the club calendar' : 'No upcoming events',
+        : data.eventStatus && data.eventStatus !== 'ready'
+          ? /* HTML */ `<div class="r95-event-content" role="status">
+              <span class="r95-kicker">CLUB CALENDAR</span>
+              <h3>
+                ${data.eventStatus === 'loading' ? 'Checking the calendar…' : 'The calendar is temporarily unavailable.'}
+              </h3>
+              <p>
+                ${data.eventStatus === 'loading' ? 'Upcoming events will appear here shortly.' : 'We could not check upcoming events. Open the calendar to try again.'}
+              </p>
+              ${buttonLink(page('events'), 'View calendar →')}
+            </div>`
+          : /* HTML */ `<div class="r95-event-content">
+              <span class="r95-kicker">CLUB CALENDAR</span>
+              <h3>More good things are coming.</h3>
+              <p>
+                There are no upcoming events on the calendar yet. Explore what
+                we’ve been learning together.
+              </p>
+              ${buttonLink(page('events'), 'Explore past meetings →')}
+            </div>`,
+      footer: event
+        ? 'Next on the club calendar'
+        : data.eventStatus === 'loading'
+          ? 'Checking events'
+          : data.eventStatus === 'unavailable'
+            ? 'Events unavailable'
+            : 'No upcoming events',
     },
     major: {
       menu: link(page('projects'), '<u>P</u>rojects') + link(data.links.major, 'Open <u>M</u>ajor'),

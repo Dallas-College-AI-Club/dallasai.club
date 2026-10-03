@@ -16,23 +16,56 @@ function message(text) {
   const element = q('#auth-message');
   if (element) element.textContent = text;
 }
-async function request(action, body, path) {
-  const response = await fetch(
-    '/api/custom-surveys?' +
-      new URLSearchParams({ action, ...(path ? { path } : {}) }),
-    {
-      credentials: 'same-origin',
-      cache: 'no-store',
-      signal: AbortSignal.timeout(30000),
-      headers: {
-        'X-Survey-Link': link,
-        ...(previewCapability ? { 'X-Survey-Preview': '1' } : {}),
-        ...(body ? { 'Content-Type': 'application/json' } : {}),
+function unavailable(text) {
+  document.title = 'Survey unavailable · Dallas College AI Club';
+  q('.brand').textContent = 'Survey Studio';
+  q('.sidebar .eyebrow').textContent = 'Dallas College AI Club';
+  q('.sidebar-intro').textContent =
+    'Contact the club if you need a current survey link.';
+  const heading = document.createElement('h1'),
+    note = document.createElement('p');
+  heading.textContent = 'Survey unavailable';
+  heading.tabIndex = -1;
+  note.textContent = text;
+  note.setAttribute('role', 'status');
+  q('#main').replaceChildren(heading, note);
+  heading.focus();
+}
+async function request(action, body, path, offset) {
+  let response;
+  try {
+    response = await fetch(
+      '/api/custom-surveys?' +
+        new URLSearchParams({
+          action,
+          ...(path ? { path } : {}),
+          ...(offset !== undefined ? { offset } : {}),
+        }),
+      {
+        credentials: 'same-origin',
+        cache: 'no-store',
+        signal: AbortSignal.timeout(30000),
+        headers: {
+          'X-Survey-Link': link,
+          ...(previewCapability ? { 'X-Survey-Preview': '1' } : {}),
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+        },
+        ...(body ? { method: 'POST', body: JSON.stringify(body) } : {}),
       },
-      ...(body ? { method: 'POST', body: JSON.stringify(body) } : {}),
-    },
-  );
-  const data = await response.json();
+    );
+  } catch {
+    throw new Error(
+      'Could not connect. Your answers remain in this tab. Check your connection and try again.',
+    );
+  }
+  const data = await response.json().catch(() => null);
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    const error = new Error(
+      'The survey service is temporarily unavailable. Your answers remain in this tab; please try again.',
+    );
+    error.status = response.status >= 400 ? response.status : 503;
+    throw error;
+  }
   if (!response.ok) {
     const error = new Error(
       data.error || 'Could not connect. Your answers remain in this tab.',
@@ -53,7 +86,9 @@ async function sendCode() {
   q('#survey-email-form').hidden = true;
   q('#survey-code-form').hidden = false;
   q('#code-address').textContent =
-    'If this is an approved advisor address, a code was sent to ' + email + '.';
+    'If this is an approved advisor address, a code was sent to ' +
+    email +
+    '.';
   message('Use the latest six-digit code. Check your junk folder too.');
 }
 q('#survey-email-form').onsubmit = async (event) => {
@@ -215,7 +250,7 @@ for (const suffix of ['', 'Mobile'])
   };
 async function start() {
   if (!/^[A-Za-z0-9_-]{43}$/.test(link)) {
-    message('Use the private survey link provided by the club.');
+    unavailable('Use the private survey link provided by the club.');
     return;
   }
   try {
@@ -254,7 +289,7 @@ async function start() {
     if (error.status === 401) {
       q('#survey-email-form').hidden = false;
       message('Verify your email to open the questions.');
-    } else message(error.message);
+    } else unavailable(error.message);
   }
 }
 start();

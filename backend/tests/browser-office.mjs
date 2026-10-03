@@ -4,6 +4,7 @@ import { mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { officeFixture } from './helpers/office-fixture.mjs';
 import { changeDraft } from '../lib/survey-builder.mjs';
+import { privateSurveyToken } from '../lib/custom-surveys.mjs';
 import { randomUUID } from 'node:crypto';
 const fixture = await officeFixture();
 const browser = await chromium.launch({
@@ -209,6 +210,12 @@ try {
       await page
         .getByRole('button', { name: 'Close survey', exact: true })
         .waitFor();
+      const answeringLink = await page
+        .getByRole('link', {
+          name: 'Open private survey ↗',
+          exact: true,
+        })
+        .getAttribute('href');
       await page
         .getByRole('button', { name: 'Close survey', exact: true })
         .click();
@@ -250,6 +257,18 @@ try {
         ).rows[0].status,
         'closed',
       );
+      await page.goto(answeringLink);
+      await expect(
+        page.getByRole('heading', {
+          name: 'Survey unavailable',
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        page.getByText('What makes advising worth your time?', {
+          exact: true,
+        }),
+      ).toHaveCount(0);
     },
   );
   await check(
@@ -551,6 +570,192 @@ try {
           )
         ).rows[0].n,
         1,
+      );
+    },
+  );
+  await check(
+    'Survey answers survive a lost acknowledgement without duplicate receipts',
+    async (page) => {
+      const id = randomUUID(),
+        questionId = randomUUID(),
+        optionalId = randomUUID();
+      const definition = {
+        template: 'blank',
+        title: 'Respondent recovery audit',
+        intro: '',
+        audience: 'public',
+        durationDays: 30,
+        permissions: {
+          preview: 'link',
+          answer: 'verified',
+          results: 'admins',
+        },
+        questions: [
+          {
+            id: questionId,
+            title: 'Your feedback',
+            description: '',
+            type: 'text',
+            required: true,
+            options: [],
+          },
+          {
+            id: optionalId,
+            title: 'Optional comment',
+            description: '',
+            type: 'text',
+            required: false,
+            options: [],
+          },
+        ],
+      };
+      for (const [action, expectedRevision] of [
+        ['save', 0],
+        ['publish', 1],
+      ])
+        await changeDraft(
+          fixture.db,
+          { email: 'officer@example.com' },
+          {
+            id,
+            definition,
+            action,
+            expectedRevision,
+            requestId: randomUUID(),
+          },
+        );
+      await page.goto(
+        fixture.origin + '/surveys/#invite=' + privateSurveyToken(id),
+      );
+      await page
+        .getByRole('button', {
+          name: 'Continue to questions →',
+          exact: true,
+        })
+        .click();
+      await page
+        .getByRole('textbox', { name: 'Email address', exact: true })
+        .fill('recovery@example.com');
+      await page
+        .getByRole('button', { name: 'Send sign-in code', exact: true })
+        .click();
+      await page
+        .getByRole('textbox', { name: 'Sign-in code', exact: true })
+        .fill('123456');
+      await page
+        .getByRole('button', {
+          name: 'Verify and continue',
+          exact: true,
+        })
+        .click();
+      await page
+        .getByRole('button', { name: 'Review answers →', exact: true })
+        .click();
+    await expect(page.locator('#main').getByRole('status')).toContainText(
+        'Answer the required question',
+      );
+      await page
+        .getByRole('textbox', { name: 'Your feedback *', exact: true })
+        .fill('Not answered');
+      await page
+        .getByRole('textbox', { name: 'Optional comment', exact: true })
+        .fill('   ');
+      await page
+        .getByRole('button', { name: 'Review answers →', exact: true })
+        .click();
+      await page
+        .getByRole('button', { name: 'Submit answers', exact: true })
+        .click();
+    await expect(page.locator('#main').getByRole('status')).toContainText('Confirm');
+      await page.getByRole('checkbox').check();
+      let dropped = false;
+      await page.route(
+        '**/api/custom-surveys?action=submit',
+        async (route) => {
+          if (dropped) return route.continue();
+          dropped = true;
+          await route.fetch();
+          await route.abort('failed');
+        },
+      );
+      await page
+        .getByRole('button', { name: 'Submit answers', exact: true })
+        .click();
+    await expect(page.locator('#main').getByRole('status')).toContainText(
+        'Your answers remain in this tab',
+      );
+      await page
+        .getByRole('button', { name: 'Submit answers', exact: true })
+        .click();
+      await expect(
+        page.getByRole('heading', {
+          name: 'Your response is saved',
+          exact: true,
+        }),
+      ).toBeVisible();
+      assert.equal(
+        (
+          await fixture.db.query(
+            'SELECT count(*)::int n FROM club_forms.custom_survey_receipts WHERE survey_id=$1',
+            [id],
+          )
+        ).rows[0].n,
+        1,
+      );
+      const stored = (
+        await fixture.db.query(
+          'SELECT responses FROM club_forms.custom_survey_responses WHERE survey_id=$1',
+          [id],
+        )
+      ).rows[0].responses;
+      assert.deepEqual(
+        stored.map((answer) => answer.value),
+        ['Not answered'],
+      );
+      await page.reload();
+      await page.getByRole('button', {
+        name: 'Continue to questions →', exact: true,
+      }).click();
+      await expect(
+        page.getByRole('textbox', {
+          name: 'Your feedback *',
+          exact: true,
+        }),
+      ).toHaveValue('Not answered');
+    },
+  );
+  await check(
+    'CSV export errors stay in the office and a retry downloads the file',
+    async (page) => {
+      const exportRoute = '**/api/admin?*export=csv';
+      await page.route(exportRoute, (route) =>
+        route.fulfill({
+          status: 413,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error:
+              'More than 10,000 submissions match. Narrow the filters before exporting.',
+          }),
+        }),
+      );
+      await page
+        .getByRole('link', { name: 'Export filtered CSV', exact: true })
+        .click();
+      await expect(page.locator('#status')).toContainText(
+        'Narrow the filters',
+      );
+      await expect(page.locator('#office')).toBeVisible();
+      await page.unroute(exportRoute);
+      const download = page.waitForEvent('download');
+      await page
+        .getByRole('link', { name: 'Export filtered CSV', exact: true })
+        .click();
+      assert.equal(
+        (await download).suggestedFilename(),
+        'club-submissions.csv',
+      );
+      await expect(page.locator('#status')).toHaveText(
+        'CSV download started.',
       );
     },
   );

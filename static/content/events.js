@@ -8,6 +8,7 @@ if (EVENTS_API_URL) EVENTS.splice(0, EVENTS.length);
 let started = false,
   pending = null;
 export let eventsFresh = !EVENTS_API_URL;
+export let eventsStatus = EVENTS_API_URL ? 'loading' : 'ready';
 
 function cleanEvent(event) {
   if (
@@ -79,12 +80,14 @@ export function refreshEvents() {
       if (new Set(next.map((e) => e.id)).size !== next.length)
         throw new Error('Duplicate event');
       eventsFresh = true;
+      eventsStatus = 'ready';
       if (JSON.stringify(next) !== JSON.stringify(EVENTS)) {
         EVENTS.splice(0, EVENTS.length, ...next);
         document.dispatchEvent(new CustomEvent('club:events-updated'));
       }
     } catch {
       eventsFresh = false;
+      eventsStatus = 'unavailable';
     } finally {
       pending = null;
       document.dispatchEvent(new CustomEvent('club:events-status'));

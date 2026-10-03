@@ -122,11 +122,14 @@ export function builderLinks(survey) {
     previewLink:
       survey.definition &&
       ['draft', 'open'].includes(survey.status) &&
-      new Date(survey.expires_at) > new Date()
+      new Date(survey.expires_at) > new Date() &&
+      digest(previewToken(survey.id)) === survey.preview_digest
         ? new URL('/surveys/#preview=' + previewToken(survey.id), origin).href
         : null,
     privateLink:
-      survey.status === 'open' && new Date(survey.expires_at) > new Date()
+      survey.status === 'open' &&
+      new Date(survey.expires_at) > new Date() &&
+      digest(privateSurveyToken(survey.id)) === survey.link_digest
         ? new URL('/surveys/#invite=' + privateSurveyToken(survey.id), origin)
             .href
         : null,
@@ -135,7 +138,9 @@ export function builderLinks(survey) {
 export async function getDraft(db, id) {
   if (!uuid.test(id || '')) invalid('Choose a survey.');
   const survey = (
-    await db.query('SELECT * FROM club_forms.custom_surveys WHERE id=$1', [id])
+    await db.query('SELECT * FROM club_forms.custom_surveys WHERE id=$1', [
+      id,
+    ])
   ).rows[0];
   if (!survey) throw new RequestError(404, 'Survey not found.');
   return {
@@ -150,7 +155,13 @@ export async function getDraft(db, id) {
   };
 }
 export async function changeDraft(db, actor, body) {
-  object(body, ['id', 'requestId', 'expectedRevision', 'action', 'definition']);
+  object(body, [
+    'id',
+    'requestId',
+    'expectedRevision',
+    'action',
+    'definition',
+  ]);
   if (
     !uuid.test(body.id) ||
     !uuid.test(body.requestId) ||
@@ -327,6 +338,7 @@ export function validateFormResponse(body, survey, member) {
   const result = [];
   for (const q of survey.definition.questions) {
     let value = answers.get(q.id);
+    if (q.type === 'text' && typeof value === 'string') value = value.trim();
     if (
       value === undefined ||
       value === '' ||

@@ -39,6 +39,54 @@ function node(tag, text, className) {
 function status(message = '') {
   q('#status').textContent = message;
 }
+let exporting = false;
+q('#export').onclick = async (event) => {
+  event.preventDefault();
+  if (exporting) return;
+  exporting = true;
+  const generation = sessionGeneration;
+  q('#export').setAttribute('aria-disabled', 'true');
+  status('Preparing CSV…');
+  try {
+    const response = await fetch(q('#export').href, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(30000),
+    });
+    if (generation !== sessionGeneration) return;
+    if (!response.ok) {
+      if (response.status === 401) showLogin();
+      const result = await response.json().catch(() => null);
+      throw new Error(
+        result?.error ||
+          'Could not export these submissions. Please try again.',
+      );
+    }
+    if (!response.headers.get('content-type')?.startsWith('text/csv'))
+      throw new Error(
+        'The export service is temporarily unavailable. Please try again.',
+      );
+    const blob = await response.blob();
+    if (generation !== sessionGeneration) return;
+    const url = URL.createObjectURL(blob),
+      link = node('a');
+    link.href = url;
+    link.download = 'club-submissions.csv';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    status('CSV download started.');
+  } catch (error) {
+    if (generation === sessionGeneration || !signedIn)
+      status(
+        error.name === 'TypeError' || error.name === 'TimeoutError'
+          ? 'Could not download the CSV. Check your connection and try again.'
+          : error.message,
+      );
+  } finally {
+    exporting = false;
+    q('#export').removeAttribute('aria-disabled');
+  }
+};
 async function api(path = '/api/admin', body) {
   const requestSession = sessionGeneration;
   let response;

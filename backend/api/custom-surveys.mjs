@@ -5,7 +5,9 @@ import { expiredAdminCookies } from '../lib/admin-session.mjs';
 import { send, fail, jsonBody, limit } from '../lib/http.mjs';
 import { RequestError } from '../lib/errors.mjs';
 import { definition } from '../lib/survey-contract.mjs';
-import { getDraft, changeDraft, builderLinks } from '../lib/survey-builder.mjs';
+import { getDraft, changeDraft } from '../lib/survey-builder.mjs';
+import { surveyCatalog } from '../lib/survey-catalog.mjs';
+import { surveyResultPage } from '../lib/survey-results.mjs';
 import {
   respondentList,
   changeRespondent,
@@ -22,7 +24,6 @@ import {
   digest,
   currentResponses,
   submitSurvey,
-  privateSurveyToken,
 } from '../lib/custom-surveys.mjs';
 export const config = { api: { bodyParser: false } };
 export function customSurveysHandler({
@@ -52,15 +53,16 @@ export function customSurveysHandler({
             `SELECT s.id AS survey_id,s.title AS survey_title,s.definition,m.advisor_id,m.display_name,m.email,m.active,r.revision,r.responses,r.submitted_at,
           (SELECT max(a.created_at) FROM club_forms.custom_survey_activity a WHERE a.survey_id=m.survey_id AND a.advisor_id=m.advisor_id AND a.action='respondent_removed') AS archived_at
           FROM club_forms.custom_survey_members m JOIN club_forms.custom_survey_responses r USING(survey_id,advisor_id) JOIN club_forms.custom_surveys s ON s.id=m.survey_id
-          WHERE NOT m.active AND jsonb_array_length(r.responses)>0 ORDER BY archived_at DESC NULLS LAST,r.submitted_at DESC,s.id,m.advisor_id LIMIT 21 OFFSET $1`,
+          WHERE NOT m.active AND jsonb_array_length(r.responses)>0 ORDER BY archived_at DESC NULLS LAST,r.submitted_at DESC,s.id,m.advisor_id LIMIT 11 OFFSET $1`,
             [offset],
           )
         ).rows;
         return send(res, 200, {
           responses: rows
-            .slice(0, 20)
+            .slice(0, 10)
             .map((r) => ({ ...r, definition: r.definition || definition })),
-          hasMore: rows.length > 20,
+          hasMore: rows.length > 10,
+          pageSize: 10,
           readOnly: true,
         });
       }
@@ -104,25 +106,8 @@ export function customSurveysHandler({
           throw new RequestError(405, 'Survey results are read-only.');
         const db = getDatabase();
         if (action === 'catalog') {
-          const surveys = (
-            await db.query(
-              `SELECT s.id,s.title,s.status,s.expires_at,s.content_version,s.link_digest,s.definition,count(r.advisor_id)::int AS response_count FROM club_forms.custom_surveys s LEFT JOIN club_forms.custom_survey_responses r ON r.survey_id=s.id GROUP BY s.id ORDER BY s.created_at DESC`,
-            )
-          ).rows;
           return send(res, 200, {
-            surveys: surveys.map(({ link_digest, ...s }) => ({
-              ...s,
-              previewLink: s.definition ? builderLinks(s).previewLink : null,
-              privateLink:
-                s.status === 'open' &&
-                new Date(s.expires_at) > new Date() &&
-                digest(privateSurveyToken(s.id)) === link_digest
-                  ? new URL(
-                      '/surveys/#invite=' + privateSurveyToken(s.id),
-                      process.env.AUTH_BASE_URL,
-                    ).href
-                  : null,
-            })),
+            surveys: await surveyCatalog(db),
           });
         }
         const id = url.searchParams.get('id');
@@ -138,7 +123,9 @@ export function customSurveysHandler({
         return send(res, 200, {
           survey,
           resultsDefinition: survey.definition || definition,
-          results: await currentResponses(db, id),
+          ...(await surveyResultPage(db, id, url.searchParams.get('offset'), {
+            activeOnly: true,
+          })),
           readOnly: true,
         });
       }
@@ -238,8 +225,37 @@ export function customSurveysHandler({
         return send(res, 200, { signedOut: true });
       }
       const member = await requireDevice(db, req, survey);
+      if (action === 'shared-results' && req.method === 'GET') {
+        if (survey.definition?.permissions.results !== 'respondents')
+          throw new RequestError(
+            403,
+            'This survey does not share respondent results.',
+          );
+        return send(
+          res,
+          200,
+          await surveyResultPage(
+            db,
+            survey.id,
+            url.searchParams.get('offset'),
+            {
+              activeOnly: true,
+              exclude: member.advisor_id,
+            },
+          ),
+        );
+      }
       if (action === 'bootstrap' && req.method === 'GET') {
-        const members = await surveyMembers(db, survey.id);
+        const members = survey.definition
+          ? [member]
+          : await surveyMembers(db, survey.id);
+        const shared =
+          survey.definition?.permissions.results === 'respondents'
+            ? await surveyResultPage(db, survey.id, '0', {
+                activeOnly: true,
+                exclude: member.advisor_id,
+              })
+            : { results: [], nextOffset: null };
         return send(res, 200, {
           mode: 'connected',
           survey: {
@@ -248,11 +264,13 @@ export function customSurveysHandler({
             expiresAt: survey.expires_at,
           },
           advisorId: member.advisor_id,
+          nextOffset: shared.nextOffset,
           definition: {
             ...(survey.definition || definition),
             respondents: members
               .filter(
-                (m) => !survey.definition || m.advisor_id === member.advisor_id,
+                (m) =>
+                  !survey.definition || m.advisor_id === member.advisor_id,
               )
               .map((m) => ({
                 id: m.advisor_id,
@@ -260,11 +278,12 @@ export function customSurveysHandler({
               })),
           },
           results: survey.definition
-            ? survey.definition.permissions.results === 'respondents'
-              ? (await currentResponses(db, survey.id)).filter((r) => r.active)
-              : (
-                  await currentResponses(db, survey.id, member.advisor_id)
-                ).filter((r) => r.advisor_id === member.advisor_id)
+            ? [
+                ...(await currentResponses(db, survey.id, member.advisor_id, {
+                  ownOnly: true,
+                })),
+                ...shared.results,
+              ]
             : await currentResponses(db, survey.id, member.advisor_id),
         });
       }

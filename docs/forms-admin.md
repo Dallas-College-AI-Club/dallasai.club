@@ -29,46 +29,12 @@ CSV exports have separate Subject / title and Message / body fields, dedicated m
 
 There are no email alerts, emailed confirmation links, or newsletter broadcasts in this release. Newsletter requests record consent for future updates; email ownership is not verified and `email_verified` remains false. They must not be represented as verified subscribers or automatically enrolled in a future mailing service. The public page explains that newsletters are not currently being sent. People can contact the club to withdraw a request or cancel an RSVP.
 
-## Admin access
+## Setup and access
 
-Approved officers sign in with a code emailed by Neon Auth. No password is needed.
-The server checks both `ADMIN_EMAILS` and the current Neon admin role on every
-admin request, uses secure HTTP-only cookies, and limits code requests and
-verification attempts. Public account creation and password login are not
-exposed through the club backend. Removing an email or Neon admin role revokes
-access on the next request. See [Event editor](event-editor.md) for the current
-login and deployment instructions.
-
-The older self-hosted account tables and `provision-admins.mjs` script are retained
-only for rollback. Do not run that script to create current Neon administrators.
-Provision approved accounts with the admin role in the Neon Console instead.
-Login codes are authentication emails; signup alerts, form confirmations, and
-newsletter delivery remain disabled.
-
-## Private settings
-
-Use `backend/.env.example` as the variable reference. Never put credentials in browser scripts, Hugo data, or commits.
-
-- `FORMS_DATABASE_URL`: runtime role restricted to the forms schema.
-- `AUTH_DATABASE_URL`: runtime role restricted to the admin authentication tables.
-- `FORM_TOKEN_SECRET`, `BETTER_AUTH_SECRET`, `CRON_SECRET`: independent random secrets of at least 32 characters. Keep them stable. The form secret hashes request quota identifiers.
-- `AUTH_BASE_URL`: exact backend origin serving the admin page, including the preview origin when testing.
-- `ADMIN_EMAILS`: comma-separated approved officer addresses. An empty list disables admin access.
-- `BLOB_READ_WRITE_TOKEN`: connected private Blob store for contributions.
-- `FORMS_ALLOWED_ORIGINS`: optional exact frontend origins for preview testing.
-
-The leaderboard's existing `DATABASE_URL` and `SESSION_SECRET` remain unchanged. Resend credentials are not required or used.
-
-## Provisioning, testing, and launch
-
-1. Review migrations `003_club_forms.sql`, `004_admin_auth.sql`, and `005_screen_confirmations.sql`. The provisioning script applies these and migration 010 for a fresh setup and creates restricted roles. It refuses to overwrite existing credentials or roles.
-2. For an already provisioned database, apply migration 005 once before deploying this revision. It disables the old email-queue trigger and makes new records active by default. Existing data and unused email tables are retained; no email worker or webhook endpoint is deployed.
-3. Save private settings and provision officer accounts. Keep preview admin access limited to the designated tester. Use isolated test data and remove only the records created by a test.
-4. From `backend/`, run `npm ci --include=dev --ignore-scripts`, `npm test`, and `npm run build`. The build generates the admin bundle and trusted event registry. Rebuild/redeploy the backend when event registrations change.
-5. Apply `006_event_editor.sql`, `007_office_tools.sql`, and `008_event_archive.sql` in order for events, question intake, and assets. Apply `009_submission_comments.sql` before deploying the activity/comment API and `010_event_surveys.sql` before deploying surveys. Deploy a protected Vercel preview with the correct admin origin. Check all six forms, real database saves, email-code login/signout, unauthorized access, and private uploads/downloads.
-6. After review, deploy the Vercel backend and then publish the website. The backend is deployed through the CLI; pushing the website alone does not update it. The public form endpoint is configured in `data/club.json`.
-
-For local development, build the backend and run `npm run dev` at `127.0.0.1:4175`. Set `AUTH_BASE_URL=http://127.0.0.1:4175` and Hugo's `params.formsAPIURL=http://127.0.0.1:4175/api/forms`. Serve the frontend at `127.0.0.1:4174`. A daily authenticated maintenance task expires request-limit and obsolete webhook records; it sends no messages.
+[Operations](operations.md) is the shared reference for email-code officer access,
+72-hour sessions, private settings, ordered migrations, local previews, verification,
+and deployment. Form emails and newsletters remain disabled; Neon delivers login
+codes separately. Apply all migrations required by the features below before release.
 
 ## Attachments and privacy
 

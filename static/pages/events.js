@@ -229,7 +229,9 @@ export function mountEvents(root) {
               <span>WHERE</span>
               <p>${escapeHTML(selected.location)}</p>
             </div>`
-          : ''
+          : !past
+            ? '<div class="event-venue"><span>WHERE</span><p>Location to be announced.</p></div>'
+            : ''
       }${
         selected.agenda.length
           ? /* HTML */ `<h3>${past ? 'Meeting details' : 'On the agenda'}</h3>
@@ -280,7 +282,8 @@ export function mountEvents(root) {
           )
             ? image.previewSrc
             : EVENTS_API_URL + '?image=' + encodeURIComponent(image.id);
-        img.alt = image.alt || selected.title + ' — event image ' + (index + 1);
+        img.alt =
+          image.alt || selected.title + ' — event image ' + (index + 1);
         if (privatePreview) figure.append(img);
         else {
           const button = document.createElement('button');
@@ -463,7 +466,8 @@ export function mountEvents(root) {
   };
   const updated = () => {
     if (privatePreview) return;
-    fallback = splitEvents().upcoming[0] || splitEvents().past[0] || EVENTS[0];
+    fallback =
+      splitEvents().upcoming[0] || splitEvents().past[0] || EVENTS[0];
     const previous = selected;
     selected =
       EVENTS.find((e) => e.id === (selected?.id || requested)) || fallback;

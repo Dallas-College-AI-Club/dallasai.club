@@ -1,6 +1,16 @@
 import { csvCell } from './submission-export.mjs';
 import { RequestError } from './errors.mjs';
 import { responseFilter, responseSelect } from './survey-management.mjs';
+const anyChoice = (value) =>
+  String(value).trim().toLowerCase() === 'any of these';
+const ordinaryChoice = (value) =>
+  value !== '__other__' &&
+  !anyChoice(value) &&
+  !/^(none\b|not sure\b)/i.test(value.trim());
+const impliedChoice = (question, values, choice) =>
+  question.type === 'multiple' &&
+  values.some(anyChoice) &&
+  ordinaryChoice(choice);
 export const answerValues = (answer) =>
   (Array.isArray(answer?.value) ? answer.value : [answer?.value || ''])
     .filter(Boolean)
@@ -38,14 +48,13 @@ export function summarizeResponses(rows) {
           ...q,
           answered: 0,
           skipped: 0,
-          choices: [
-            ...q.options,
-            ...(q.allowOther ? ['__other__'] : []),
-          ].map((value) => ({
-            value,
-            label: value === '__other__' ? 'Other' : value,
-            count: 0,
-          })),
+          choices: [...q.options, ...(q.allowOther ? ['__other__'] : [])].map(
+            (value) => ({
+              value,
+              label: value === '__other__' ? 'Other' : value,
+              count: 0,
+            }),
+          ),
           written: [],
         })),
       });
@@ -62,7 +71,11 @@ export function summarizeResponses(rows) {
       }
       q.answered++;
       for (const choice of q.choices)
-        if (values.includes(choice.value)) choice.count++;
+        if (
+          values.includes(choice.value) ||
+          impliedChoice(q, values, choice.value)
+        )
+          choice.count++;
       if (q.type === 'text')
         q.written.push({
           name: row.name,
@@ -131,12 +144,9 @@ export function responsesCSV(rows) {
       if (option === null) return answerValues(answer).join('; ');
       if (!answer?.value?.length) return '';
       const selected = answer.value.includes(option);
-      const any = answer.value.includes('Any of these');
-      const individual =
-        option !== 'Any of these' && !/^(none\b|not sure\b)/i.test(option);
       return selected
         ? 'Yes'
-        : any && individual
+        : impliedChoice(q, answer.value, option)
           ? 'Yes (Any of these)'
           : 'No';
     }),

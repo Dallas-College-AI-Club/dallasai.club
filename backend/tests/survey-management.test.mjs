@@ -29,6 +29,47 @@ const questions = [
     required: false,
   },
 ];
+test('summary and CSV count Any of these consistently without choosing None, Not sure, or Other', () => {
+  const question = {
+    ...questions[0],
+    options: [
+      'Chess',
+      'Cards',
+      'Any of these',
+      'None of these',
+      'Not sure yet',
+    ],
+  };
+  const rows = ['Any of these', 'Chess'].map((value, index) => ({
+    event_id: 'games',
+    event_title: 'Games',
+    event_date: '',
+    survey_version: 'v1',
+    name: 'Person ' + index,
+    email: 'person@example.edu',
+    created_at: '2026-10-03T00:00:00Z',
+    questions: [question],
+    answers: [{ questionId: qid, value: [value], other: '' }],
+  }));
+  const choices = summarizeResponses(rows).groups[0].questions[0].choices;
+  assert.deepEqual(
+    choices.map((c) => [c.label, c.count]),
+    [
+      ['Chess', 2],
+      ['Cards', 1],
+      ['Any of these', 1],
+      ['None of these', 0],
+      ['Not sure yet', 0],
+      ['Other', 0],
+    ],
+  );
+  assert.match(responsesCSV(rows), /Yes \(Any of these\)/);
+  rows[0].answers[0].value = ['Chess', 'Any of these'];
+  assert.equal(
+    summarizeResponses(rows).groups[0].questions[0].choices[0].count,
+    2,
+  );
+});
 before(async () => {
   db = new PGlite();
   for (const file of [

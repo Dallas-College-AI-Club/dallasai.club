@@ -5,6 +5,14 @@ submitted summaries grouped by respondent and chapter, refresh results, open the
 private or question-preview link. These controls do not edit advisor answers.
 Event RSVP surveys remain in the separate Event surveys group.
 
+The selector counts active, nonempty responses and shows archived responses
+separately. Expired rounds are labeled expired; closed and expired links are not
+offered as working invitations. Long result lists load ten responses at a time with
+**Load more responses**. Respondents with shared-result access use **Load more saved
+results**; their own saved answers are always available on the first load.
+The archived response view also loads ten responses per page. Invalid or closed
+invitations show a neutral unavailable screen with the club contact address.
+
 Advisor Studio is a private collection round with a 30-day deadline. The
 deadline appears in the welcome page, question preview, respondent navigation,
 and officer view. The invitation secret stays in the URL fragment and a
@@ -74,6 +82,11 @@ WordprocessingML ZIP. Email is a help-only mailto/copy-address action. No survey
 invitation or response email is sent automatically.
 
 ## Deployment
+
+Use [Operations](operations.md) for shared configuration, migration order,
+session rules, deployment, and rollback. Migration 018 adds indexes for survey
+history and device revocation, and bounded cleanup of obsolete device tokens.
+This cleanup does not remove respondents, submitted answers, or audit records.
 
 Apply migrations `011_custom_surveys.sql`, `012_survey_respondents.sql`, and
 `013_survey_builder.sql` to the approved forms database in order. Their

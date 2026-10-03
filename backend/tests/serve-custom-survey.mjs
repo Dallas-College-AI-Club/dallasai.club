@@ -10,6 +10,12 @@ process.env.AUTH_BASE_URL = origin;
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, origin);
+    if (url.pathname === '/responsive') {
+      res.setHeader('Content-Type', 'text/html');
+      return res.end(
+        `<!doctype html><html><head><title>Survey responsive check</title><style>body{margin:0;background:#eee}nav{padding:8px}iframe{display:block;border:0;max-width:none}output{font:12px monospace;display:block}</style></head><body><nav><label>Viewport <select id="size"><option>320x740</option><option>390x844</option><option>768x1024</option><option>844x390</option><option>1024x768</option><option>1440x1100</option></select></label><output aria-label="Layout measurements"></output></nav><iframe title="Survey under test" src="/surveys/#invite=${f.token}&preview=1"></iframe><script>const frame=document.querySelector('iframe'),sizes=document.querySelector('select');function resize(){const [w,h]=sizes.value.split('x');frame.width=w;frame.height=h}sizes.onchange=resize;resize();setInterval(()=>{const d=frame.contentDocument,w=frame.contentWindow;if(!d?.body)return;const overflow=[...d.querySelectorAll('main *')].filter(e=>{const r=e.getBoundingClientRect();return r.width&&r.height&&(r.left<-.5||r.right>w.innerWidth+.5)}).map(e=>e.className||e.tagName);document.querySelector('output').textContent=JSON.stringify({width:w.innerWidth,height:w.innerHeight,scrollWidth:d.documentElement.scrollWidth,heading:d.querySelector('main h1')?.textContent,overflow:[...new Set(overflow)],enabledAnswers:d.querySelectorAll('main input:not(:disabled),main textarea:not(:disabled),main select:not(:disabled)').length})},250);</script></body></html>`,
+      );
+    }
     if (url.pathname === '/reference' && process.env.SURVEY_REFERENCE_SOURCE) {
       res.setHeader('Content-Type', 'text/html');
       return res.end(await readFile(process.env.SURVEY_REFERENCE_SOURCE));

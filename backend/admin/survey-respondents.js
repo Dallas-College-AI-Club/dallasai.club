@@ -15,7 +15,7 @@ export async function mountRespondents(root, surveyId, api, onChanged) {
       node('h3', 'Respondents'),
       node(
         'p',
-        'Add approved email addresses, including your own for testing. Removing someone ends their survey access on every device. Saved responses and the activity log are retained.',
+        'Add approved email addresses, including your own for testing. Removing someone archives them and ends survey access on every device. Saved responses and the activity log are retained.',
         'hint',
       ),
     );
@@ -58,7 +58,7 @@ export async function mountRespondents(root, surveyId, api, onChanged) {
     }
     const active = node('div', undefined, 'respondent-list');
     const removed = node('details');
-    removed.append(node('summary', 'Removed respondents'));
+    removed.append(node('summary', 'Archived respondents'));
     for (const member of data.members) {
       const row = node('div', undefined, 'respondent-row');
       const person = node('div');
@@ -136,7 +136,8 @@ export async function mountRespondents(root, surveyId, api, onChanged) {
     const labels = {
       respondent_added: 'Added',
       respondent_restored: 'Restored',
-      respondent_removed: 'Removed',
+      respondent_removed: 'Archived',
+      respondent_registered: 'Registered',
     };
     for (const entry of data.activity) {
       const item = node('p');

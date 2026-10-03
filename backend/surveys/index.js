@@ -1,5 +1,10 @@
+import { responseSections } from './results-ui.js';
 const q = (selector) => document.querySelector(selector);
-const link = new URLSearchParams(location.hash.slice(1)).get('invite') || '';
+const params = new URLSearchParams(location.hash.slice(1));
+const previewCapability =
+  !params.has('invite') &&
+  /^[A-Za-z0-9_-]{43}$/.test(params.get('preview') || '');
+const link = params.get('invite') || params.get('preview') || '';
 let bootstrap,
   email = '',
   busy = false,
@@ -21,6 +26,7 @@ async function request(action, body, path) {
       signal: AbortSignal.timeout(30000),
       headers: {
         'X-Survey-Link': link,
+        ...(previewCapability ? { 'X-Survey-Preview': '1' } : {}),
         ...(body ? { 'Content-Type': 'application/json' } : {}),
       },
       ...(body ? { method: 'POST', body: JSON.stringify(body) } : {}),
@@ -105,28 +111,9 @@ function savedResults(results) {
   const summary = document.createElement('summary');
   summary.textContent = 'Saved shared summaries · read-only';
   details.append(summary);
-  for (const result of results) {
-    const section = document.createElement('section'),
-      heading = document.createElement('h2');
-    heading.textContent = result.display_name;
-    section.append(heading);
-    if (!result.responses?.length) {
-      const p = document.createElement('p');
-      p.textContent = 'No shared responses yet.';
-      section.append(p);
-    } else
-      for (const answer of result.responses) {
-        const card = document.createElement('div'),
-          title = document.createElement('h3'),
-          text = document.createElement('p');
-        card.className = 'saved-answer';
-        title.textContent = answer.title;
-        text.textContent = answer.text;
-        card.append(title, text);
-        section.append(card);
-      }
-    details.append(section);
-  }
+  details.append(
+    responseSections(results, { definition: bootstrap.definition }),
+  );
   root.append(details);
 }
 async function openQuestions() {
@@ -233,6 +220,15 @@ async function start() {
   }
   try {
     const welcome = await request('welcome');
+    if (welcome.kind === 'custom') {
+      const { mountCustomForm } = await import('./form-ui.js');
+      await mountCustomForm({
+        welcome,
+        request,
+        previewOnly: previewCapability || params.get('preview') === '1',
+      });
+      return;
+    }
     q('#survey-expiration').textContent =
       'This private survey expires ' +
       new Date(welcome.expiresAt).toLocaleString('en-US', {

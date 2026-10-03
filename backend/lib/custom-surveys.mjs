@@ -1,6 +1,7 @@
-import { createHash, createHmac, randomBytes } from 'node:crypto';
+import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { RequestError } from './errors.mjs';
 import { definition, validateSubmission } from './survey-contract.mjs';
+import { FORM_VERSION, validateFormResponse } from './survey-builder.mjs';
 export const digest = (value) =>
   createHash('sha256').update(value).digest('hex');
 export function privateSurveyToken(id) {
@@ -41,8 +42,24 @@ export async function linkedSurvey(db, token, lock = false) {
       404,
       'This private survey link is unavailable or has expired. Contact the club for a current link.',
     );
-  if (survey.content_version !== definition.content_version)
+  if (
+    survey.content_version !==
+    (survey.definition ? FORM_VERSION : definition.content_version)
+  )
     throw new RequestError(503, 'This survey version is not available.');
+  return survey;
+}
+export async function linkedPreview(db, token) {
+  if (typeof token !== 'string' || !/^[A-Za-z0-9_-]{43}$/.test(token))
+    throw new RequestError(404, 'This preview link is unavailable.');
+  const survey = (
+    await db.query(
+      "SELECT * FROM club_forms.custom_surveys WHERE preview_digest=$1 AND status IN ('draft','open') AND expires_at>now()",
+      [digest(token)],
+    )
+  ).rows[0];
+  if (!survey?.definition || survey.content_version !== FORM_VERSION)
+    throw new RequestError(404, 'This preview link is unavailable or expired.');
   return survey;
 }
 export async function surveyMembers(db, id) {
@@ -74,16 +91,52 @@ export async function rememberDevice(db, survey, user) {
       'Verify the code sent to your approved advisor email.',
     );
   return db.transaction(async (tx) => {
-    const member = (
+    const current = (
       await tx.query(
-        'SELECT * FROM club_forms.custom_survey_members WHERE survey_id=$1 AND email=$2 AND active FOR UPDATE',
+        "SELECT * FROM club_forms.custom_surveys WHERE id=$1 AND status IN ('draft','open') AND expires_at>now() FOR UPDATE",
+        [survey.id],
+      )
+    ).rows[0];
+    if (!current) throw new RequestError(403, 'This survey has closed.');
+    let member = (
+      await tx.query(
+        'SELECT * FROM club_forms.custom_survey_members WHERE survey_id=$1 AND email=$2 FOR UPDATE',
         [survey.id, user.email.toLowerCase()],
       )
     ).rows[0];
-    if (!member || (member.user_id && member.user_id !== user.id))
+    if (!member && current.definition?.permissions.answer === 'verified') {
+      const id = randomUUID(),
+        name = (user.name || user.email).slice(0, 120),
+        email = user.email.toLowerCase();
+      member = (
+        await tx.query(
+          'INSERT INTO club_forms.custom_survey_members(survey_id,advisor_id,display_name,email,user_id) VALUES($1,$2,$3,$4,$5) RETURNING *',
+          [survey.id, id, name, email, user.id],
+        )
+      ).rows[0];
+      const revision = current.roster_revision + 1;
+      await tx.query(
+        'UPDATE club_forms.custom_surveys SET roster_revision=$2 WHERE id=$1',
+        [survey.id, revision],
+      );
+      await tx.query(
+        "INSERT INTO club_forms.custom_survey_activity(id,survey_id,advisor_id,action,actor_id,actor_email,respondent_name,respondent_email,revision,request_digest) VALUES($1,$2,$3,'respondent_registered',$4,$5,$6,$5,$7,$8)",
+        [
+          randomUUID(),
+          survey.id,
+          id,
+          user.id,
+          email,
+          name,
+          revision,
+          digest('registered:' + user.id),
+        ],
+      );
+    }
+    if (!member?.active || (member.user_id && member.user_id !== user.id))
       throw new RequestError(
         403,
-        'This account is not an advisor for this survey.',
+        'This account is not an approved respondent for this survey.',
       );
     await tx.query(
       'UPDATE club_forms.custom_survey_members SET user_id=$3 WHERE survey_id=$1 AND advisor_id=$2',
@@ -92,7 +145,13 @@ export async function rememberDevice(db, survey, user) {
     const token = randomBytes(32).toString('base64url');
     await tx.query(
       'INSERT INTO club_forms.custom_survey_devices(token_digest,survey_id,advisor_id,user_id,expires_at) VALUES($1,$2,$3,$4,$5)',
-      [digest(token), survey.id, member.advisor_id, user.id, survey.expires_at],
+      [
+        digest(token),
+        survey.id,
+        member.advisor_id,
+        user.id,
+        current.expires_at,
+      ],
     );
     return { token, member };
   });
@@ -122,12 +181,14 @@ export async function submitSurvey(db, req, link, body) {
     if (!locked.rows.length)
       throw new RequestError(403, 'Survey access has been revoked.');
     const members = await surveyMembers(tx, survey.id);
-    const responses = validateSubmission(
-      body,
-      member,
-      members.filter((m) => m.advisor_id !== member.advisor_id),
-      survey.content_version,
-    );
+    const responses = survey.definition
+      ? validateFormResponse(body, survey, member)
+      : validateSubmission(
+          body,
+          member,
+          members.filter((m) => m.advisor_id !== member.advisor_id),
+          survey.content_version,
+        );
     const requestDigest = digest(
       JSON.stringify({
         responses,
@@ -177,7 +238,7 @@ export async function submitSurvey(db, req, link, body) {
         member.advisor_id,
         revision,
         JSON.stringify(responses),
-        members
+        (survey.definition?.permissions.results === 'admins' ? [] : members)
           .filter((m) => m.advisor_id !== member.advisor_id)
           .map((m) => m.advisor_id),
       ],

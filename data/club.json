@@ -24,11 +24,15 @@
   "SOCIAL_LINKS": [
     {
       "label": "Instagram",
-      "href": "https://www.instagram.com/dallascollegeaiclub/?hl=en"
+      "href": "https://www.instagram.com/thedallascollegeaiclub"
+    },
+    {
+      "label": "Threads",
+      "href": "https://www.threads.com/@thedallascollegeaiclub"
     },
     {
       "label": "LinkedIn",
-      "href": "https://www.linkedin.com/in/dallas-college-ai-club-richland-based-742338400/"
+      "href": "https://www.linkedin.com/in/dallas-college-ai-club-748a8643b/"
     }
   ],
   "WORKSHOP_REQUEST_URL": "",

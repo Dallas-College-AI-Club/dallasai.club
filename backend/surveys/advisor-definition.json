@@ -1,0 +1,659 @@
+{
+  "schema_version": "9.0.0",
+  "content_version": "2026-10-02-response-sharing-9",
+  "title": "Advisor Studio · Shape an advising role you look forward to",
+  "respondents": [
+    {
+      "id": "pearlman",
+      "name": "Mr. Russ Pearlman"
+    },
+    {
+      "id": "bracewell",
+      "name": "Prof. David Bracewell"
+    }
+  ],
+  "chapters": [
+    {
+      "id": "spark",
+      "title": "Find the spark",
+      "kicker": "01 · What brings you here",
+      "intro": "Start with the ways you most enjoy helping students grow.",
+      "core": ["spark"],
+      "optional": ["reward"],
+      "optional_title": "What would make this rewarding for you, too?",
+      "note": "What would make this experience meaningful for you?",
+      "note_help": "Share a thought about what you enjoy, what you hope to gain, or anything else on this page."
+    },
+    {
+      "id": "future",
+      "title": "Give students a better next step",
+      "kicker": "02 · Students’ futures & your availability",
+      "intro": "Reflect on the students you want to support, then choose an involvement level that fits your life.",
+      "core": ["concerns", "concern_focus", "weekly", "priority", "busy_route"],
+      "optional": [],
+      "note": "What could the club do about your top concerns?",
+      "note_help": "Share a practical idea, a qualification about your availability, or thoughts on anything covered on this page."
+    },
+    {
+      "id": "style",
+      "title": "Dial in your working style",
+      "kicker": "03 · Projects & club activities",
+      "intro": "Explore how you would coach a student team, then choose the club activities you would enjoy.",
+      "core": ["new_team", "event_types", "event_involvement", "event_contact"],
+      "optional": ["event_role", "event_notice"],
+      "optional_title": "Activity role & advance notice",
+      "note": "What would make projects or activities work well for you?",
+      "note_help": "Share an activity idea, a communication preference, or a thought about any topic on this page."
+    },
+    {
+      "id": "offer",
+      "title": "Make it possible",
+      "kicker": "04 · Resources, meetings & teamwork",
+      "intro": "Share possible resources and connections, then tell us which meetings would be useful.",
+      "core": [
+        "resources",
+        "meeting_frequency",
+        "meeting_format",
+        "meeting_invites"
+      ],
+      "optional": ["routing", "disagreement"],
+      "optional_title": "Fine-tune how the two advisors work together",
+      "note": "Any other resources, connections, conditions, or ideas?",
+      "note_help": "You can also comment or share thoughts on anything covered on this page."
+    },
+    {
+      "id": "review",
+      "title": "Your playbook, in your words",
+      "kicker": "05 · Review & submit",
+      "intro": "Review the wording of each response, choose what to share, and keep a full copy for yourself.",
+      "core": [],
+      "optional": []
+    }
+  ],
+  "questions": [
+    {
+      "id": "spark",
+      "type": "rank",
+      "title": "What would you actually look forward to?",
+      "prompt": "Drag the activities you would most enjoy into priority order. Rank just the ones that matter to you.",
+      "required": false,
+      "allow_custom": true,
+      "decision": "Identify appealing activities, separately from expertise and commitment.",
+      "options": [
+        {
+          "id": "build",
+          "label": "Build or review an AI prototype together"
+        },
+        {
+          "id": "learning",
+          "label": "Help students explain and evaluate what they built"
+        },
+        {
+          "id": "useful",
+          "label": "Shape a project around a useful real-world problem"
+        },
+        {
+          "id": "judgment",
+          "label": "Explore a responsible-AI or leadership dilemma"
+        },
+        {
+          "id": "discovery",
+          "label": "Discover something new alongside students"
+        }
+      ]
+    },
+    {
+      "id": "reward",
+      "type": "rank",
+      "title": "What would make it rewarding for you, too?",
+      "prompt": "What would leave you feeling that advising was time well spent? Rank the possibilities that resonate with you, or add your own. No additional benefit needed is also an option.",
+      "required": false,
+      "allow_custom": true,
+      "optional_detail": true,
+      "statuses": ["rank", "no_order", "none", "private"],
+      "decision": "Propose reciprocal benefits without inferring career ambitions or promising publicity.",
+      "options": [
+        {
+          "id": "student_growth",
+          "label": "See students grow in confidence and shape their own futures"
+        },
+        {
+          "id": "open_doors",
+          "label": "Open a door that helps a student take their next big step"
+        },
+        {
+          "id": "wisdom",
+          "label": "Share hard-earned lessons and see students put them to work"
+        },
+        {
+          "id": "learn",
+          "label": "Learn alongside students and bring fresh ideas into my own work"
+        },
+        {
+          "id": "lasting_work",
+          "label": "Create something lasting together—a useful project, article, or teaching resource"
+        },
+        {
+          "id": "community",
+          "label": "Build a community where curiosity, trust, and encouragement help people thrive"
+        }
+      ]
+    },
+    {
+      "id": "concerns",
+      "type": "rank",
+      "title": "What most concerns you about students’ futures?",
+      "prompt": "Thinking about the next few years, which student challenges would you most like the club to address? Prioritize up to three, or rank more when it helps clarify your thinking.",
+      "required": false,
+      "allow_custom": true,
+      "decision": "Elicit concerns without treating them as verified forecasts.",
+      "options": [
+        {
+          "id": "foundations",
+          "label": "Relying on AI without building understanding or judgment"
+        },
+        {
+          "id": "opportunity",
+          "label": "Struggling to find entry-level opportunities or show their abilities"
+        },
+        {
+          "id": "access",
+          "label": "Unequal access to tools, mentors, and professional networks"
+        },
+        {
+          "id": "adaptability",
+          "label": "Losing confidence or falling behind as expectations change"
+        },
+        {
+          "id": "responsibility",
+          "label": "Making harmful, insecure, or poorly justified AI decisions"
+        }
+      ]
+    },
+    {
+      "id": "concern_focus",
+      "type": "focus_group",
+      "title": "How much would you like to help with your top three concerns?",
+      "prompt": "Set a level for each of your top three concerns. Tied concerns at the cutoff stay together.",
+      "required": false,
+      "allow_custom": true,
+      "left": "A small part of my contribution",
+      "right": "A main focus of my contribution",
+      "midpoint": "One of several focuses",
+      "special": ["depends", "custom", "not_now"],
+      "depends_on": "concerns",
+      "decision": "Desired focus for each leading concern, stored by concern ID. Not an allocation of hours or a measure of expertise."
+    },
+    {
+      "id": "new_team",
+      "type": "slider",
+      "title": "Students are building their first AI prototype. How would you help?",
+      "prompt": "In a 30-minute check-in on a prototype using public or synthetic data, where would you prefer to focus your effort?",
+      "required": false,
+      "allow_custom": true,
+      "left": "Coach through questions and student-led attempts",
+      "right": "Work alongside students on a concrete example",
+      "midpoint": "A mix of coaching through questions and working alongside students",
+      "special": ["depends", "custom", "not_now"],
+      "decision": "Preferred coaching mix for an inexperienced team, not an autonomy score."
+    },
+    {
+      "id": "routing",
+      "type": "choice",
+      "title": "How should we involve two advisors?",
+      "prompt": "What default would make co-advising work smoothly?",
+      "required": false,
+      "allow_custom": true,
+      "optional_detail": true,
+      "options": [
+        {
+          "id": "lead",
+          "label": "One agreed lead advisor per project; involve the other when useful"
+        },
+        {
+          "id": "topic",
+          "label": "Route requests using a jointly agreed topic guide"
+        },
+        {
+          "id": "shared",
+          "label": "One shared brief to both; clarify who will respond"
+        },
+        {
+          "id": "joint",
+          "label": "Reserve selected milestones for joint discussion"
+        },
+        {
+          "id": "context",
+          "label": "Agree case by case"
+        }
+      ]
+    },
+    {
+      "id": "disagreement",
+      "type": "choice",
+      "title": "Two different recommendations—what next?",
+      "prompt": "Both suggestions are safe and within the project’s agreed scope. What process would you prefer?",
+      "required": false,
+      "allow_custom": true,
+      "optional_detail": true,
+      "options": [
+        {
+          "id": "tradeoff",
+          "label": "Students summarize the trade-off and ask us to reconcile priorities"
+        },
+        {
+          "id": "experiment",
+          "label": "Students propose a small comparison experiment"
+        },
+        {
+          "id": "delegated",
+          "label": "Students decide within agreed delegation and explain why"
+        },
+        {
+          "id": "owner",
+          "label": "Use the decision owner agreed for that project"
+        }
+      ]
+    },
+    {
+      "id": "resources",
+      "type": "resources",
+      "title": "What resources or connections would you like to offer?",
+      "prompt": "Which resources or connections could you help students explore? Add your own possibilities, too.",
+      "required": false,
+      "allow_custom": true,
+      "statuses": [
+        {
+          "id": "direct",
+          "label": "Could help directly, within my remit"
+        },
+        {
+          "id": "explore",
+          "label": "Could explore, subject to permission"
+        },
+        {
+          "id": "connect",
+          "label": "Could help identify the right person"
+        },
+        {
+          "id": "discuss",
+          "label": "Would need to discuss first"
+        }
+      ],
+      "decision": "An expression of interest, not an institutional resource commitment, guaranteed access, or consent to contact others.",
+      "options": [
+        {
+          "id": "materials",
+          "label": "Learning materials, examples, or public / synthetic datasets"
+        },
+        {
+          "id": "expertise",
+          "label": "Guest speakers, specialist feedback, or mentors"
+        },
+        {
+          "id": "careers",
+          "label": "Career conversations or professional introductions"
+        },
+        {
+          "id": "problems",
+          "label": "Real-world problem ideas or potential project partners"
+        },
+        {
+          "id": "access",
+          "label": "Tools, spaces, equipment, or learning credits"
+        }
+      ]
+    },
+    {
+      "id": "weekly",
+      "type": "weekly",
+      "title": "What would involvement look like in a regular week?",
+      "prompt": "With your other commitments in mind, what range would be realistic in an ordinary week? Include routine meetings, messages, preparation, and project review. Discuss extra event preparation and special meetings separately.",
+      "required": false,
+      "allow_custom": true,
+      "decision": "Desired weekly range, not a measure of dedication. Zero and nonrecurring arrangements are valid.",
+      "minimum": 0,
+      "maximum": 168,
+      "step": 0.25,
+      "helper": "A small, sustainable contribution is welcome. Zero and case-by-case involvement are valid choices."
+    },
+    {
+      "id": "priority",
+      "type": "choice",
+      "title": "How should we plan around that time?",
+      "prompt": "For the weekly range you entered, which arrangement usually works best?",
+      "required": false,
+      "allow_custom": true,
+      "options": [
+        {
+          "id": "protected",
+          "label": "Set aside a regular place in my weekly schedule"
+        },
+        {
+          "id": "flexible",
+          "label": "Keep the time flexible around my other work"
+        }
+      ],
+      "compact": true,
+      "display_when": {
+        "question": "weekly",
+        "mode": "range",
+        "min_max_exclusive": 0
+      }
+    },
+    {
+      "id": "busy_route",
+      "type": "multi_choice",
+      "title": "When your week gets busy, how should an officer check availability?",
+      "prompt": "Select the routes that work for you. Officers should use one suitable route, not send the same message everywhere.",
+      "required": false,
+      "allow_custom": true,
+      "options": [
+        {
+          "id": "teams",
+          "label": "An officer can message me directly on Teams"
+        },
+        {
+          "id": "email",
+          "label": "An officer can email me directly"
+        },
+        {
+          "id": "coordinator",
+          "label": "Use my existing scheduling contact"
+        },
+        {
+          "id": "me",
+          "label": "I will update the officers when my availability changes"
+        }
+      ],
+      "compact": false
+    },
+    {
+      "id": "event_involvement",
+      "type": "slider",
+      "title": "An officer is organizing an activity you like. How involved would you like to be in planning?",
+      "prompt": "Imagine an activity you like: an AI Review writing session, an AI Lab experiment, or a guest conversation. An officer owns logistics and promotion and brings you an initial idea with reasonable notice.",
+      "required": false,
+      "allow_custom": true,
+      "left": "Review a short plan at one agreed checkpoint",
+      "right": "Co-design the activity through planning",
+      "midpoint": "Help shape the idea, then check key milestones",
+      "special": ["depends", "custom", "not_now"],
+      "decision": "Preferred planning involvement in this hypothetical event; not authority over event approvals or weekly time."
+    },
+    {
+      "id": "event_contact",
+      "type": "multi_choice",
+      "title": "How should the officer bring you the activity idea?",
+      "prompt": "Select all approaches that work for you. An officer should choose one appropriate approach.",
+      "required": false,
+      "allow_custom": true,
+      "options": [
+        {
+          "id": "usual",
+          "label": "Use my availability-check route from the second page"
+        },
+        {
+          "id": "teams",
+          "label": "Send a short Teams outline with the goal, audience, and specific request"
+        },
+        {
+          "id": "email",
+          "label": "Email a one-page proposal with the goal, audience, dates, and time requested"
+        },
+        {
+          "id": "call",
+          "label": "Send a short brief, then arrange a 15-minute planning call"
+        },
+        {
+          "id": "coordinator",
+          "label": "Route the brief and possible dates through my scheduling contact"
+        }
+      ],
+      "compact": false
+    },
+    {
+      "id": "event_role",
+      "type": "multi_choice",
+      "title": "When the activity takes place, what parts would you enjoy?",
+      "prompt": "Select all the roles that appeal to you.",
+      "required": false,
+      "allow_custom": true,
+      "optional_detail": true,
+      "options": [
+        {
+          "id": "demo",
+          "label": "Join students as they try, test, or discuss their work"
+        },
+        {
+          "id": "guest",
+          "label": "Lead a short discussion or guest Q&A"
+        },
+        {
+          "id": "feedback",
+          "label": "Offer feedback at a student showcase or review session"
+        },
+        {
+          "id": "host",
+          "label": "Welcome a guest and help students make connections"
+        },
+        {
+          "id": "observe",
+          "label": "Attend, listen, and encourage students"
+        },
+        {
+          "id": "none",
+          "label": "No live-activity role this term"
+        }
+      ],
+      "compact": false,
+      "exclusive_options": ["none"]
+    },
+    {
+      "id": "event_notice",
+      "type": "choice",
+      "title": "How much notice would you like for an activity request?",
+      "prompt": "",
+      "required": false,
+      "allow_custom": true,
+      "optional_detail": true,
+      "options": [
+        {
+          "id": "one",
+          "label": "About one week"
+        },
+        {
+          "id": "two",
+          "label": "About two weeks"
+        },
+        {
+          "id": "four",
+          "label": "About four weeks"
+        },
+        {
+          "id": "more",
+          "label": "More than four weeks"
+        },
+        {
+          "id": "context",
+          "label": "Depends on the preparation and role"
+        }
+      ]
+    },
+    {
+      "id": "ideal_responsibilities",
+      "type": "text",
+      "title": "What would your ideal responsibilities in this club look like?",
+      "prompt": "Describe what you would like to lead or support, what officers should handle independently, and which decisions they should bring to you first. You can also say what you would prefer not to take on.",
+      "required": false,
+      "allow_custom": true,
+      "max_length": 2000
+    },
+    {
+      "id": "event_types",
+      "type": "rank",
+      "title": "Which kinds of club activities interest you most?",
+      "prompt": "Drag the activities you would most enjoy into priority order. Ranking a few is enough; leave the others unranked or add a new idea.",
+      "required": false,
+      "allow_custom": true,
+      "options": [
+        {
+          "id": "ai_review",
+          "label": "Lead the AI Review",
+          "description": "Coach students to write clear, well-supported AI articles and give thoughtful editorial feedback.",
+          "link": {
+            "label": "Explore the AI Review",
+            "url": "https://dallasai.club/club.html?mode=journal"
+          }
+        },
+        {
+          "id": "code_review",
+          "label": "Run a student code-review clinic",
+          "description": "Help students reason about design, tests, readability, and the code they build with AI."
+        },
+        {
+          "id": "ai_lab",
+          "label": "Lead bite-sized AI Lab experiments",
+          "description": "Pair students with IT or other Dallas College staff on small AI studies that could inform college decisions.",
+          "link": {
+            "label": "Explore the AI Lab",
+            "url": "https://dallasai.club/club.html?mode=lab"
+          }
+        },
+        {
+          "id": "hands_on",
+          "label": "Host hands-on AI workshops and learning labs"
+        },
+        {
+          "id": "showcase",
+          "label": "Coach student project demos and showcases"
+        },
+        {
+          "id": "industry",
+          "label": "Host fireside chats, guest speakers, and industry Q&A"
+        },
+        {
+          "id": "build",
+          "label": "Join collaborative build sessions or mini-hackathons"
+        },
+        {
+          "id": "cross_major",
+          "label": "Explore cross-major AI questions and responsible-AI cases"
+        },
+        {
+          "id": "social",
+          "label": "Join problem-solving game nights and informal socials"
+        }
+      ],
+      "context": {
+        "title": "What could a bite-sized AI Lab study look like?",
+        "paragraphs": [
+          "One practical question, a small comparison, and a short write-up. Pair students with interested Dallas College IT staff or colleagues from other departments to investigate AI behavior together.",
+          "For example: Does an answer drift during a long conversation? Does a guardrail work consistently on harmless test cases? Does a generated explanation match the evidence?",
+          "The team could prepare an evidence brief for Dallas College senior leadership: what was tested, what was observed, the limitations, and what the findings suggest for a tool choice, pilot, guardrail, or staff-training decision. A small experiment informs a decision; it does not establish that a system is ready for deployment.",
+          "MATS connects research fellows with experienced mentors. Its research offers an example of learning through mentored investigation. This proposed Dallas College version would be smaller, student-centered, and focused on practical college questions—not a MATS program or affiliation.",
+          "Use approved tools and public or synthetic data. Staff participation, scope, permissions, and the audience for findings would be agreed with the people involved."
+        ],
+        "link": {
+          "label": "Explore MATS research — an example of mentored AI research",
+          "url": "https://www.matsprogram.org/research"
+        }
+      },
+      "decision": "Concrete interests in recurring club activities and events. Interest in a leadership option is not an appointment; scope and staff participation require agreement."
+    },
+    {
+      "id": "meeting_frequency",
+      "type": "choice",
+      "compact": true,
+      "title": "How often would you like a dedicated advisor check-in?",
+      "prompt": "Separate from regular club meetings and special events.",
+      "required": false,
+      "allow_custom": true,
+      "options": [
+        {
+          "id": "weekly",
+          "label": "Every week"
+        },
+        {
+          "id": "fortnightly",
+          "label": "Every two weeks"
+        },
+        {
+          "id": "monthly",
+          "label": "Once a month"
+        },
+        {
+          "id": "milestones",
+          "label": "At milestones or when there is a useful agenda"
+        },
+        {
+          "id": "regular_only",
+          "label": "No separate check-in; use regular club meetings"
+        },
+        {
+          "id": "no_recurring",
+          "label": "No recurring check-in; ask when needed"
+        }
+      ]
+    },
+    {
+      "id": "meeting_format",
+      "type": "choice",
+      "compact": true,
+      "title": "For meetings you attend, which format usually works best?",
+      "prompt": "",
+      "required": false,
+      "allow_custom": true,
+      "options": [
+        {
+          "id": "in_person",
+          "label": "In person"
+        },
+        {
+          "id": "teams",
+          "label": "Microsoft Teams"
+        },
+        {
+          "id": "mix",
+          "label": "A mix of in-person and Teams meetings"
+        },
+        {
+          "id": "context",
+          "label": "Choose based on the purpose and my schedule"
+        }
+      ]
+    },
+    {
+      "id": "meeting_invites",
+      "type": "choice",
+      "compact": true,
+      "title": "Which regular club-meeting invitations would you like?",
+      "prompt": "",
+      "required": false,
+      "allow_custom": true,
+      "options": [
+        {
+          "id": "all_attend",
+          "label": "Invite me to all; I plan to attend regularly"
+        },
+        {
+          "id": "selected",
+          "label": "Invite me to specific topics or milestones"
+        },
+        {
+          "id": "all_decide",
+          "label": "Send all invitations; I will decide each time"
+        },
+        {
+          "id": "summary",
+          "label": "Send updates instead; invite me when my input is needed"
+        }
+      ]
+    }
+  ],
+  "sharing": {
+    "audience": "Authorized club officers and the other advisor for this survey",
+    "destination": "thedallascollegeaiclub@dcccd.onmicrosoft.com",
+    "mode": "Only individually reviewed responses explicitly included in the shared summary are saved on submission. Full-response Word and Markdown copies are personal local downloads."
+  }
+}

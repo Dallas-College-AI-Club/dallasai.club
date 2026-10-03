@@ -1,5 +1,6 @@
 import { mountSurveyResults } from './survey-results.js';
 import { createAuthClient } from 'better-auth/client';
+import { mountCustomSurveys } from './custom-surveys.js';
 import { emailOTPClient } from 'better-auth/client/plugins';
 import { mountEventEditor } from './event-editor.js';
 import { mountBrowserAlerts } from './browser-alerts.js';
@@ -72,6 +73,7 @@ function showLogin() {
   q('#inbox-pane').hidden = false;
   editor.clear();
   surveys.clear();
+  customSurveys.clear();
   q('#surveys-pane').hidden = true;
 }
 function filters() {
@@ -452,6 +454,19 @@ q('#signout').onclick = async () => {
 };
 const editor = mountEventEditor(api);
 const surveys = mountSurveyResults(api);
+const customSurveys = mountCustomSurveys(q('#custom-surveys-root'), api);
+function surveyGroup(custom) {
+  q('#custom-surveys-root').hidden = !custom;
+  q('#event-surveys-root').hidden = custom;
+  q('#custom-surveys-group').setAttribute('aria-pressed', String(custom));
+  q('#event-surveys-group').setAttribute('aria-pressed', String(!custom));
+  if (custom) customSurveys.load();
+}
+q('#custom-surveys-group').onclick = () => surveyGroup(true);
+q('#event-surveys-group').onclick = () => {
+  surveyGroup(false);
+  surveys.show();
+};
 function showPane(name, keepHash = false) {
   if (name !== 'events' && !editor.canLeave()) return false;
   for (const pane of ['inbox', 'events', 'surveys']) {
@@ -465,10 +480,12 @@ function showPane(name, keepHash = false) {
       name === 'inbox' ? location.pathname : '#' + name,
     );
   if (name === 'events') editor.show();
-  if (name === 'surveys')
+  if (name === 'surveys') {
+    surveyGroup(false);
     surveys.show(
       new URLSearchParams(location.hash.slice(1)).get('survey') || '',
     );
+  }
 }
 window.addEventListener('hashchange', () => {
   if (

@@ -28,6 +28,10 @@
     },
     "api/surveys.mjs": {
       "maxDuration": 30
+    },
+    "api/custom-surveys.mjs": {
+      "maxDuration": 30,
+      "includeFiles": "surveys/advisor-definition.json"
     }
   },
   "crons": [
@@ -37,6 +41,19 @@
     }
   ],
   "headers": [
+    {
+      "source": "/surveys/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "X-Content-Type-Options", "value": "nosniff" },
+        { "key": "X-Frame-Options", "value": "DENY" },
+        { "key": "Referrer-Policy", "value": "no-referrer" },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'"
+        }
+      ]
+    },
     {
       "source": "/admin/(.*)",
       "headers": [

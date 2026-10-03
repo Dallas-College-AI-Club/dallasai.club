@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Advisor Studio · Dallas College AI Club</title>
+    <link rel="stylesheet" href="/surveys/style.css" />
+  </head>
+  <body>
+    <a href="#main" class="skip">Skip to survey</a>
+    <header>
+      <div>
+        <div class="brand">Advisor <span>Studio</span></div>
+        <div class="tagline">
+          <a
+            href="https://dallasai.club/"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Dallas College AI Club ↗</a
+          >
+        </div>
+      </div>
+      <div class="tools" id="survey-tools" hidden>
+        <button id="mode" class="small ghost">Plain mode</button>
+        <button id="motion" class="small ghost">Motion on</button>
+        <button id="restart" class="small ghost">Start over</button>
+        <button id="survey-signout" class="small ghost">
+          Sign out of this device
+        </button>
+      </div>
+    </header>
+    <div class="layout">
+      <aside class="sidebar" aria-label="Survey navigation">
+        <div class="eyebrow">Design a good partnership</div>
+        <p class="sidebar-intro">
+          Help students find their spark.<br />Watch what they become.
+        </p>
+        <div id="who" class="micro"></div>
+        <div id="progress"></div>
+        <nav id="nav"></nav>
+        <div class="sidebar-help">
+          <p>If you have any questions or concerns,<br />please contact:</p>
+          <a
+            id="club-email"
+            href="mailto:thedallascollegeaiclub@dcccd.onmicrosoft.com"
+            >thedallascollegeaiclub@<wbr />dcccd.onmicrosoft.com</a
+          ><button id="copyEmail" class="small ghost">Copy address</button
+          ><span id="copy-status" role="status"></span>
+        </div>
+      </aside>
+      <div class="main">
+        <main id="main" tabindex="-1">
+          <section class="welcome">
+            <div class="heroart" aria-hidden="true">
+              <div class="orbit"></div>
+              <div class="orbit b"></div>
+              <div class="orb"></div>
+              <div class="orb b"></div>
+              <div class="orb c"></div>
+              <div class="core">AI</div>
+            </div>
+            <div class="eyebrow">Build a partnership you look forward to</div>
+            <h1>What makes advising<br />worth your time?</h1>
+            <p class="welcome-copy">
+              Shape an advising role you look forward to.
+            </p>
+            <div class="start-guide">
+              <h2>Before you begin</h2>
+              <p>
+                Rank only what matters; ties and your own answers are welcome.
+                Drag cards or use their move buttons. An untouched dial is
+                unanswered. Skip anything you would rather discuss.
+              </p>
+              <p>
+                Plan for ordinary weeks; extra activity time is agreed
+                separately. These preferences start a conversation, not a
+                booking or a commitment from someone else.
+              </p>
+              <p>
+                <strong
+                  >You choose which responses to share with club officers and
+                  the other advisor.</strong
+                >
+                Only responses you individually review and include are saved
+                when you submit. Edited wording is shared without the original
+                answers. Unshared responses remain in this browser session; your
+                full Word or Markdown copy is for you to keep.
+              </p>
+            </div>
+            <div class="auth-panel">
+              <p id="survey-expiration"></p>
+              <button type="button" id="survey-preview" hidden>
+                Preview questions · no sign-in needed
+              </button>
+              <p>
+                Use your approved advisor email to receive a sign-in code. This
+                device will be remembered until the survey expires, you sign
+                out, or your access is revoked.
+              </p>
+              <form id="survey-email-form" hidden>
+                <label
+                  >Email address<input
+                    name="email"
+                    type="email"
+                    autocomplete="email"
+                    maxlength="254"
+                    required /></label
+                ><button type="submit" class="primary">
+                  Send sign-in code
+                </button>
+              </form>
+              <form id="survey-code-form" hidden>
+                <p id="code-address"></p>
+                <label
+                  >Sign-in code<input
+                    name="otp"
+                    inputmode="numeric"
+                    autocomplete="one-time-code"
+                    pattern="[0-9]{6}"
+                    minlength="6"
+                    maxlength="6"
+                    required /></label
+                ><button type="submit" class="primary">
+                  Verify and open questions</button
+                ><button type="button" id="survey-resend">
+                  Send a new code</button
+                ><button type="button" id="survey-change-email">
+                  Use another email
+                </button>
+              </form>
+              <button id="survey-continue" class="primary" hidden>
+                Open my questions
+              </button>
+              <p id="auth-message" class="auth-message" role="status">
+                Checking this private survey link…
+              </p>
+            </div>
+          </section>
+        </main>
+        <section id="saved-results" hidden></section>
+      </div>
+    </div>
+    <footer class="mobile-help">
+      <p>If you have any questions or concerns,<br />please contact:</p>
+      <a
+        id="club-email-mobile"
+        href="mailto:thedallascollegeaiclub@dcccd.onmicrosoft.com"
+        >thedallascollegeaiclub@<wbr />dcccd.onmicrosoft.com</a
+      ><button id="copyEmailMobile" class="small ghost">Copy address</button
+      ><span id="copy-status-mobile" role="status"></span>
+    </footer>
+    <div id="file-status" class="file-status" role="status" hidden></div>
+    <div
+      id="announcer"
+      class="sr-only"
+      aria-live="polite"
+      aria-atomic="true"
+    ></div>
+    <script type="module" src="/surveys/index.js"></script>
+  </body>
+</html>

@@ -306,29 +306,40 @@
           </nav>
         </section>
         <section id="surveys-pane" aria-label="Survey results" hidden>
-          <div class="heading">
-            <h2>Surveys</h2>
-            <button id="survey-reload">Refresh</button>
-          </div>
-          <p>
-            Detailed answers from event RSVPs. Results remain here after an
-            event ends or is archived.
-          </p>
-          <label
-            >Survey event<select id="survey-event">
-              <option value="">All events, including past events</option>
-            </select></label
-          >
-          <button id="survey-all" class="secondary" hidden>
-            Show all responses
-          </button>
-          <p id="survey-status" role="status" aria-live="polite"></p>
-          <div id="survey-results"></div>
-          <nav class="pagination" aria-label="Survey result pages">
-            <button id="survey-previous">Previous</button
-            ><span id="survey-page"></span
-            ><button id="survey-next">Next</button>
+          <nav class="office-tabs" aria-label="Survey groups">
+            <button id="event-surveys-group" aria-pressed="true">
+              Event surveys
+            </button>
+            <button id="custom-surveys-group" aria-pressed="false">
+              Custom surveys
+            </button>
           </nav>
+          <section id="custom-surveys-root" hidden></section>
+          <section id="event-surveys-root">
+            <div class="heading">
+              <h2>Surveys</h2>
+              <button id="survey-reload">Refresh</button>
+            </div>
+            <p>
+              Detailed answers from event RSVPs. Results remain here after an
+              event ends or is archived.
+            </p>
+            <label
+              >Survey event<select id="survey-event">
+                <option value="">All events, including past events</option>
+              </select></label
+            >
+            <button id="survey-all" class="secondary" hidden>
+              Show all responses
+            </button>
+            <p id="survey-status" role="status" aria-live="polite"></p>
+            <div id="survey-results"></div>
+            <nav class="pagination" aria-label="Survey result pages">
+              <button id="survey-previous">Previous</button
+              ><span id="survey-page"></span
+              ><button id="survey-next">Next</button>
+            </nav>
+          </section>
         </section>
         <section id="events-pane" aria-label="Event editor" hidden>
           <div class="heading">

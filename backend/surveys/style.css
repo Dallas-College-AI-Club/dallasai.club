@@ -1744,3 +1744,44 @@ input:invalid {
   padding: 16px 0;
   border-top: 1px solid var(--line);
 }
+.people {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 15px;
+  margin: 26px 0 18px;
+}
+.person {
+  text-align: left;
+  padding: 23px;
+  background: var(--panel);
+  border-radius: 17px;
+  min-height: 76px;
+  font-size: 1rem;
+}
+.survey-preview .preview-disabled {
+  opacity: 1;
+  cursor: not-allowed;
+  -webkit-text-fill-color: currentColor;
+}
+.survey-preview .rankcard,
+.survey-preview .draghandle {
+  touch-action: pan-y;
+  cursor: default;
+}
+@media (max-width: 700px) {
+  .people {
+    grid-template-columns: 1fr;
+  }
+  .person {
+    min-height: 66px;
+  }
+  .survey-preview .sidebar #who {
+    display: block;
+    margin-bottom: 12px;
+  }
+}
+@media (max-width: 430px) {
+  .person {
+    padding: 18px;
+  }
+}

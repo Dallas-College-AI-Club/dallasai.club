@@ -1,3 +1,4 @@
+import { mountRespondents } from './survey-respondents.js';
 function node(tag, text, className) {
   const el = document.createElement(tag);
   if (text !== undefined) el.textContent = text;
@@ -17,7 +18,7 @@ export function mountCustomSurveys(root, api) {
         node('h2', 'Custom surveys'),
         node(
           'p',
-          'Private advisor surveys. Officers can read shared responses; only the assigned advisors can submit.',
+          'Manage respondents and read their shared responses. Only assigned respondents can answer this survey.',
         ),
       );
       if (!surveys.length) {
@@ -111,6 +112,14 @@ export function mountCustomSurveys(root, api) {
             actions.append(preview, copyPreview, link, copy);
             content.append(actions, notice);
           }
+          const respondents = node(
+            'section',
+            undefined,
+            'entry respondent-management',
+          );
+          content.append(respondents);
+          await mountRespondents(respondents, selected, api, load);
+          if (current !== generation || request !== requestGeneration) return;
           const grid = node('div', undefined, 'custom-survey-comparison');
           const ids = [
             ...new Set(
@@ -120,6 +129,14 @@ export function mountCustomSurveys(root, api) {
           for (const result of data.results) {
             const column = node('article', undefined, 'entry');
             column.append(node('h3', result.display_name));
+            if (!result.active)
+              column.append(
+                node(
+                  'p',
+                  'Removed respondent · saved responses retained',
+                  'hint',
+                ),
+              );
             column.append(
               node(
                 'p',

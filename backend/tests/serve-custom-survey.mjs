@@ -4,11 +4,16 @@ import path from 'node:path';
 import { fixture } from './helpers/custom-survey-fixture.mjs';
 const f = await fixture(),
   root = path.resolve(import.meta.dirname, '../public');
-const origin = 'http://127.0.0.1:4187';
+const port = Number(process.env.PORT || 4187);
+const origin = 'http://127.0.0.1:' + port;
 process.env.AUTH_BASE_URL = origin;
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, origin);
+    if (url.pathname === '/reference' && process.env.SURVEY_REFERENCE_SOURCE) {
+      res.setHeader('Content-Type', 'text/html');
+      return res.end(await readFile(process.env.SURVEY_REFERENCE_SOURCE));
+    }
     if (url.pathname === '/api/custom-surveys') return f.handler(req, res);
     if (url.pathname === '/api/auth/get-session') {
       res.setHeader('Content-Type', 'application/json');
@@ -64,7 +69,7 @@ const server = http.createServer(async (req, res) => {
     res.end('Not found');
   }
 });
-server.listen(4187, '127.0.0.1', () =>
+server.listen(port, '127.0.0.1', () =>
   console.log(
     JSON.stringify({
       respondent: origin + '/surveys/#invite=' + f.token,

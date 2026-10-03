@@ -97,11 +97,16 @@ export async function rememberDevice(db, survey, user) {
     return { token, member };
   });
 }
-export async function currentResponses(db, surveyId) {
+export async function currentResponses(db, surveyId, viewerId = null) {
   return (
     await db.query(
-      `SELECT m.advisor_id,m.display_name,r.revision,r.responses,r.submitted_at FROM club_forms.custom_survey_members m LEFT JOIN club_forms.custom_survey_responses r USING(survey_id,advisor_id) WHERE m.survey_id=$1 AND m.active ORDER BY m.advisor_id DESC`,
-      [surveyId],
+      `SELECT m.advisor_id,m.display_name,m.active,r.revision,r.responses,r.submitted_at
+       FROM club_forms.custom_survey_members m LEFT JOIN club_forms.custom_survey_responses r
+       ON r.survey_id=m.survey_id AND r.advisor_id=m.advisor_id
+       AND ($2::text IS NULL OR r.advisor_id=$2 OR $2=ANY(r.shared_with))
+       WHERE m.survey_id=$1 AND ($2::text IS NULL OR m.active)
+       ORDER BY m.active DESC,m.advisor_id DESC`,
+      [surveyId, viewerId],
     )
   ).rows;
 }
@@ -166,8 +171,16 @@ export async function submitSurvey(db, req, link, body) {
       );
     const revision = body.expectedRevision + 1;
     await tx.query(
-      `INSERT INTO club_forms.custom_survey_responses(survey_id,advisor_id,revision,responses) VALUES($1,$2,$3,$4) ON CONFLICT(survey_id,advisor_id) DO UPDATE SET revision=EXCLUDED.revision,responses=EXCLUDED.responses,submitted_at=now()`,
-      [survey.id, member.advisor_id, revision, JSON.stringify(responses)],
+      `INSERT INTO club_forms.custom_survey_responses(survey_id,advisor_id,revision,responses,shared_with) VALUES($1,$2,$3,$4,$5) ON CONFLICT(survey_id,advisor_id) DO UPDATE SET revision=EXCLUDED.revision,responses=EXCLUDED.responses,shared_with=EXCLUDED.shared_with,submitted_at=now()`,
+      [
+        survey.id,
+        member.advisor_id,
+        revision,
+        JSON.stringify(responses),
+        members
+          .filter((m) => m.advisor_id !== member.advisor_id)
+          .map((m) => m.advisor_id),
+      ],
     );
     const receipt = (
       await tx.query(

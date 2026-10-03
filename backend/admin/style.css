@@ -1014,6 +1014,42 @@ input::file-selector-button {
     grid-template-columns: 1fr;
   }
 }
+.respondent-management {
+  margin: 24px 0;
+}
+.respondent-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+  flex-wrap: wrap;
+}
+.respondent-row p {
+  margin: 4px 0;
+}
+.respondent-add {
+  display: flex;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 20px 0;
+}
+.respondent-add label {
+  flex: 1;
+  min-width: 180px;
+}
+.respondent-add input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 8px;
+}
+.respondent-management details {
+  margin: 18px 0;
+  overflow-wrap: anywhere;
+}
 
 .formatting-editor {
   margin: -4px 0 20px;

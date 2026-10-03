@@ -1,5 +1,9 @@
 import { makeDocx } from './personal-copy.js';
-export function mountAdvisor(bootstrap, transport) {
+export function mountAdvisor(
+  bootstrap,
+  transport,
+  { readOnly = false, welcomeHTML = '' } = {},
+) {
   let submitting = false;
   const BANK = bootstrap.definition;
   const Q = Object.fromEntries(BANK.questions.map((q) => [q.id, q]));
@@ -20,7 +24,7 @@ export function mountAdvisor(bootstrap, transport) {
   let ui = { plain: false, motion: !reduce.matches };
   const fresh = () => ({
     advisorId: bootstrap.advisorId,
-    step: 0,
+    step: readOnly ? -1 : 0,
     answers: {},
     custom: {},
     notes: {},
@@ -195,6 +199,16 @@ export function mountAdvisor(bootstrap, transport) {
     $('main').scrollIntoView({ behavior: 'instant', block: 'start' });
     $('title')?.focus({ preventScroll: true });
   }
+  function lockPreviewAnswers() {
+    if (!readOnly) return;
+    $('main')
+      .querySelectorAll('input,textarea,select,button')
+      .forEach((control) => {
+        if (control.matches('#begin,#back,#next')) return;
+        if (!control.disabled) control.classList.add('preview-disabled');
+        control.disabled = true;
+      });
+  }
   function render() {
     const active = document.activeElement?.id;
     const open = [...document.querySelectorAll('details[open]')].map(
@@ -211,14 +225,15 @@ export function mountAdvisor(bootstrap, transport) {
     );
     $('mode').setAttribute('aria-pressed', String(ui.plain));
 
-    $('who').textContent =
-      BANK.respondents.find((r) => r.id === state.advisorId)?.name || '';
+    $('who').textContent = readOnly
+      ? 'Preview · answering disabled'
+      : BANK.respondents.find((r) => r.id === state.advisorId)?.name || '';
     $('nav').innerHTML =
       '<button class="navitem" data-nav="-1">Welcome</button>' +
       BANK.chapters
         .map(
           (c, i) =>
-            `<button class="navitem ${state.step === i ? 'active' : ''}" data-nav="${i}" ${state.advisorId ? '' : 'disabled'} ${state.step === i ? 'aria-current="step"' : ''}><span class="node">${i + 1}</span><span>${esc(c.title)}</span></button>`,
+            `<button class="navitem ${state.step === i ? 'active' : ''}" data-nav="${i}" ${state.advisorId || readOnly ? '' : 'disabled'} ${state.step === i ? 'aria-current="step"' : ''}><span class="node">${i + 1}</span><span>${esc(c.title)}</span></button>`,
         )
         .join('');
     $('progress').innerHTML =
@@ -226,6 +241,7 @@ export function mountAdvisor(bootstrap, transport) {
     if (state.step < 0) {
       welcome();
       assignFocusIDs();
+      lockPreviewAnswers();
       if (active && $(active)) $(active).focus({ preventScroll: true });
       return;
     }
@@ -245,10 +261,15 @@ export function mountAdvisor(bootstrap, transport) {
     $('main').innerHTML =
       `<section class="intro"><div class="eyebrow">${esc(c.kicker)}</div><h1 id="title" tabindex="-1">${esc(c.title)}</h1><div class="scene"><p>${esc(c.intro)}</p></div></section>${body}<div class="footer"><button id="back">← Back</button>${state.step < 4 ? '<button id="next" class="primary">' + (state.step === 3 ? 'Review my playbook' : 'Continue') + ' →</button>' : ''}</div>`;
     assignFocusIDs();
+    lockPreviewAnswers();
     for (const id of open) if ($(id)) $(id).open = true;
     if (active && $(active)) $(active).focus({ preventScroll: true });
   }
   function welcome() {
+    if (readOnly) {
+      $('main').innerHTML = welcomeHTML;
+      return;
+    }
     $('main').innerHTML =
       '<section class="welcome"><h1 id="title" tabindex="-1">What makes advising worth your time?</h1><p>Shape an advising role you look forward to.</p><p>Signed in as ' +
       esc(advisorName()) +
@@ -608,6 +629,7 @@ export function mountAdvisor(bootstrap, transport) {
     drag.frame = requestAnimationFrame(dragTick);
   }
   function startDrag(e) {
+    if (readOnly) return;
     if (e.button !== 0 || !e.isPrimary) return;
     const card = e.target.closest('[data-card]');
     if (!card) return;
@@ -762,6 +784,7 @@ export function mountAdvisor(bootstrap, transport) {
   });
   document.addEventListener('pointercancel', () => finishDrag(false));
   document.addEventListener('keydown', (e) => {
+    if (readOnly) return;
     if (e.key === 'Escape' && drag) {
       e.preventDefault();
       finishDrag(false);
@@ -781,6 +804,7 @@ export function mountAdvisor(bootstrap, transport) {
     writeDial(id, { mode: 'value', value: Math.min(100, Math.max(0, value)) });
   }
   document.addEventListener('input', (e) => {
+    if (readOnly) return;
     const t = e.target;
     if (t.dataset.hours) {
       const old = state.answers.weekly;
@@ -855,6 +879,7 @@ export function mountAdvisor(bootstrap, transport) {
     }
   });
   document.addEventListener('change', (e) => {
+    if (readOnly) return;
     const t = e.target;
     if (t.dataset.dial) {
       render();
@@ -925,6 +950,13 @@ export function mountAdvisor(bootstrap, transport) {
       return;
     const t = e.target.closest('button');
     if (!t || t.disabled) return;
+    if (
+      readOnly &&
+      !t.matches(
+        '#begin,#next,#back,[data-nav],#mode,#motion,#copyEmail,#copyEmailMobile',
+      )
+    )
+      return;
     if (t.id === 'begin') setStep(0);
     if (t.id === 'next') setStep(Math.min(4, state.step + 1));
     if (t.id === 'back') setStep(state.step - 1);
@@ -1044,6 +1076,7 @@ export function mountAdvisor(bootstrap, transport) {
   });
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && e.target.id.startsWith('custom-')) {
+      if (readOnly) return;
       e.preventDefault();
       const id = e.target.id.slice(7);
       try {
@@ -1139,14 +1172,18 @@ export function mountAdvisor(bootstrap, transport) {
     return null;
   }
   // Per-response sharing. Never serialize full state or infer consent from another response.
-  function otherAdvisor() {
-    return BANK.respondents.find((p) => p.id !== state.advisorId);
+  function otherAdvisors() {
+    return BANK.respondents.filter((p) => p.id !== state.advisorId);
   }
   function advisorName() {
+    if (readOnly) return 'Question preview';
     return BANK.respondents.find((p) => p.id === state.advisorId)?.name || '';
   }
   function consentWording() {
-    return `I am ready to submit the shared summary to club officers and ${otherAdvisor()?.name || 'the other advisor'}.`;
+    if (readOnly)
+      return 'I am ready to submit the shared summary to club officers and the other advisor.';
+    const names = otherAdvisors().map((p) => p.name);
+    return `I am ready to submit the shared summary to club officers${names.length ? ' and ' + new Intl.ListFormat('en-US').format(names) : ''}.`;
   }
   function runtimeNotice() {
     return '<p>Only responses you individually review and include are saved when you submit. Unshared responses stay in this browser session. Download your full personal copy before closing or refreshing.</p>';
@@ -1349,7 +1386,7 @@ export function mountAdvisor(bootstrap, transport) {
     return issues;
   }
   function canShare() {
-    return !!state.approved && !sharingIssues().length;
+    return !readOnly && !!state.approved && !sharingIssues().length;
   }
   function hasFullResponses() {
     return (
@@ -1486,12 +1523,13 @@ export function mountAdvisor(bootstrap, transport) {
       advisorId: state.advisorId,
       consent: {
         reviewed: true,
-        audience: ['club_officers', otherAdvisor().id],
+        audience: ['club_officers', ...otherAdvisors().map((p) => p.id)],
       },
       responses,
     };
   }
   async function submitSharedSummary() {
+    if (readOnly) return;
     const button = $('submitPlaybook'),
       status = $('submit-status');
     if (submitting) return;
@@ -1680,6 +1718,7 @@ export function mountAdvisor(bootstrap, transport) {
 
   window.addEventListener('beforeunload', (e) => {
     if (
+      !readOnly &&
       state.advisorId &&
       (Object.keys(state.answers).length ||
         Object.keys(state.notes).length ||

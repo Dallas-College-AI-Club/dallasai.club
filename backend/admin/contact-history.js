@@ -1,4 +1,5 @@
 import { activityTime } from './event-activity.js';
+import { contactProfile } from './contact-profile.js';
 const node = (tag, text, cls) => {
   const el = document.createElement(tag);
   if (text !== undefined) el.textContent = text;
@@ -71,14 +72,23 @@ export function contactHistory(api, onChange = () => {}) {
       const params = new URLSearchParams(
         email
           ? { contact: email, offset }
-          : { contacts: '1', search: search.value, offset, view: view.value },
+          : {
+              contacts: '1',
+              search: search.value,
+              offset,
+              view: view.value,
+            },
       );
       const data = await api('/api/surveys?' + params);
       if (version !== generation || !dialog.open) return;
       if (!email) {
         heading.textContent = 'Contacts';
         for (const c of data.contacts) {
-          const button = node('button', undefined, 'contact-choice secondary');
+          const button = node(
+            'button',
+            undefined,
+            'contact-choice secondary',
+          );
           button.append(
             node('strong', c.name || c.email),
             node('span', c.emails.join(' · ')),
@@ -179,9 +189,12 @@ export function contactHistory(api, onChange = () => {}) {
               'hint',
             ),
           );
-          if (item.body) card.append(node('p', item.body, 'contact-note-text'));
+          if (item.body)
+            card.append(node('p', item.body, 'contact-note-text'));
           if (item.source_email)
-            card.append(node('p', item.source_email, 'hint contact-note-text'));
+            card.append(
+              node('p', item.source_email, 'hint contact-note-text'),
+            );
           for (const key of [
             'eventTitle',
             'eventDate',
@@ -194,8 +207,13 @@ export function contactHistory(api, onChange = () => {}) {
             'title',
             'summary',
           ])
-            if (typeof item.details?.[key] === 'string' && item.details[key])
-              card.append(node('p', item.details[key], 'contact-note-text'));
+            if (
+              typeof item.details?.[key] === 'string' &&
+              item.details[key]
+            )
+              card.append(
+                node('p', item.details[key], 'contact-note-text'),
+              );
           if (item.entry_id) {
             const link = node('a', 'Open submission');
             link.href = '#entry=' + encodeURIComponent(item.entry_id);
@@ -226,11 +244,14 @@ export function contactHistory(api, onChange = () => {}) {
       ),
       remove = node(
         'button',
-        contact.is_test ? 'Permanently delete test contact' : 'Delete contact',
+        contact.is_test
+          ? 'Permanently delete test contact'
+          : 'Delete contact',
         'secondary danger',
       ),
       restore = node('button', 'Restore contact', 'secondary'),
       merge = node('button', 'Merge with another contact', 'secondary'),
+      edit = node('button', 'Edit contact', 'secondary'),
       details = node('div', undefined, 'contact-confirmation');
     const actionButton = (text, fn, cls = 'secondary') => {
       const el = node('button', text, cls);
@@ -242,6 +263,7 @@ export function contactHistory(api, onChange = () => {}) {
     async function save(body, message) {
       if (!fresh()) return;
       const controls = [...panel.querySelectorAll('button, input')];
+      const disabled = controls.map((control) => control.disabled);
       controls.forEach((el) => (el.disabled = true));
       status.textContent = 'Saving contact changes…';
       try {
@@ -264,7 +286,7 @@ export function contactHistory(api, onChange = () => {}) {
       } catch (error) {
         if (fresh()) {
           status.textContent = error.message;
-          controls.forEach((el) => (el.disabled = false));
+          controls.forEach((el, index) => (el.disabled = disabled[index]));
         }
       }
     }
@@ -288,7 +310,9 @@ export function contactHistory(api, onChange = () => {}) {
           save(
             {
               ...body,
-              ...(requireEmail ? { confirmEmail: input.value.trim() } : {}),
+              ...(requireEmail
+                ? { confirmEmail: input.value.trim() }
+                : {}),
             },
             message,
           );
@@ -324,7 +348,9 @@ export function contactHistory(api, onChange = () => {}) {
         contact.is_test
           ? 'Deleting this contact will keep their submissions and allow restoration.'
           : 'This applies to every linked email. Deleting a test contact permanently erases its submissions, survey answers, comments, attachments and follow-up notes. Marking it does not delete anything yet.',
-        contact.is_test ? 'Confirm unmark as test' : 'Confirm mark as test',
+        contact.is_test
+          ? 'Confirm unmark as test'
+          : 'Confirm mark as test',
         { action: 'contact-test', value: !contact.is_test },
         contact.is_test
           ? 'Test flag removed.'
@@ -436,6 +462,16 @@ export function contactHistory(api, onChange = () => {}) {
         }
       };
     };
+    edit.onclick = () => {
+      details.replaceChildren(
+        contactProfile(contact, save, () => {
+          details.replaceChildren();
+          edit.focus();
+        }),
+      );
+      details.querySelector('input')?.focus();
+    };
+    if (!contact.deleted_at) actions.append(edit);
     actions.append(test);
     if (!contact.deleted_at) actions.append(merge);
     if (contact.deleted_at) actions.append(restore);

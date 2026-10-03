@@ -27,6 +27,19 @@ export function adminHandler({
       const db = getDatabase();
       const url = new URL(req.url, 'https://admin.invalid');
       if (req.method === 'GET') {
+        if (url.searchParams.has('edit')) {
+          const id = url.searchParams.get('edit');
+          if (!uuid.test(id || ''))
+            throw new RequestError(400, 'Choose a submission.');
+          const entry = (
+            await db.query(
+              `SELECT e.*,(SELECT row_to_json(s) FROM club_forms.survey_responses s WHERE s.entry_id=e.id) AS survey FROM club_forms.entries e WHERE e.id=$1`,
+              [id],
+            )
+          ).rows[0];
+          if (!entry) throw new RequestError(404, 'Submission not found.');
+          return send(res, 200, { entry });
+        }
         if (url.searchParams.has('history'))
           return send(
             res,
@@ -42,12 +55,15 @@ export function adminHandler({
           if (!uuid.test(id))
             throw new RequestError(400, 'Invalid attachment.');
           const file = (
-            await db.query('SELECT * FROM club_forms.attachments WHERE id=$1', [
-              id,
-            ])
+            await db.query(
+              'SELECT * FROM club_forms.attachments WHERE id=$1',
+              [id],
+            )
           ).rows[0];
           if (!file) throw new RequestError(404, 'Attachment not found.');
-          const blob = await storage.get(file.pathname, { access: 'private' });
+          const blob = await storage.get(file.pathname, {
+            access: 'private',
+          });
           if (!blob || blob.statusCode !== 200)
             throw new RequestError(404, 'Attachment unavailable.');
           await db.query(
@@ -69,10 +85,21 @@ export function adminHandler({
           });
           return;
         }
-        const savedEvents = (await db.query(`SELECT DISTINCT ON (data->>'eventId') data->>'eventId' AS id,data->>'eventTitle' AS title,data->>'eventDate' AS date,(data->>'potential')='true' AS potential FROM club_forms.entries WHERE kind='rsvp' ORDER BY data->>'eventId',created_at DESC,id`)).rows;
-        const allEvents = [...new Map([...savedEvents,...await getEvents(db)].map(event=>[event.id,event])).values()];
+        const savedEvents = (
+          await db.query(
+            `SELECT DISTINCT ON (data->>'eventId') data->>'eventId' AS id,data->>'eventTitle' AS title,data->>'eventDate' AS date,(data->>'potential')='true' AS potential FROM club_forms.entries WHERE kind='rsvp' ORDER BY data->>'eventId',created_at DESC,id`,
+          )
+        ).rows;
+        const allEvents = [
+          ...new Map(
+            [...savedEvents, ...(await getEvents(db))].map((event) => [
+              event.id,
+              event,
+            ]),
+          ).values(),
+        ];
         const events = upcomingEvents(allEvents);
-        const upcomingIds = events.map(event=>event.id);
+        const upcomingIds = events.map((event) => event.id);
         const { values: filters, where } = inboxFilter(
           url.searchParams,
           events,
@@ -118,7 +145,12 @@ export function adminHandler({
           entries: result.rows.slice(0, 50),
           hasMore: result.rows.length > 50,
           counts,
-          events: allEvents.map(({ id, title, date }) => ({ id, title, date, past:!upcomingIds.includes(id) })),
+          events: allEvents.map(({ id, title, date }) => ({
+            id,
+            title,
+            date,
+            past: !upcomingIds.includes(id),
+          })),
           notifications: { email: false },
           configured: {
             uploads: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
@@ -129,10 +161,11 @@ export function adminHandler({
         throw new RequestError(405, 'Method not allowed.');
       adminOrigin(req);
       const body = await jsonBody(req, 400000);
-      if (['edit-submission','delete-submission'].includes(body.action)) {
-        const result = await changeSubmission(db,body,user.email);
-        if(result.deleted) result.filesCleaned = await cleanupContactFiles(db,storage);
-        return send(res,200,result);
+      if (['edit-submission', 'delete-submission'].includes(body.action)) {
+        const result = await changeSubmission(db, body, user.email);
+        if (result.deleted)
+          result.filesCleaned = await cleanupContactFiles(db, storage);
+        return send(res, 200, result);
       }
       if (body.action === 'comment') {
         const comment = await addSubmissionComment(db, body, user.email);

@@ -44,7 +44,9 @@ const request = (route, body, admin = true) =>
     method: body ? 'POST' : 'GET',
     headers: {
       ...(admin ? { 'x-test-admin': admin === true ? 'yes' : admin } : {}),
-      ...(body ? { 'Content-Type': 'application/json', Origin: origin } : {}),
+      ...(body
+        ? { 'Content-Type': 'application/json', Origin: origin }
+        : {}),
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
@@ -129,9 +131,13 @@ test('legacy event types include Social and collapse legacy aliases without rewr
     0,
   );
   const edited = await editorEvents(db, originals);
-  assert.equal(edited.find((r) => r.id === 'old-4').draft.category, 'Talk');
   assert.equal(
-    (await liveEvents(db, originals)).find((r) => r.id === 'old-5').category,
+    edited.find((r) => r.id === 'old-4').draft.category,
+    'Talk',
+  );
+  assert.equal(
+    (await liveEvents(db, originals)).find((r) => r.id === 'old-5')
+      .category,
     'Meeting',
   );
   assert.equal(originals[4].category, 'Presentation');
@@ -166,7 +172,10 @@ test('event groups reject free text on save and reuse one canonical name across 
     event: { title: 'One', category: 'study group' },
   });
   assert.equal(response.status, 200);
-  assert.equal((await response.json()).event.draft.category, 'Study Group');
+  assert.equal(
+    (await response.json()).event.draft.category,
+    'Study Group',
+  );
   assert.equal(
     (
       await request('/api/events', {
@@ -242,7 +251,10 @@ test('uploaded images are decoded, resized, private in drafts, public only while
     false,
   );
   assert.equal(publicImage.status, 200);
-  assert.equal(publicImage.headers.get('cache-control'), 'private, no-store');
+  assert.equal(
+    publicImage.headers.get('cache-control'),
+    'private, no-store',
+  );
   assert.ok((await publicImage.arrayBuffer()).byteLength > 0);
   assert.equal(
     (
@@ -258,7 +270,10 @@ test('uploaded images are decoded, resized, private in drafts, public only while
     (await request('/api/events?image=' + image.id, null, false)).status,
     401,
   );
-  assert.equal((await request('/api/events?image=' + image.id)).status, 200);
+  assert.equal(
+    (await request('/api/events?image=' + image.id)).status,
+    200,
+  );
   assert.equal(
     (
       await request('/api/events', {
@@ -291,7 +306,8 @@ test('uploaded images are decoded, resized, private in drafts, public only while
 });
 test('image uploads reject unauthenticated clients and non-images; failed storage metadata removes the orphan', async () => {
   assert.equal(
-    (await request('/api/events?upload=1', { content: 'abc' }, false)).status,
+    (await request('/api/events?upload=1', { content: 'abc' }, false))
+      .status,
     401,
   );
   assert.equal(
@@ -358,7 +374,7 @@ test('question submissions are persisted once and preserve event context without
     /no longer available/,
   );
 });
-test('inbox, counts and CSV exclude past RSVPs and support an exact upcoming event filter', async () => {
+test('inbox, counts and CSV separate past and upcoming RSVPs while all submissions and direct links include both', async () => {
   for (const event of events)
     await db.query(
       'INSERT INTO club_forms.entries(id,kind,email,data,dedupe_key) VALUES($1,$2,$3,$4,$5)',
@@ -376,9 +392,27 @@ test('inbox, counts and CSV exclude past RSVPs and support an exact upcoming eve
     events,
   );
   const all = await (await request('/api/admin')).json();
-  assert.equal(all.entries.length, 3);
+  assert.equal(all.entries.length, 4);
   assert.equal(all.counts.find((row) => row.kind === 'rsvp').total, 2);
-  assert.equal(all.events.length, 2);
+  assert.equal(
+    all.counts.find((row) => row.kind === 'rsvp-past').total,
+    1,
+  );
+  assert.equal(all.events.length, 3);
+  assert.equal(all.events.find((row) => row.id === 'past').past, true);
+  const past = await (await request('/api/admin?kind=rsvp-past')).json();
+  assert.equal(past.entries.length, 1);
+  assert.equal(past.entries[0].data.eventId, 'past');
+  assert.equal(
+    (await (await request('/api/admin?id=' + past.entries[0].id)).json())
+      .entries.length,
+    1,
+  );
+  const pastCSV = await (
+    await request('/api/admin?kind=rsvp-past&export=csv')
+  ).text();
+  assert.ok(pastCSV.includes('Past'));
+  assert.ok(!pastCSV.includes('Next event'));
   const filtered = await (
     await request('/api/admin?kind=rsvp&eventId=next')
   ).json();
@@ -425,7 +459,9 @@ function parseCSV(text) {
   }
   const [headers, ...rows] = records;
   return rows.map((row) =>
-    Object.fromEntries(headers.map((header, index) => [header, row[index]])),
+    Object.fromEntries(
+      headers.map((header, index) => [header, row[index]]),
+    ),
   );
 }
 test('CSV gives all six submission types readable columns, preserves multiline text and Unicode, and neutralizes formulas', async () => {
@@ -449,7 +485,11 @@ test('CSV gives all six submission types readable columns, preserves multiline t
     entry('workshop', { topic: 'Workshop topic', details: message }),
     events,
   );
-  await submit(db, entry('join', { interests: 'Learning, building' }), events);
+  await submit(
+    db,
+    entry('join', { interests: 'Learning, building' }),
+    events,
+  );
   await submit(db, entry('subscribe'), events);
   await submit(db, entry('rsvp', { eventId: 'next' }), events);
   const response = await request('/api/admin?export=csv');
@@ -468,7 +508,10 @@ test('CSV gives all six submission types readable columns, preserves multiline t
     assert.equal(byType[kind]['Subject / title'], title);
     assert.equal(byType[kind]['Message / body'], message);
     assert.ok(!Object.hasOwn(byType[kind], 'Details'));
-    assert.equal(byType[kind]['Submission state'], 'Received in club inbox');
+    assert.equal(
+      byType[kind]['Submission state'],
+      'Received in club inbox',
+    );
     assert.ok(byType[kind].Reference);
   }
   assert.equal(byType['Club signups'].Campus, 'Richland');
@@ -521,7 +564,9 @@ test('reviewing, closing and reopening keep the submission and only change its r
       200,
     );
     const saved = (
-      await db.query('SELECT * FROM club_forms.entries WHERE id=$1', [row.id])
+      await db.query('SELECT * FROM club_forms.entries WHERE id=$1', [
+        row.id,
+      ])
     ).rows[0];
     assert.equal(saved.review_status, status);
     assert.deepEqual(saved.data, row.data);
@@ -537,7 +582,11 @@ test('reviewing, closing and reopening keep the submission and only change its r
       [row.id],
     )
   ).rows.map((r) => r.action);
-  assert.deepEqual(actions, ['review:reviewed', 'review:closed', 'review:new']);
+  assert.deepEqual(actions, [
+    'review:reviewed',
+    'review:closed',
+    'review:new',
+  ]);
 });
 
 test('admin comments persist author, time and text separately; retries do not duplicate comments or history', async () => {
@@ -550,7 +599,8 @@ test('admin comments persist author, time and text separately; retries do not du
     action: 'comment',
     id: row.id,
     commentId: randomUUID(),
-    comment: '  I will follow up.\n안녕하세요 <img src=x onerror=alert(1)>  ',
+    comment:
+      '  I will follow up.\n안녕하세요 <img src=x onerror=alert(1)>  ',
     author_email: 'spoof@example.com',
     created_at: '1999-01-01',
   };
@@ -564,7 +614,8 @@ test('admin comments persist author, time and text separately; retries do not du
   assert.ok(Date.parse(comment.created_at) >= start - 1000);
   assert.equal((await request('/api/admin', body)).status, 200);
   assert.equal(
-    (await db.query('SELECT * FROM club_forms.entry_comments')).rows.length,
+    (await db.query('SELECT * FROM club_forms.entry_comments')).rows
+      .length,
     1,
   );
   assert.equal(
@@ -617,7 +668,9 @@ test('admin comments persist author, time and text separately; retries do not du
   );
   for (const status of ['closed', 'new'])
     await request('/api/admin', { action: 'review', id: row.id, status });
-  const history = await (await request('/api/admin?history=' + row.id)).json();
+  const history = await (
+    await request('/api/admin?history=' + row.id)
+  ).json();
   assert.deepEqual(
     history.activity.map((r) => r.action),
     ['review:new', 'review:closed', 'comment-added'],
@@ -667,7 +720,9 @@ test('submission activity includes historical actions and paginates without mixi
     "INSERT INTO club_forms.audit(actor,entry_id,action) VALUES('other@example.com',$1,'download-attachment')",
     [other.id],
   );
-  const first = await (await request('/api/admin?history=' + row.id)).json();
+  const first = await (
+    await request('/api/admin?history=' + row.id)
+  ).json();
   assert.equal(first.activity.length, 50);
   const second = await (
     await request(
@@ -682,7 +737,8 @@ test('submission activity includes historical actions and paginates without mixi
   );
   assert.ok(first.activity.every((r) => r.actor !== 'other@example.com'));
   assert.equal(
-    (await request('/api/admin?history=' + row.id + '&before=oops')).status,
+    (await request('/api/admin?history=' + row.id + '&before=oops'))
+      .status,
     400,
   );
   assert.equal(
@@ -721,7 +777,8 @@ test('comment and audit writes roll back together if activity recording fails', 
     /audit unavailable/,
   );
   assert.equal(
-    (await db.query('SELECT * FROM club_forms.entry_comments')).rows.length,
+    (await db.query('SELECT * FROM club_forms.entry_comments')).rows
+      .length,
     0,
   );
 });
@@ -788,7 +845,9 @@ test('status sections and their exports isolate archived submissions and allow r
     records[state] = record;
   }
   for (const state of ['new', 'reviewed', 'closed']) {
-    const view = await (await request('/api/admin?status=' + state)).json();
+    const view = await (
+      await request('/api/admin?status=' + state)
+    ).json();
     assert.deepEqual(
       view.entries.map((item) => item.id),
       [records[state].id],
@@ -802,7 +861,11 @@ test('status sections and their exports isolate archived submissions and allow r
     assert.equal(exported[0]['Subject / title'], state + ' question');
     assert.equal(
       exported[0]['Review status'],
-      state === 'closed' ? 'Archived' : state === 'new' ? 'New' : 'Reviewed',
+      state === 'closed'
+        ? 'Archived'
+        : state === 'new'
+          ? 'New'
+          : 'Reviewed',
     );
   }
   await request('/api/admin', {
@@ -817,7 +880,8 @@ test('status sections and their exports isolate archived submissions and allow r
     status: 'new',
   });
   assert.equal(
-    (await (await request('/api/admin?status=closed')).json()).entries.length,
+    (await (await request('/api/admin?status=closed')).json()).entries
+      .length,
     0,
   );
   const restored = await (await request('/api/admin?status=new')).json();

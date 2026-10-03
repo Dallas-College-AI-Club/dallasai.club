@@ -16,7 +16,7 @@ export function upcomingEvents(events, now = new Date()) {
             ? e.date >= today
             : new Date(e.end || e.date) > now)),
     )
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 }
 export function inboxFilter(params, events) {
   const kind = params.get('kind') || '',

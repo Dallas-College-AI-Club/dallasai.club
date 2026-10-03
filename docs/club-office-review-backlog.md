@@ -3,11 +3,12 @@
 Generated on October 3, 2026 from the review workflow behind [club-office-review.md](club-office-review.md).
 Nine area reviewers read the code and drove a local fixture copy of Club Office in Playwright.
 An adversarial verifier then re-checked each area, correcting severities and adding missed issues.
+A completeness critic then covered the gaps between areas and grouped duplicates by root cause.
 
-275 findings: 4 critical, 18 high, 139 medium, 114 low.
-Areas overlap, so one root cause can appear under several IDs. The summary document groups them.
-Line numbers refer to commit 957abc6. Repro script names in verifier notes referred to the
-reviewers' scratch folders, which no longer exist.
+290 findings: 4 critical, 22 high, 147 medium, 117 low,
+including 15 from the critic. 57 root-cause groups are listed at the end.
+Line numbers refer to commit 957abc6. Repro script names in the notes referred to the
+reviewers' scratch folders, which no longer exist. Email addresses are synthetic fixture data.
 
 ## Shell, sign-in and navigation
 
@@ -485,7 +486,7 @@ Contacts & follow-up is one native <dialog> built by admin/contact-history.js. I
 - **Where:** `backend/admin/contact-history.js:478` · **Verdict:** confirmed
 - **Impact:** Student names repeat often, so an officer can conflate two people. The fault is then permanent without database work, and every later submission from either person is filed under the wrong identity.
 - **Fix:** (a) Enrich candidate cards with submission count, kinds, the last-seen date and the names used. (b) Show a side-by-side preview before Confirm and state plainly that the merge links future submissions too. (c) Add 'Unlink this address', which moves an alias back to its own contact row. The original contacts row still exists after a merge, so unlinking is feasible: set contact_emails.contact_email back to the alias and log contact_activity. (d) Say which record is being absorbed: you are viewing A, and the label 'Find the contact to keep' means A disappears into B.
-- **Verifier:** Reproduced with two seeded 'Riley Chen' contacts (e1234567@ Eastfield join, rchen2@ RAG question). The merge candidate card read only 'Riley Chen / rchen2@dcccd.edu / Regular contact'. The confirm copy was 'Keep Riley Chen (rchen2@dcccd.edu) and link e1234567@dcccd.edu. 2 website submission(s) will appear together. No original answers, emails or notes will be rewritten.' It never says the merge is permanent or covers future submissions. Afterwards 'Remove unused address' on e1234567 was disabled ([true]) and no unlink, unmerge or split control existed. Server: lib/contacts.mjs 228-231 only …
+- **Verifier:** Reproduced with two seeded 'Riley Chen' contacts (student1@college.example Eastfield join, rchen2@ RAG question). The merge candidate card read only 'Riley Chen / rchen2@college.example / Regular contact'. The confirm copy was 'Keep Riley Chen (rchen2@college.example) and link student1@college.example. 2 website submission(s) will appear together. No original answers, emails or notes will be rewritten.' It never says the merge is permanent or covers future submissions. Afterwards 'Remove unused address' on e1234567 was disabled ([true]) and no unlink, unmerge or split control existed. Server: …
 
 ### contacts-3 · medium · bug · effort S — Unsaved profile draft from one contact is pre-filled into a different contact's editor after a merge
 
@@ -623,7 +624,7 @@ Contacts & follow-up is one native <dialog> built by admin/contact-history.js. I
 - **Where:** `backend/lib/contact-profile.mjs:117` · **Verdict:** confirmed
 - **Impact:** The directory can display an address the person never wrote from, and officers emailing them would use the wrong one.
 - **Fix:** Make 'Use as primary' (choose one of the linked addresses) the default control. When a typed address has no submissions, show an inline warning ('No submission has used this address — keep it as primary?') before saving.
-- **Verifier:** Reproduced: changing typo@dcccd.edu to typo@dccd.edu saved with 'Contact updated. Its history stays together under this primary email.' and the header read 'Primary email: typo@dccd.edu'. There was no warning that no submission ever used that address (lib/contact-profile.mjs 117-153).
+- **Verifier:** Reproduced: changing typo@college.example to typo@colege.example saved with 'Contact updated. Its history stays together under this primary email.' and the header read 'Primary email: typo@colege.example'. There was no warning that no submission ever used that address (lib/contact-profile.mjs 117-153).
 
 ### contacts-21 · low · enhancement · effort S — Primary email in the contact header is plain text: no mailto or copy
 
@@ -1910,3 +1911,190 @@ Club Office is a single 128.6 KB minified ES module (44 KB gzip; about 30 KB of 
 - **Where:** `backend/admin/index.js:814` · **Verdict:** found by verifier
 - **Impact:** On shared lab or library computers, signing out in one tab does not hide the club's personal data in the others. Officers with several tabs also have to sign in to each one again.
 - **Fix:** Broadcast sign-out and sign-in over BroadcastChannel (or a localStorage key) and call showLogin() or load() in the other tabs. Also re-check the session on visibilitychange to visible.
+
+## Gaps found by the completeness critic
+
+After the area reviews, a critic looked for what no area covered and investigated the gaps itself.
+
+- Intake-to-Inbox integrity was outside every area's scope. That covers how repeat or duplicate submissions are handled, public form rate limits during tabling, and the missing officer path for adding a submission by hand. Investigated as critic-1 and critic-3, both reproduced in an isolated PGlite copy of tests/helpers/office-fixture.mjs plus api/forms.mjs (scratchpad/critic/c1-intake.mjs). The shared fixture has no /api/forms route.
+- No area checked whether exports are complete. Inbox CSV always applies the current status tab (New, Reviewed or Archived) and there is no 'All statuses' option. Reproduced in critic-2: the export had 11 of 31 club signups.
+- Side effects of the event lifecycle on Inbox were not covered: unpublishing or archiving an event, or its date passing. Unpublishing re-files future RSVPs as 'past' and drops them from the count cards (critic-5, reproduced).
+- No area covered officer lifecycle and governance: onboarding and offboarding officers, roles, or a viewer for the audit log (exports and permanent deletions are logged but never shown). See critic-9.
+- Notification outside the app was not covered. There is no email or chat digest and no Web Push, and on Android Chrome the page-level Notification constructor is not allowed. See critic-4. The Android behaviour needs a check on a real device; headless desktop Chromium cannot show it.
+- Public content outside events was not covered. The leaderboard has public nicknames and scores and no moderation in Club Office (critic-10).
+- Event-day and after-event workflows were not covered: capacity or waitlist, a check-in list for the door, attended/no-show records (critic-11). The type-specific outcomes officers actually need are also missing: answered, accepted/published, scheduled, cancelled, withdrawn (critic-12).
+- No area tested very large content. A 40,000-character AI Review draft makes each 60-second poll about 2 MB for 50 cards, and one expanded card is 23,196px tall at 390px (critic-7, reproduced).
+- No area exercised the Edit response dialog itself. A 409 conflict there is a dead end (critic-8, reproduced). At 390px the dialog itself works: Save sits at y=610 in an 844px viewport, and Delete opens with Cancel focused.
+- Error and slow states were checked only for Inbox. Events shows 'Active 0 · Archived 0' and the empty-state invitation while loading and after a 503 (critic-13, reproduced via route interception on the shared fixture, no data changed). On a 503, Event surveys keeps Compile and Export and offers no retry; Custom surveys does show 'Try loading surveys again'.
+- First-run empty state, checked in an isolated, emptied fixture (c3-empty.mjs). Inbox says 'No submissions match these filters.' even when there is no data at all. Event surveys shows Compile summary and Export with 0 responses and the text 'Expand a person…'. Custom surveys says 'No custom surveys have been opened yet.' visual-20 and event-surveys-18 already cover this, so it is not reported separately.
+- Two officers at once: the server-side guards are solid and worth keeping. Permanent delete re-checks archived status inside the transaction (submission-management.mjs:174-186), edits carry expectedRevision, and comments, notes and edits are idempotent by requestId. The remaining gaps are already reported (inbox-6, events-4, critic-8). There is still no presence or claim indicator, so two officers can reply to the same person; this is partly in inbox-19 and inbox-32.
+- Claims that need a live check or were spot-checked: custom-surveys-1 depends on Neon user.name being empty (the code falls back to email at lib/custom-surveys.mjs:111; confirmed). shell-4 depends on Neon role provisioning. The 'server shrinks them' part of events-14 was not verified. Confirmed by code: event-surveys-1 (survey-report.mjs:6-9 excludes only options starting with 'none'/'not sure'), visual-5 (style.css:69-74 forces .entry-actions buttons to secondary), event-surveys-16 (no audit insert in api/surveys.mjs export) and reliability-22 (public/admin/index.js is 128,634 bytes).
+- Not investigated: score cheating on the leaderboard (scores come from the client) beyond moderation; officer visibility of queued attachment-deletion retries ('Attachment removal is queued for retry' with no follow-up status); 'View published event' links hard-coded to https://dallasai.club (event-overview.js:25, event-editor.js:343), which ignore data-site-origin on preview deployments; data-retention policy for an Archived list that grows forever.
+- Strengths verified, keep these in any redesign: all admin rendering uses textContent, and event rich text goes through an escaping formatter (lib/event-format.mjs:1-8). CSV cells are formula-escaped (lib/submission-export.mjs:1-9). Attachments download as application/octet-stream with nosniff and an audit row (api/admin.mjs:70-77). Every admin POST requires the exact admin Origin (lib/auth.mjs:118-124). Central-time validation rejects times that are skipped or repeated at daylight-saving changes (lib/event-content.mjs:36-52). Text wraps (overflow-wrap:anywhere) with no horizontal overflow at 390px. The Edit response dialog works on phones.
+
+### critic-1 · high · bug · effort M — A repeat Join/Subscribe/RSVP from someone whose earlier record was archived is silently swallowed: success is shown, the new details are dropped, nothing reaches New
+
+- **Where:** `backend/lib/submissions.mjs:46` · **Verified:** reproduced
+- **Impact:** Officers never see returning members (each semester), people who change campus or interests, or people who RSVP again after an officer archived them (for example after a cancellation). The contact record keeps the stale details, and the person is told they are welcome.
+- **Fix:** On a duplicate, log a 'resubmitted' activity entry on the existing record and keep the new payload as a revision, or update the profile fields. Move Reviewed or Archived records back to New and show a 'Resubmitted' badge. For join and subscribe, make the confirmation honest ('We already had your signup — we updated your details').
+- **Evidence:** The dedupe key has no time component: validation.mjs:137-141 builds `join:${email}`, `subscribe:${email}` or `rsvp:${eventId}:${email}`. submissions.mjs:46 does `INSERT ... ON CONFLICT(dedupe_key) DO NOTHING RETURNING *`, then returns the existing row. forms.mjs:41-46 sends confirmations[kind] for join and subscribe whether or not the row already existed (alreadySubmitted). Reproduced in an isolated PGlite fixture plus formsHandler (scratchpad/critic/c1-intake.mjs): (1) joined as critic-rejoin@example.edu (Richland, 'Robotics (fall)'); (2) archived it through the admin API; (3) joined again …
+
+### critic-2 · high · bug · effort S — 'Export filtered CSV' only exports the current status tab; there is no 'All statuses' option, so member lists come out silently incomplete
+
+- **Where:** `backend/admin/index.html:278` · **Verified:** reproduced
+- **Impact:** Officers who follow the documented workflow (mark reviewed, then archive) and later export Club signups or an event's RSVPs for a member, attendance or mailing list get only the unreviewed remainder. The file has a generic name and nothing warns them; missing two-thirds of the rows is easy to overlook.
+- **Fix:** Add an 'All statuses' view and make it the default for exports. Label the button with what it will produce ('Export 31 club signups · all statuses'), put kind and status in the filename, and confirm the row count after download.
+- **Evidence:** index.html:278 has `<input type="hidden" name="status" value="new" />`. The status switch (index.html:248-271) offers only New, Reviewed and Archived. index.js:468 builds the export link as `'/api/admin?' + filters() + '&export=csv'`, which includes status. Reproduced (scratchpad/critic/c5-export.mjs, isolated fixture with 30 synthetic joins split across new, reviewed and closed): with Type set to Club signups, the count card reads '11 new · 31 total'. The export href is `/api/admin?status=new&kind=join&eventId=&offset=0&export=csv`, and the downloaded club-submissions.csv has 11 data rows. …
+
+### critic-3 · high · bug · effort M — Club-fair signups fail after 12 per hour from one network, and Club Office has no way to add a walk-in or paper signup
+
+- **Where:** `backend/lib/http.mjs:85` · **Verified:** reproduced
+- **Impact:** At tabling events, students sign up on one officer tablet or on campus Wi-Fi behind NAT. From the 13th person in an hour the form fails, so the club loses signups at its biggest recruiting moment. Paper sheets, walk-in RSVPs and emailed questions can never be entered, so those people are missing from Inbox, Contacts and exports.
+- **Fix:** Scope the limit by IP plus email, or allow a higher burst (the form already has a honeypot). Offer a signed 'tabling/kiosk' link for officers that is exempt from the IP limit. Add 'Add submission' to Club Office (kind, name, email, fields, source=manual) that goes through the same dedupe, contact capture and audit.
+- **Evidence:** forms.mjs:21 sets `rateLimit = (db, req) => limit(db, req, 'forms')`. http.mjs:85 is `limit(db, req, scope, maximum = 12, seconds = 3600)`, keyed only by client IP (http.mjs:90 reads `x-vercel-forwarded-for`). Reproduced (c1-intake.mjs, isolated fixture, every request from 127.0.0.1): submissions #1-#12 got 200, #13 got 429 'Too many requests. Please try again later.' The admin POST handler accepts only edit-submission, delete-submission, comment and review (api/admin.mjs:169-185). There is no create action and no 'Add submission' control in the UI.
+
+### critic-4 · high · enhancement · effort M — Officers only learn about new questions while a desktop office tab stays open: no email or chat digest, no Web Push, and on Android 'Enable browser alerts' reports success but cannot show alerts
+
+- **Where:** `backend/admin/browser-alerts.js:75` · **Verified:** code-read
+- **Impact:** Volunteer officers who check in weekly, or from a phone, see a question or workshop request days late. The club's response time depends on someone leaving a laptop tab open.
+- **Fix:** Add an opt-in officer digest, real-time or daily, sent by email or through a Discord/Slack webhook, listing actionable new items with deep links. If browser alerts stay, register a service worker and use showNotification so phones work, and detect and state plainly when the current browser cannot show alerts.
+- **Evidence:** browser-alerts.js:72-83: notify() calls `new Notification('Dallas AI Club', {...})`. There is no service worker or manifest in backend/admin (grep for serviceWorker/manifest finds nothing). Chrome on Android rejects the page-level Notification constructor, which only works through ServiceWorkerRegistration.showNotification. So after permission is granted, the button reads 'Turn off browser alerts' (lines 13-20) and the status says alerts are on, but every notify() ends in the catch branch ('This browser could not display the alert'). index.html:243-246 says 'Browser alerts work while this …
+
+### critic-5 · medium · bug · effort S — Unpublishing or archiving an event re-files its RSVPs as 'past': they vanish from the RSVP count card and the upcoming filter, even for an event in 2030
+
+- **Where:** `backend/api/admin.mjs:145` · **Verified:** reproduced
+- **Impact:** An officer who briefly unpublishes an event to fix details, or postpones it, sees its RSVPs disappear from the counts. The new RSVP is no longer on any count card (it is only in the tab title), and the event is labelled past although it is years away. It is easy to conclude the RSVPs were lost.
+- **Fix:** Classify RSVPs by event date and archive state, not by publication state. Label unpublished and archived events in the Event filter ('Unpublished', 'Archived'), and keep New RSVPs visible on a count card whatever the publication state.
+- **Evidence:** api/admin.mjs:103 is `const events = upcomingEvents(publishedEvents)`. The counts query at :145 uses `CASE WHEN kind='rsvp' AND NOT(eventId = ANY(upcomingIds)) THEN 'rsvp-past'`, and :158 sets `past: !upcomingIds.includes(id)`. Reproduced (c1-intake.mjs, isolated fixture): counts before were [{kind:'rsvp',total:2,new:1}]. After saveEvent with action 'unpublish' they were [{kind:'rsvp-past',total:2,new:1}], and the events list shows {id:'office-audit-event',date:'2030-10-04',past:true}. ?kind=rsvp returns 0 entries and ?kind=rsvp-past returns 2. In the UI the count card reads 'Event RSVPs …
+
+### critic-6 · medium · enhancement · effort M — Actionable items and informational records share one 'New' queue and one alert, so subscriptions and RSVPs (which need no reply) bury questions and workshop requests
+
+- **Where:** `backend/admin/index.js:357` · **Verified:** code-read
+- **Impact:** Officers have to clear every RSVP and newsletter request to reach the few items that need a human reply. The badge and alerts fire for records nobody needs to act on, which trains officers to ignore them.
+- **Fix:** Split the queue into 'Needs reply' (questions, workshop requests, AI Review submissions) and 'Records' (signups, subscriptions, RSVPs, which are acknowledged automatically or in bulk). Only 'Needs reply' should drive alerts and the title count; records can be reached from Contacts, the event's attendee view, and exports.
+- **Evidence:** index.js:357 `const newCount = data.counts.reduce((sum, row) => sum + row.new, 0)` sets the tab-title badge and triggers 'New submissions arrived' plus a browser notification (365-372) for every kind. index.js:255-259 gives every kind the same Mark reviewed, Archive submission and Mark new buttons. docs/forms-admin.md says newsletters are not being sent and that review 'does not send a reply', yet every AI Review subscription request arrives as New and needs a click. In the shared fixture the New view mixes all six kinds.
+
+### critic-7 · medium · performance · effort M — Long submissions: every 60-second poll ships the full text of all 50 cards (about 2 MB for AI Review drafts), and one draft renders inline as a 23,000px card on a phone
+
+- **Where:** `backend/api/admin.mjs:138` · **Verified:** reproduced
+- **Impact:** On a phone data plan, an open office tab can pull about 120 MB an hour. Reading one draft inline means scrolling about 27 screens to reach its actions or the next entry, and the title sits below the body.
+- **Fix:** Return a preview in the list (first ~300 characters plus the length) and fetch the full submission on demand; the ?edit=<id> endpoint already exists. Open long drafts in a reader panel with the title first and actions pinned. Make polls conditional (ETag or a 'changed since' cursor).
+- **Evidence:** The list query at api/admin.mjs:138, `SELECT e.*, ...`, returns the full data JSONB, and a contribution body can be 40,000 characters (validation.mjs:113). index.js:230-236 renders every field into a <pre> inside the card, ahead of the actions (246-288). The poll runs every 60s (index.js:814-817), in hidden tabs too when alerts are on. Reproduced (scratchpad/critic/c2-large-edit.mjs, isolated fixture with 50 synthetic 40k drafts): GET /api/admin?kind=contribution&status=new returned 1,979,934 bytes. At 390px, expanding one card's 'Submission details' made the card 23,196px tall and the page …
+
+### critic-8 · medium · ux-friction · effort M — Edit response conflicts are a dead end: Save retries the same stale revision, and the only way out discards the officer's typing
+
+- **Where:** `backend/admin/submission-editor.js:232` · **Verified:** reproduced
+- **Impact:** The officer has to remember or copy their edits, discard them, reopen and retype, and never sees what the other officer changed.
+- **Fix:** Use one conflict pattern across Edit response, events, contacts and the survey builder. On a 409, load the latest version, show each field side by side ('Theirs' and 'Yours') with 'Keep mine' or 'Use theirs', then save against the new revision.
+- **Evidence:** submission-editor.js:200-204 sends `expectedRevision: entry.edit_revision`, captured when the dialog opened. On error (232-240) it only sets the message and re-enables the controls. Reproduced (c2-large-edit.mjs, isolated fixture): officer A opened Edit response and typed a corrected name. Officer B then saved an edit through the API (revision 1). A clicked Save and got 'Another admin edited this response. Reopen it to see the latest answers.' The only buttons were 'Cancel' and 'Save changes'. Save again gave the same message. Cancel asked 'Discard your unsaved response changes?' …
+
+### critic-9 · medium · security · effort L — No officer management, roles or audit view: changing access needs Vercel and Neon admins, and logged exports and deletions are never shown anywhere
+
+- **Where:** `backend/lib/auth.mjs:10` · **Verified:** code-read
+- **Impact:** Officer turnover each semester needs someone with Vercel env access (plus a redeploy) and the Neon console. A departing officer keeps full export and delete power until then. Nobody in the club can see who downloaded the member list or deleted records.
+- **Fix:** Add an 'Officers' screen for a club-lead role: invite and remove officers and see last sign-in. Consider a limited role for event-only helpers. Add an 'Activity log' view of the audit table filterable by action (exports, deletions, purges, merges) with actor and time, and log survey exports.
+- **Evidence:** auth.mjs:10-13: isAdmin reads `process.env.ADMIN_EMAILS`. requireAdmin (96-116) also requires a Neon 'admin' role, and docs/operations.md says to 'provision current officers in Neon'. No handler in api/*.mjs checks roles, so every officer can export all PII, delete permanently, merge and purge. Audit rows with no entry_id are never read: api/admin.mjs:125 'export-csv' and lib/submission-management.mjs:188 'submission-permanently-deleted'. The only readers join on entry_id (contacts.mjs:74, submission-activity.mjs:19), and no admin JS reads the audit table. Survey CSV exports are not logged at …
+
+### critic-10 · medium · enhancement · effort M — The public leaderboard has no moderation in Club Office: offensive nicknames or impossible scores can only be removed with database tools
+
+- **Where:** `backend/api/leaderboard.mjs:151` · **Verified:** code-read
+- **Impact:** If a player posts an abusive nickname or a fake top score on the club's public site, officers cannot hide it from Club Office. It stays until someone with Neon access runs SQL.
+- **Fix:** Add a small Leaderboard tab: recent and top entries, hide or unhide an entry, block a player, all audited. Optionally add a nickname blocklist.
+- **Evidence:** leaderboard.mjs:151-160 accepts any nickname matching /^[\p{L}\p{N} _.-]{2,20}$/u, with scores up to 1,000,000 sent by the browser. The public GET (127-143) lists them, and static/games/rankings.js shows them on the public site. There is no admin route or Club Office tab for the leaderboard; README.md:60 says 'Database administration tools are in leaderboard-setup.zip'.
+
+### critic-11 · medium · enhancement · effort L — No event-day tools: no capacity or waitlist, no attendee or check-in list, no attended/no-show record for follow-up
+
+- **Where:** `backend/lib/validation.mjs:74` · **Verified:** code-read
+- **Impact:** Officers cannot cap a room, check people in at the door from a phone, follow up differently with attendees and no-shows, or report attendance to the college.
+- **Fix:** Per event: an optional capacity with auto-close or a waitlist, and an 'Attendees' view (name, email, answer summary, check-in toggle) that works on a phone. Store attendance on the RSVP, show it in Contacts, and allow an 'attended' export.
+- **Evidence:** A grep for attend|capacity|waitlist|check-in across backend/lib and backend/admin finds nothing. RSVP intake stops only when registrationOpen === false or the event start has passed (validation.mjs:72-83), and closing RSVPs means publishing every pending draft edit (events-29). RSVPs can be seen only as Inbox cards (50 per page, mixed with event questions) or as CSV.
+
+### critic-12 · medium · enhancement · effort M — Every submission type has the same three generic states: no 'answered', 'accepted/published', 'scheduled', 'cancelled' or 'withdrawn', and no way to turn a workshop request into a draft event
+
+- **Where:** `backend/api/admin.mjs:183` · **Verified:** code-read
+- **Impact:** Officers track AI Review editorial progress, whether a question was answered, and whether a workshop got scheduled in free-text comments. Cancelling an RSVP or withdrawing a newsletter request means archiving (still counted in exports) or erasing the person.
+- **Fix:** Add outcomes per type: Question → Answered. Workshop → Scheduled, with 'Create draft event from request' prefilled from topic and details. Contribution → In review / Accepted / Published / Declined. RSVP → Cancelled. Subscription → Withdrawn. Make counts and exports respect these outcomes.
+- **Evidence:** api/admin.mjs:180-185 accepts only the statuses new, reviewed and closed. index.js:255-259 renders the same buttons for every kind. docs/forms-admin.md:15: 'Neither action sends a reply, removes the record, unsubscribes a person, or publishes an article.' The same document says 'People can contact the club to withdraw a request or cancel an RSVP', but there is no matching action; the only paths are Archive, then Delete permanently, which also erases the contact if nothing else uses it (submission-management.mjs:189).
+
+### critic-13 · low · bug · effort S — While the event list loads or after it fails, Events shows 'Active 0 · Archived 0' and the 'A place for your next idea' invitation, as if there were no events
+
+- **Where:** `backend/admin/event-editor.js:383` · **Verified:** reproduced
+- **Impact:** On a cold start or an outage, an officer can believe the events were deleted, or create a duplicate. A read error saying 'Your information has not been cleared' is confusing when nothing was being saved.
+- **Fix:** Show '–' or a skeleton for the counts until loaded. On failure, replace the list with an error card and a Retry button instead of the empty-state invitation. Use a separate error message for failed reads, and add the Retry that Custom surveys already has to Event surveys.
+- **Evidence:** index.html:365-368 hard-codes `<span id="active-event-count">0</span>` and the same 0 for Archived. event-editor.js:361-386: load() updates the counts only through list() on success, and the catch branch only calls `say(e.message)`. Reproduced on the shared fixture with Playwright route interception, changing no data (scratchpad/critic/c4-errors.cjs). On a 503 the pane shows 'Active 0 | Archived 0 | This service is temporarily unavailable. Your information has not been cleared; please try again.' in the accent colour, next to '+ New event' and the empty-state art (c4-events-503.png). With a …
+
+### critic-14 · low · ux-friction · effort S — Comments cannot be edited or deleted, so a comment on the wrong card (or one containing private details) is permanent and shows in that person's contact history
+
+- **Where:** `backend/009_submission_comments.sql:16` · **Verified:** code-read
+- **Impact:** A note meant for one person ('called, not interested', a phone number) attached to someone else cannot be fixed, only countered with a second comment. A privacy request cannot remove it short of deleting the whole submission.
+- **Fix:** Let the author edit or retract a comment within a short window: a soft delete with a 'comment-retracted' audit entry, and an officer-visible 'edited' marker. In the contact timeline, show which submission each comment belongs to.
+- **Evidence:** 009_submission_comments.sql:16 is `GRANT SELECT,INSERT ON club_forms.entry_comments TO club_forms_api;`, and docs/forms-admin.md says the runtime role 'can read and insert comments, not edit or delete them'. submission-activity.js (Add comment at line 106) has no edit or delete control, and the contact timeline includes comments (contacts-10). With 50 near-identical cards per page and identical buttons (a11y-9), a comment on the wrong card is plausible.
+
+### critic-15 · low · copy · effort S — Officer docs and the UI use different words for the same states, and the docs promise a review-status filter the UI only partly has
+
+- **Where:** `docs/forms-admin.md:15` · **Verified:** code-read
+- **Impact:** New officers learning from the docs look for buttons that don't exist and misread activity entries and CSV status values.
+- **Fix:** Pick one vocabulary (New / Reviewed / Archived) and use it in the UI, activity labels, CSV and docs. Link the officer guide from the office header.
+- **Evidence:** docs/forms-admin.md:15 says '**Mark closed** means no further action is planned'. The UI button is 'Archive submission' (index.js:257), the badge says 'archived' (index.js:182), and the server and activity log record 'review:closed' (api/admin.mjs:195, shown raw per contacts-5). docs line 7 says officers 'can filter by submission type and review status … and export up to 10,000 matching records', but there is no all-status option (critic-2). The office links to the public site but not to the officer guide.
+
+## Shared root causes
+
+The critic grouped findings that describe the same underlying problem. Fix the root once and close every ID in its group.
+
+- Any 401 calls showLogin(), which clears every in-memory draft and editor (events, comments, contact notes) with no warning: `shell-1`, `events-1`, `events-27`, `reliability-1`, `inbox-27`, `contacts-m2`, `a11y-v3`
+- The global #status banner is never cleared or dismissed, follows the officer across panes, and success and error look the same: `shell-12`, `a11y-6`, `visual-7`, `reliability-4`, `inbox-30`, `events-24`, `a11y-v4`, `inbox-16`
+- The 'New submissions arrived' notice is never cleared: `shell-13`, `inbox-9`, `reliability-18`
+- The new-count/latest comparison treats an officer's own (or a colleague's) 'Mark new' as a new arrival: `shell-27`, `inbox-29`, `reliability-18`
+- The background poll rebuilds the inbox DOM and refetches open activity panels even when nothing changed: `shell-14`, `inbox-7`, `a11y-12`, `shell-31`
+- Background refresh is skipped indefinitely while any comment draft exists or focus is in the list: `inbox-8`, `reliability-14`, `reliability-29`
+- A status change rebuilds the card and drops its unsent comment: `inbox-1`, `reliability-29`
+- Comment drafts are deleted by an Edit response save or a contact purge (onSaved/commentDrafts.clear): `inbox-10`, `reliability-8`, `contacts-4`
+- No leave guard for inbox comment drafts (logo link, Sign out, tab close): `shell-15`, `visual-15`, `reliability-9`
+- Office navigation and filter state are not in the URL or history: Back leaves, reload resets: `shell-8`, `inbox-22`, `visual-26`, `event-surveys-27`, `custom-surveys-21`, `custom-surveys-v4`
+- Opening the Surveys pane resets its group, chosen survey, filters and search: `shell-26`, `reliability-16`, `event-surveys-10`
+- An #entry=<id> hash overrides every inbox filter (stuck or empty view, sign-in loop when malformed): `shell-10`, `inbox-15`, `reliability-15`, `reliability-2`
+- A linked entry narrows the list, then silently disappears on the next refresh: `shell-11`, `inbox-28`
+- Any error on the first load is treated as signed-out: `shell-3`, `reliability-2`
+- The tab-title count includes past-event RSVPs that no count card shows: `shell-32`, `visual-29`, `inbox-12`
+- Polling ignores page visibility and does not refresh when the officer returns: `shell-19`, `reliability-21`
+- Sign-out and expiry are not propagated to other office tabs: `shell-33`, `reliability-31`
+- Reading a submission takes nested disclosures, and collapsed rows show no preview: `inbox-2`, `visual-2`
+- Hero, help text and header push the entry list below the fold, and nothing stays pinned: `inbox-3`, `visual-1`, `visual-12`, `shell-16`, `visual-13`, `visual-10`
+- Event questions are grouped inside the event's RSVP group: `inbox-11`, `visual-25`
+- Count cards are static, are not filters, and ignore the status view: `inbox-12`, `visual-8`
+- Grouping happens per page: groups split across pages, headers say 'on this page', scroll is not reset: `inbox-13`, `visual-3`, `visual-27`, `event-surveys-3`
+- Inbox → Archived mixes in custom-survey archives with a second pager: `inbox-20`, `visual-28`, `event-surveys-22`, `custom-surveys-15`
+- Destructive actions are styled like routine ones (.entry-actions override, primary-styled confirms): `inbox-24`, `visual-6`, `visual-5`, `contacts-15`
+- Rebuilding or disabling the DOM after an action drops keyboard focus to <body>: `a11y-1`, `inbox-17`, `reliability-11`, `inbox-34`, `a11y-3`, `a11y-2`, `a11y-4`, `a11y-13`, `custom-surveys-3`, `events-12`, `contacts-7`, `event-surveys-5`, `reliability-3`
+- Status updates have no expected-status check, so a stale click overrides a colleague: `inbox-6`, `reliability-10`
+- The attachment link navigates the office tab to a raw JSON error: `inbox-31`, `reliability-27`
+- Raw audit action codes are shown in activity and contact timelines: `contacts-5`, `event-surveys-30`, `reliability-20`
+- Inbox cards have no route to the submitter's contact history: `contacts-1`, `inbox-33`
+- Enter in a one-line event field submits the whole form (save and exit): `events-2`, `reliability-28`
+- 409 conflicts are dead ends everywhere: no diff, and reloading discards the officer's edits: `events-4`, `reliability-5`, `contacts-6`, `custom-surveys-16`, `critic-8`
+- Returning to Events refreshes the list but not the open overview, so a stale revision guarantees a 409: `events-28`, `reliability-26`
+- Validation runs only on the server, one generic message at a time, not tied to a field: `events-3`, `a11y-7`, `events-11`, `custom-surveys-2`
+- Editing RSVP questions on a live event silently versions the results and rejects in-progress RSVPs: `events-30`, `event-surveys-32`, `event-surveys-4`
+- The preview Desktop/Mobile switch does not expose its active state: `events-25`, `a11y-v6`, `visual-31`
+- aria-pressed misused for selection, and toggles that also change their label: `events-26`, `a11y-17`, `event-surveys-26`
+- Survey actions (star, archive, add respondent, refresh) reload and re-render the whole view: `event-surveys-5`, `reliability-3`, `custom-surveys-13`, `custom-surveys-6`
+- Custom-survey results are ordered by random UUID (and offset paging over it): `event-surveys-23`, `custom-surveys-12`, `custom-surveys-v3`
+- The respondent roster lacks response state, and Remove access is unconfirmed: `event-surveys-24`, `custom-surveys-7`, `custom-surveys-11`
+- The choice drag grip is a focusable no-op: `event-surveys-25`, `custom-surveys-v7`, `a11y-18`
+- Two different question editors (event RSVP vs custom survey): `custom-surveys-24`, `events-10`
+- The builder saves on every step click and floods the activity log: `custom-surveys-17`, `reliability-7`
+- A builder save failure locks every control, and the error renders far from the trigger: `reliability-6`, `custom-surveys-v5`
+- Survey CSV export error handling (raw parser error, no timeout or guard): `event-surveys-17`, `reliability-13`
+- Low non-text contrast on field borders and segmented controls: `a11y-10`, `a11y-11`, `visual-14`
+- Office tabs are aria-pressed buttons rather than a tablist, and the Inbox pane has no headings: `shell-17`, `a11y-8`, `a11y-9`, `inbox-34`
+- Vague or missing loading states on filter, page and refresh: `shell-20`, `visual-30`
+- 'View survey answers' jumps panes, lands below the fold and loses the Inbox position: `event-surveys-9`, `visual-11`, `event-surveys-27`
+- No single per-event RSVP count: `events-18`, `event-surveys-2`
+- Two independent 'archive' states for one RSVP (Inbox review vs survey archive): `event-surveys-12`, `event-surveys-13`
+- Follow-up state is free text only; rows show no owner or last action: `contacts-20`, `inbox-32`
+- Annotations are append-only: notes and comments cannot be corrected: `contacts-20`, `critic-14`
+- Saving the contact profile locks the name, including blank names: `contacts-16`, `contacts-m1`
+- Clicks during an in-flight event save are silently ignored: `events-26`, `reliability-30`
+- Next/Previous look active and accept double taps while loading: `reliability-24`, `inbox-13`
+- Pluralisation and count copy errors: `visual-23`, `event-surveys-18`
+- 'Open submission' from Contacts is one-way and misplaces focus: `contacts-11`, `a11y-v1`

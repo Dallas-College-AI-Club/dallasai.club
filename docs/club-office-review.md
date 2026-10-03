@@ -11,9 +11,13 @@ of view: how it is built, what gets in the way, what is broken and what to chang
   surveys, custom surveys, accessibility, visual, reliability) read the code and drove
   `tests/helpers/office-fixture.mjs` with synthetic records in Playwright. Each area then went to an
   adversarial verifier, which re-ran the claims, corrected severities and added what was missed.
-- **Result.** 275 findings: 4 critical, 18 high, 139 medium, 114 low. One was refuted. Every item
-  with its file and line, impact, fix and verifier note is in
-  [club-office-review-backlog.md](club-office-review-backlog.md). This page groups them by root cause.
+- **Completeness critic.** A final agent looked for what no area covered: intake, exports, event
+  lifecycle, notifications, governance, very large content, error states. It investigated each gap
+  and grouped duplicate findings by shared root cause.
+- **Result.** 290 findings: 4 critical, 22 high, 147 medium, 117 low, including 15 from the critic.
+  One was refuted. Every item with its file and line, impact, fix and verifier note is in
+  [club-office-review-backlog.md](club-office-review-backlog.md), which ends with the critic's 57
+  root-cause groups. This page groups the findings by root cause.
 
 Line numbers refer to commit `957abc6`.
 
@@ -36,6 +40,12 @@ Line numbers refer to commit `957abc6`.
 - **Server-side safety.** Most writes use optimistic revisions plus `requestId`/`commentId`
   idempotency keys. Every status change, edit, download and comment lands in an attributed activity
   timeline. Requests are checked for the same Origin, and filters and SQL are parameterized.
+- **Output safety.** All admin rendering uses `textContent`, and event rich text goes through an
+  escaping formatter (`lib/event-format.mjs:1-8`). Attachments download as
+  `application/octet-stream` with `nosniff` and an audit row.
+- **Two officers at once.** Permanent delete re-checks the archived status inside its transaction,
+  edits carry `expectedRevision`, and comments, notes and edits are idempotent by `requestId`.
+- **Central time.** Event validation rejects times skipped or repeated at daylight-saving changes.
 - **Request hygiene.** `sessionGeneration`, stale-filter checks and `reloadPending` drop late or
   superseded responses.
 - **Inbox.** Archive is reversible. Permanent delete is offered only for archived entries, with Cancel
@@ -45,7 +55,8 @@ Line numbers refer to commit `957abc6`.
 - **Layout.** Nothing scrolls sideways from 320 px to 1440 px, the dark theme is solid, and all modals
   are native `<dialog>`.
 
-Any redesign should keep this data model and these guards. The problems below are in the client.
+Any redesign should keep this data model and these guards. Most of the problems below are in the
+client. Root cause 11 is the main exception: it is in the server's intake and export code.
 
 ## What officers hit, by root cause
 
@@ -212,6 +223,63 @@ restore from it on load.
 contrast. Use tab semantics or plain links. Add headings and accessible names to groups and entries.
 Add `scroll-padding-bottom` for the sticky bar.
 
+### 11. Intake and exports silently lose records (high)
+
+`critic-1`, `critic-2`, `critic-3`, `critic-5`, `inbox-26`
+
+- **Resubmissions vanish.** Join, Subscribe and RSVP deduplicate on a key with no time component
+  (`lib/validation.mjs:137-141`). `lib/submissions.mjs:46` runs `ON CONFLICT DO NOTHING`, so someone
+  whose earlier record was archived can sign up again with a new campus or interests. They are
+  told they're welcome, the new details are dropped and nothing reaches New.
+- **Partial exports.** "Export filtered CSV" always applies the current status tab, and there is no
+  "All statuses" option. In the fixture, a Club signups export returned 11 of 31 rows with no
+  warning (`index.html:278`).
+- **Tabling limit.** Public forms allow 12 submissions per hour per IP (`lib/http.mjs:85`). At a club
+  fair on one tablet or campus Wi-Fi, the 13th student gets "Too many requests". Club Office has no
+  way to add a paper or walk-in signup.
+- **Unpublished events.** Unpublishing or archiving an event re-files its RSVPs as past, so they
+  drop out of the RSVP count, even for an event years ahead (`api/admin.mjs:145`).
+
+**Fix.** On a duplicate, keep the new details as a revision, move the record back to New with a
+"Resubmitted" badge and word the confirmation honestly. Make exports default to all statuses, and
+label the button and filename with what they contain. Rate-limit by IP plus email, or give
+officers a signed tabling link. Add "Add submission" for manual entries, using the same dedupe,
+contact capture and audit as the public forms.
+
+### 12. New work only reaches officers who keep a desktop tab open (high)
+
+`critic-4`, `critic-6`, `critic-12`
+
+Alerts fire only while a desktop office tab is open (`browser-alerts.js:75`). On Android Chrome the
+page-level `Notification` constructor is not allowed, so "Enable browser alerts" reports success
+and then never shows anything. This was inferred from code and documented browser behaviour, and
+needs checking on a real phone. Questions and workshop requests share one New queue and one alert
+with subscriptions and RSVPs, which need no reply. Every submission type has the same three
+generic states.
+
+**Fix.** Add an opt-in officer digest by email or a Discord/Slack webhook, listing only actionable
+items with deep links. If browser alerts stay, use a service worker and `showNotification`. Give
+actionable kinds their own queue, and give each kind the outcomes it needs: answered,
+accepted/published, scheduled, cancelled, withdrawn.
+
+### Also found by the critic (medium and low)
+
+- **`critic-7`, large content.** Every 60-second poll ships the full text of all 50 cards, about
+  2 MB with long AI Review drafts. One such draft renders as a 23,000 px card on a phone.
+- **`critic-8`, Edit response conflicts.** A 409 is a dead end: Save retries the same stale
+  revision, and the only way out discards the officer's typing.
+- **`critic-9`, no officer management.** There are no roles and no audit view. Changing access
+  needs Vercel and Neon admins, and logged exports and deletions are never shown.
+- **`critic-10`, leaderboard.** The public leaderboard has no moderation, so an offensive nickname
+  can only be removed with database tools.
+- **`critic-11`, event day.** There is no capacity, waitlist, check-in list or attended/no-show
+  record.
+- **`critic-13`, Events loading state.** While loading, and after a failure, Events shows
+  "Active 0 · Archived 0" and the empty-state invitation.
+- **`critic-14`, permanent comments.** Comments can't be edited or deleted, so one on the wrong card,
+  or one containing private details, stays in that person's contact history.
+- **`critic-15`, docs vs UI.** Officer docs and the UI use different words for the same states.
+
 ### Security and privacy items
 
 - **`custom-surveys-1` (high).** A public "verified" survey that shares results with respondents shows
@@ -224,6 +292,8 @@ Add `scroll-padding-bottom` for the sticky bar.
 - **`contacts-13`.** Real people have no erasure path, and purges leave no receipt.
 - **`inbox-26`.** "Export filtered CSV" exports the last filters applied, not what the dropdowns
   show. It can include other events' attendees.
+- **`critic-9` and `critic-14`.** Exports and deletions are logged but no screen shows the log.
+  Comments containing private details can't be removed.
 
 ### Seen on production (read-only)
 
@@ -243,11 +313,12 @@ Each phase can ship on its own.
 
 | Phase | Goal | Main items | Size |
 | --- | --- | --- | --- |
-| 0 | Stop losing work and data | Sign-in dialog on 401 with state kept (1). Comment + status in one action, `beforeunload` for drafts (2). Block implicit submit in the event editor. Hide respondent emails (`custom-surveys-1`). Export what the filters show (`inbox-26`). Block permanent delete of New RSVPs from Surveys. Add a `requestId` to event saves | S–M each |
+| 0 | Stop losing work and data | Sign-in dialog on 401 with state kept (1). Comment + status in one action, `beforeunload` for drafts (2). Block implicit submit in the event editor. Hide respondent emails (`custom-surveys-1`). Resubmissions reach New, and exports cover all statuses and what the filters show (11). A tabling-safe rate limit (`critic-3`). Block permanent delete of New RSVPs from Surveys. Add a `requestId` to event saves | S–M each |
 | 1 | Keep the officer's place | In-place card updates and a focus-restore helper (3). Toasts that clear (6). Navigation state in the URL (5). Separate "could not load" from "signed out" | M |
 | 2 | Rework the Inbox for triage | Slim header, sticky toolbar with search, dense rows with previews, reading pane or sheet, bulk actions, a "N new" pill, help in a popover, questions filed under Questions (4). Contact history on cards (9) | L |
 | 3 | Fix the Events and Surveys workflows | Stay in edit mode after saving, autosave, field-level validation, Publish confirmation, RSVP counts on events (7). Event overview table, one shared RSVP state, custom-survey summary, CSV and roster paste (8) | M–L |
 | 4 | Finish | Contacts profile view, merge preview and unlink, follow-up state (9). Tab semantics, headings, contrast and button hierarchy (10). Erasure path and export auditing | M |
+| 5 | Reach officers and run events | Officer digest and an actionable queue with per-kind outcomes (12). Manual "Add submission". Audit-log view and officer management (`critic-9`). Leaderboard moderation, event-day check-in and waitlist (`critic-10`, `critic-11`) | M–L |
 
 Phase 0 needs no layout changes and closes every critical item. Phase 1's focus helper and in-place
 updates set up Phase 2. Without them, the redesigned Inbox would keep the same focus and scroll bugs.
@@ -332,9 +403,17 @@ and CSV and HTML import before Word and PDF.
 
 ## Still open
 
-- **Completeness critic.** The workflow's last agent was still running at handoff. Its output is not
-  in this document or the backlog.
-- **Code-quality pass.** The officer also asked how to simplify the code and remove stale code. That
-  analysis had only just started and has no results yet.
-- **Not exercised.** Real Vercel Blob image storage, the public-site preview iframe and production
-  Neon behaviour for `user.name`, because the fixture has no blob token or public site.
+- **Code-quality pass.** The officer also asked how to simplify the code and remove stale code. Two
+  analyses are running. Their combined results will go in `docs/club-office-cleanup.md`.
+- **Not exercised.** These need production or a real device:
+  - Real Vercel Blob image storage.
+  - The public-site preview iframe.
+  - Production Neon behaviour for `user.name`.
+  - Neon role provisioning (`shell-4`).
+  - Browser alerts on Android.
+- **Not investigated.**
+  - Leaderboard score cheating: scores come from the client.
+  - What officers see about queued attachment-deletion retries.
+  - "View published event" links hard-coded to `https://dallasai.club` (`event-overview.js:25`,
+    `event-editor.js:343`), which ignore preview deployments.
+  - A retention policy for the Archived list.

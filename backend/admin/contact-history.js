@@ -543,6 +543,7 @@ export function contactHistory(api, onChange = () => {}) {
               profileDrafts.delete(address);
             if (draft) profileDrafts.set(contact.email, draft);
           },
+          () => dialog.close(),
         ),
       );
       details.querySelector('input')?.focus();

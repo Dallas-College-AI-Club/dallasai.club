@@ -754,6 +754,46 @@ try {
         ).rows.length,
         0,
       );
+      await dialog
+        .locator('.contact-alias-row')
+        .filter({ hasText: 'join@example.edu' })
+        .getByRole('link', { name: /^Open response:/ })
+        .click();
+      await expect(dialog).not.toBeVisible();
+      await page
+        .getByRole('button', { name: 'Edit response', exact: true })
+        .click();
+      const responseDialog = page.locator('.submission-dialog');
+      await responseDialog
+        .getByLabel('Email address', { exact: true })
+        .fill('final-profile@example.edu');
+      await responseDialog
+        .getByRole('button', { name: 'Save changes', exact: true })
+        .click();
+      await expect(page.locator('#status')).toHaveText(
+        'Response updated.',
+      );
+      await page
+        .locator('#inbox-pane')
+        .getByRole('button', { name: 'Contacts & follow-up', exact: true })
+        .click();
+      await dialog
+        .getByRole('button', {
+          name: /Corrected profile final-profile@example.edu/,
+        })
+        .click();
+      await dialog
+        .getByRole('button', { name: 'Edit contact', exact: true })
+        .click();
+      await expect(
+        dialog
+          .locator('.contact-alias-row')
+          .filter({ hasText: 'join@example.edu' })
+          .getByRole('button', {
+            name: 'Remove unused address',
+            exact: true,
+          }),
+      ).toBeEnabled();
     },
   );
 } finally {

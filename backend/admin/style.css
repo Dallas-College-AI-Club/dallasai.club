@@ -1472,6 +1472,14 @@ input::file-selector-button {
 .contact-alias-row > .contact-confirmation {
   flex-basis: 100%;
 }
+.contact-alias-responses {
+  flex-basis: 100%;
+}
+.contact-alias-responses a {
+  display: block;
+  padding-block: 8px;
+  overflow-wrap: anywhere;
+}
 .contact-alias-row p {
   margin-block: 8px 0;
 }

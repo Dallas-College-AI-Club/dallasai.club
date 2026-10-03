@@ -16,6 +16,7 @@ export function contactProfile(
   cancel,
   draft,
   remember = () => {},
+  openResponse = () => {},
 ) {
   const panel = node('section', undefined, 'contact-profile');
   const form = node('form'),
@@ -87,6 +88,31 @@ export function contactProfile(
       ),
     );
     row.append(details);
+    if (alias.submissions) {
+      const links = node('div', undefined, 'contact-alias-responses');
+      links.append(
+        node(
+          'p',
+          'To correct this saved email, open its response and choose Edit response.',
+          'hint',
+        ),
+      );
+      for (const response of alias.responses || []) {
+        const link = node('a', 'Open response: ' + response.title);
+        link.href = '#entry=' + encodeURIComponent(response.id);
+        link.onclick = () => openResponse();
+        links.append(link);
+      }
+      if (alias.submissions > 5)
+        links.append(
+          node(
+            'p',
+            'More responses are listed in the contact history below.',
+            'hint',
+          ),
+        );
+      row.append(links);
+    }
     if (alias.email !== contact.email) {
       const use = button('Use as primary', () => {
         email.value = alias.email;

@@ -1,3 +1,4 @@
+import { eventPlainText } from '../app/event-format.js';
 import { articles } from '../content/articles.js';
 import { articleUrl } from '../content/article-links.js';
 import { EVENTS, eventDate } from '../content/club.js';
@@ -87,7 +88,7 @@ const searchEntries = () => [
         ' ' +
         e.date.slice(0, 4) +
         ' · ' +
-        (e.summary || e.category),
+        eventPlainText(e.summary || e.category),
       category: 'Event',
       keywords: [
         e.date,

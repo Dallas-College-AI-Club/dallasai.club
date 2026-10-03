@@ -385,6 +385,7 @@ try {
       name: new RegExp(workshop.title.replace(/[+]/g, '\\+')),
     })
     .click();
+  await page.locator('#edit-selected-event').click();
   assert.equal(
     await page.locator('[name="targetAudience"]').inputValue(),
     workshop.targetAudience,
@@ -594,6 +595,7 @@ try {
   await page.reload();
   await page.locator('#archived-events').click();
   await page.locator('.event-choice').click();
+  await page.locator('#edit-selected-event').click();
   assert.equal(
     await page.locator('[name="title"]').inputValue(),
     workshop.title,

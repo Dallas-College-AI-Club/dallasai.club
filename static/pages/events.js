@@ -1,3 +1,4 @@
+import { eventText, eventList, eventAgenda } from '../app/event-format.js';
 import { rsvpDialog } from '../app/rsvp-dialog.js';
 import { readEventPlans, saveEventPlan } from '../storage/event-plans.js';
 import {
@@ -32,7 +33,10 @@ export function monthCells(year, month) {
     ...Array(first.getUTCDay()).fill(null),
     ...Array.from({ length: count }, (_, i) => i + 1),
   ];
-  return [...cells, ...Array(42 - cells.length).fill(null)];
+  return [
+    ...cells,
+    ...Array(Math.ceil(cells.length / 7) * 7 - cells.length).fill(null),
+  ];
 }
 const parts = (e) =>
   (e.date || new Date().toISOString()).slice(0, 10).split('-').map(Number);
@@ -58,28 +62,31 @@ export function eventsMarkup() {
     <p id="event-freshness" role="status"></p>
     ${ADMIN_URL ? '<p><a class="outline-link" href="' + escapeHTML(ADMIN_URL) + '">Admin sign in ↗</a></p>' : ''}
     <div class="events-layout">
-      <section class="event-calendar" aria-label="Club event calendar">
-        <div class="calendar-heading">
-          <button id="calendar-prev" aria-label="Previous month">←</button>
-          <h2 id="calendar-month" aria-live="polite"></h2>
-          <button id="calendar-next" aria-label="Next month">→</button>
-        </div>
-        <div class="calendar-week" aria-hidden="true">
-          ${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d) => /* HTML */ `<span>${d}</span>`).join('')}
-        </div>
-        <div id="calendar-days" class="calendar-days"></div>
-        <p class="calendar-key">
-          <i></i> Club event <span>All times Central</span>
-        </p>
-        <div id="calendar-agenda" class="calendar-agenda"></div>
-        <div
+      <aside class="events-browser" aria-label="Find an event">
+        <section
           id="potential-events"
           class="calendar-agenda potential-events"
-        ></div>
-        <button class="calendar-read" id="calendar-read">
-          View event details ↓
-        </button>
-      </section>
+          hidden
+        ></section>
+        <section class="event-calendar" aria-label="Club event calendar">
+          <div class="calendar-heading">
+            <button id="calendar-prev" aria-label="Previous month">←</button>
+            <h2 id="calendar-month" aria-live="polite"></h2>
+            <button id="calendar-next" aria-label="Next month">→</button>
+          </div>
+          <div class="calendar-week" aria-hidden="true">
+            ${['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d) => /* HTML */ `<span>${d}</span>`).join('')}
+          </div>
+          <div id="calendar-days" class="calendar-days"></div>
+          <p class="calendar-key">
+            <i></i> Club event <span>All times Central</span>
+          </p>
+          <div id="calendar-agenda" class="calendar-agenda"></div>
+          <button class="calendar-read" id="calendar-read">
+            View event details ↓
+          </button>
+        </section>
+      </aside>
       <article
         id="event-detail"
         class="event-detail"
@@ -173,11 +180,15 @@ export function mountEvents(root) {
         b.setAttribute('aria-pressed', String(b.dataset.event === e.id)),
       );
     detail();
+    const panel = q('#event-detail');
+    if (innerWidth <= 900 || panel.getBoundingClientRect().top < 0) {
+      panel.scrollIntoView({ block: 'start' });
+      panel.focus({ preventScroll: true });
+    }
   };
   function detail() {
     const panel = q('#event-detail');
     rsvp.update(selected && !eventIsPast(selected) ? selected : null);
-    panel.scrollTop = 0;
     q('#calendar-read').hidden = !selected;
     if (!selected) {
       panel.innerHTML =
@@ -202,10 +213,11 @@ export function mountEvents(root) {
         >
       </div>
       <h2>${escapeHTML(selected.title)}</h2>
+      <div class="event-registration"></div>
       ${selected.potential ? '<p class="potential-notice">Potential event · Share your interest while we plan. Final details and seats are not yet confirmed.</p>' : ''}
-      ${selected.targetAudience ? '<h3>Who is this for?</h3><p>' + escapeHTML(selected.targetAudience) + '</p>' : ''}
-      ${selected.learningOutcomes?.length ? '<h3>Learning outcomes</h3><ul>' + selected.learningOutcomes.map((x) => '<li>' + escapeHTML(x) + '</li>').join('') + '</ul>' : ''}
-      ${selected.summary ? /* HTML */ `<p class="event-description">${escapeHTML(selected.summary)}</p>` : ''}${
+      ${selected.targetAudience ? '<section class="event-richtext"><h3>Who is this for?</h3>' + eventText(selected.targetAudience) + '</section>' : ''}
+      ${selected.learningOutcomes?.length ? '<section class="event-richtext"><h3>Learning outcomes</h3>' + eventList(selected.learningOutcomes) + '</section>' : ''}
+      ${selected.summary ? /* HTML */ `<div class="event-description event-richtext">${eventText(selected.summary)}</div>` : ''}${
         selected.location
           ? /* HTML */ `<div class="event-venue">
               <span>WHERE</span>
@@ -215,18 +227,14 @@ export function mountEvents(root) {
       }${
         selected.agenda.length
           ? /* HTML */ `<h3>${past ? 'Meeting details' : 'On the agenda'}</h3>
-              <ul>
-                ${selected.agenda.map((x) => /* HTML */ `<li>${escapeHTML(x)}</li>`).join('')}
-              </ul>`
+              ${eventAgenda(selected.agenda)}`
           : past
             ? ''
             : '<h3>More details to come</h3><p>The workshop agenda will be announced here.</p>'
       }${
         selected.preparation.length
           ? /* HTML */ `<h3>Before you come</h3>
-              <ul>
-                ${selected.preparation.map((x) => /* HTML */ `<li>${escapeHTML(x)}</li>`).join('')}
-              </ul>`
+              ${eventList(selected.preparation)}`
           : ''
       }
       <div class="event-detail-actions">
@@ -237,7 +245,7 @@ export function mountEvents(root) {
     if (q('#ask-event-question'))
       q('#ask-event-question').onclick = () => questions.open(selected);
     if (!privatePreview && !past && selected.registrationOpen !== false) {
-      panel.insertAdjacentHTML(
+      q('.event-registration').insertAdjacentHTML(
         'beforeend',
         '<button id="open-rsvp" class="solid-link">RSVP' +
           (selected.surveyQuestions?.length
@@ -257,7 +265,7 @@ export function mountEvents(root) {
       `${selected.images?.length ? '<div class="event-gallery">' + selected.images.map((image) => '<figure><img loading="lazy" src="' + escapeHTML(privatePreview && /^data:image\/webp;base64,[A-Za-z0-9+/=]+$/.test(image.previewSrc || '') ? image.previewSrc : EVENTS_API_URL + '?image=' + encodeURIComponent(image.id)) + '" alt="' + escapeHTML(image.alt) + '"></figure>').join('') + '</div>' : ''}`,
     );
     q('.event-calendar-back').onclick = () => {
-      q('.event-calendar').scrollIntoView({ block: 'start' });
+      q('.events-browser').scrollIntoView({ block: 'start' });
       q(`[data-event="${selected.id}"]`)?.focus({ preventScroll: true });
     };
     const goingButton = q('#event-going');
@@ -352,7 +360,7 @@ export function mountEvents(root) {
     ).filter((e) => e.potential && !eventIsPast(e));
     q('#potential-events').hidden = !potential.length;
     q('#potential-events').innerHTML =
-      '<h3>Potential events</h3>' +
+      '<h2>Potential events</h2><p>Help shape what comes next.</p>' +
       potential
         .map(
           (e) =>

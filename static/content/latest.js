@@ -1,3 +1,4 @@
+import { eventPlainText } from '../app/event-format.js';
 import {
   splitEvents,
   eventDate,
@@ -46,7 +47,7 @@ export function buildLatest(now = new Date(), snapshot = PUBLISHED) {
       ? {
           id: next.id,
           title: next.title,
-          summary: next.summary,
+          summary: eventPlainText(next.summary),
           category: next.potential ? 'Potential event' : next.category,
           month,
           day,

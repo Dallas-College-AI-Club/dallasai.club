@@ -1,3 +1,5 @@
+import { eventOverview } from './event-overview.js';
+import { mountTextFormatting } from './text-formatting.js';
 import { surveyEditor } from './survey-editor.js';
 import { mountEventActivity, activityTime } from './event-activity.js';
 const node = (tag, text, className) => {
@@ -31,11 +33,39 @@ const blank = () => ({
 export function mountEventEditor(api) {
   const q = (s) => document.querySelector(s);
   const form = q('#event-form');
+  mountTextFormatting(form);
   const survey = surveyEditor(
     q('#survey-questions'),
     q('#add-survey-question'),
   );
   const activity = mountEventActivity(api);
+  const overview = node('article', undefined, 'event-overview');
+  overview.id = 'event-overview';
+  overview.hidden = true;
+  form.before(overview);
+  const activityPanel = q('#event-activity'),
+    updatedNote = q('#event-updated');
+  const cancel = node('button', 'Cancel editing', 'secondary');
+  cancel.type = 'button';
+  cancel.id = 'cancel-event-edit';
+  form.querySelector('.editor-heading').append(cancel);
+  let editing = false;
+  cancel.onclick = () => {
+    if (!canLeave()) return;
+    if (!current.revision && !current.published) {
+      current = null;
+      editing = false;
+      form.hidden = true;
+      overview.hidden = true;
+      activity.clear();
+      saved = '';
+      q('#event-empty').hidden = false;
+      list();
+      say();
+      return;
+    }
+    edit(current, false);
+  };
   let rows = [],
     current = null,
     saved = '',
@@ -130,7 +160,7 @@ export function mountEventEditor(api) {
     content.images = images.map((image) => ({ ...image }));
     return content;
   }
-  const dirty = () => current && JSON.stringify(values()) !== saved;
+  const dirty = () => editing && current && JSON.stringify(values()) !== saved;
   const canLeave = () =>
     !busy && (!dirty() || confirm('Discard your unsaved event changes?'));
   const state = (row) =>
@@ -214,10 +244,28 @@ export function mountEventEditor(api) {
         ),
       );
   }
-  function edit(row) {
+  function edit(row, editable = false) {
     current = row;
+    editing = editable;
     showArchived = Boolean(row.archived_at);
-    form.hidden = false;
+    form.hidden = !editing;
+    overview.hidden = editing;
+    if (editing) {
+      q('.editor-heading').append(updatedNote);
+      q('.editor-heading').after(activityPanel);
+    } else {
+      activityPanel.remove();
+      updatedNote.remove();
+      overview.replaceChildren(
+        eventOverview(row, state(row), () => {
+          if (!busy) {
+            edit(current, true);
+            q('#event-heading').focus();
+          }
+        }),
+      );
+      overview.append(updatedNote, activityPanel);
+    }
     q('#event-empty').hidden = true;
     q('#event-preview').hidden = true;
     images = (row.draft.images || []).map((image) => ({ ...image }));
@@ -259,13 +307,16 @@ export function mountEventEditor(api) {
     say();
   }
   function newEvent(content = blank()) {
-    edit({
-      id: 'event-' + crypto.randomUUID(),
-      revision: 0,
-      published_revision: 0,
-      published: null,
-      draft: content,
-    });
+    edit(
+      {
+        id: 'event-' + crypto.randomUUID(),
+        revision: 0,
+        published_revision: 0,
+        published: null,
+        draft: content,
+      },
+      true,
+    );
     form.elements.title.focus();
   }
   async function load() {
@@ -310,7 +361,7 @@ export function mountEventEditor(api) {
     dialog.showModal();
   }
   async function save(action) {
-    if (busy || !current) return;
+    if (busy || !current || !editing) return;
     busy = true;
     const version = generation;
     // FormData excludes disabled fields, so collect before locking the form.
@@ -337,7 +388,7 @@ export function mountEventEditor(api) {
         controls.forEach((input) => {
           input.disabled = false;
         });
-        edit(data.event);
+        edit(data.event, true);
         say(
           action === 'publish'
             ? 'Published. The website will show this event on its next refresh.'
@@ -407,6 +458,8 @@ export function mountEventEditor(api) {
     if (showArchived === archived || !canLeave()) return;
     showArchived = archived;
     current = null;
+    editing = false;
+    overview.hidden = true;
     activity.clear();
     saved = '';
     form.hidden = true;
@@ -422,7 +475,7 @@ export function mountEventEditor(api) {
     const id = current?.id;
     await load();
     const updated = rows.find((r) => r.id === id);
-    if (updated) edit(updated);
+    if (updated) edit(updated, editing);
   };
   q('#event-search').oninput = list;
   q('#add-type').onclick = async () => {
@@ -497,6 +550,12 @@ export function mountEventEditor(api) {
     clear() {
       generation++;
       current = null;
+      editing = false;
+      overview.hidden = true;
+      // Preserve activity nodes before clearing private content.
+      q('.editor-heading').append(updatedNote);
+      q('.editor-heading').after(activityPanel);
+      overview.replaceChildren();
       activity.clear();
       showArchived = false;
       rows = [];

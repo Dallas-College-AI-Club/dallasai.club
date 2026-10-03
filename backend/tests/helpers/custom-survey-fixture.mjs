@@ -13,6 +13,7 @@ export async function fixture() {
     '005_screen_confirmations.sql',
     '010_event_surveys.sql',
     '011_custom_surveys.sql',
+    '012_survey_respondents.sql',
   ])
     await db.exec(
       await readFile(new URL('../../' + name, import.meta.url), 'utf8'),
@@ -35,7 +36,7 @@ export async function fixture() {
     throw new RequestError(401, 'Sign in as an officer.');
   };
   const getSession = async (req) => {
-    const advisor = /test-neon=(pearlman|bracewell)/.exec(
+    const advisor = /test-neon=([a-z0-9-]+)/.exec(
       req.headers.cookie || '',
     )?.[1];
     return advisor

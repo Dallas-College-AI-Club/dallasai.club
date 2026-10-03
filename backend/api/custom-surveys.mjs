@@ -6,6 +6,10 @@ import { send, fail, jsonBody, limit } from '../lib/http.mjs';
 import { RequestError } from '../lib/errors.mjs';
 import { definition } from '../lib/survey-contract.mjs';
 import {
+  respondentList,
+  changeRespondent,
+} from '../lib/survey-respondents.mjs';
+import {
   linkedSurvey,
   surveyMembers,
   requireDevice,
@@ -34,6 +38,25 @@ export function customSurveysHandler({
       if (!['GET', 'POST'].includes(req.method))
         throw new RequestError(405, 'Method not allowed.');
       if (req.method === 'POST') adminOrigin(req);
+      if (action === 'members' || action === 'member-change') {
+        const actor = await authorize(req);
+        const db = getDatabase();
+        if (action === 'members' && req.method === 'GET')
+          return send(res, 200, {
+            ...(await respondentList(db, url.searchParams.get('id'))),
+            currentUser: {
+              email: actor.email,
+              name: actor.name || actor.email,
+            },
+          });
+        if (action === 'member-change' && req.method === 'POST')
+          return send(
+            res,
+            200,
+            await changeRespondent(db, actor, await jsonBody(req, 10000)),
+          );
+        throw new RequestError(405, 'Method not allowed.');
+      }
       if (action === 'catalog' || action === 'results') {
         await authorize(req);
         if (req.method !== 'GET')
@@ -156,7 +179,7 @@ export function customSurveysHandler({
               name: m.display_name,
             })),
           },
-          results: await currentResponses(db, survey.id),
+          results: await currentResponses(db, survey.id, member.advisor_id),
         });
       }
       if (action === 'submit' && req.method === 'POST')

@@ -51,7 +51,9 @@ async function api(path = '/api/admin', body) {
   const data = await response.json();
   if (!response.ok) {
     if (response.status === 401) showLogin();
-    throw new Error(data.error || 'Please try again.');
+    const error = new Error(data.error || 'Please try again.');
+    error.status = response.status;
+    throw error;
   }
   return data;
 }

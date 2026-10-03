@@ -29,8 +29,14 @@ export function surveyTrial(definition) {
     const title = node('h3', 'Example admin results');
     title.id = 'trial-results-title';
     dialog.setAttribute('aria-labelledby', title.id);
+    const close = node('button', 'Close results preview');
+    close.type = 'button';
+    close.onclick = () => dialog.close();
+    const header = node('div');
+    header.className = 'survey-trial-header';
+    header.append(title, close);
     dialog.append(
-      title,
+      header,
       node('p', 'Trial respondent · preview only · no saved response'),
     );
     for (const q of definition.questions) {
@@ -49,10 +55,6 @@ export function surveyTrial(definition) {
       card.append(node('h4', q.title), node('p', answer));
       dialog.append(card);
     }
-    const close = node('button', 'Close results preview');
-    close.type = 'button';
-    close.onclick = () => dialog.close();
-    dialog.append(close);
     root.append(dialog);
     dialog.onclose = () => dialog.remove();
     dialog.showModal();

@@ -8,7 +8,8 @@ export async function mountRespondents(root, surveyId, api, onChanged) {
   root.append(node('p', 'Loading respondents…'));
   try {
     const data = await api(
-      '/api/custom-surveys?action=members&id=' + encodeURIComponent(surveyId),
+      '/api/custom-surveys?action=members&id=' +
+        encodeURIComponent(surveyId),
     );
     if (!root.isConnected) return;
     root.replaceChildren(
@@ -44,6 +45,7 @@ export async function mountRespondents(root, surveyId, api, onChanged) {
       };
       try {
         await api('/api/custom-surveys?action=member-change', pending.body);
+        if (!root.isConnected) return;
         pending = null;
         await onChanged();
       } catch (error) {
@@ -53,7 +55,9 @@ export async function mountRespondents(root, surveyId, api, onChanged) {
         if (error.status && error.status < 500) pending = null;
       } finally {
         busy = false;
-        root.querySelectorAll('button').forEach((b) => (b.disabled = false));
+        root
+          .querySelectorAll('button')
+          .forEach((b) => (b.disabled = false));
       }
     }
     const active = node('div', undefined, 'respondent-list');
@@ -79,7 +83,11 @@ export async function mountRespondents(root, surveyId, api, onChanged) {
         change(
           member.active
             ? { action: 'remove', advisorId: member.advisor_id }
-            : { action: 'add', name: member.display_name, email: member.email },
+            : {
+                action: 'add',
+                name: member.display_name,
+                email: member.email,
+              },
         );
       row.append(person, button);
       (member.active ? active : removed).append(row);
@@ -132,7 +140,9 @@ export async function mountRespondents(root, surveyId, api, onChanged) {
     const history = node('details');
     history.append(node('summary', 'Respondent activity'));
     if (!data.activity.length)
-      history.append(node('p', 'No respondent changes recorded yet.', 'hint'));
+      history.append(
+        node('p', 'No respondent changes recorded yet.', 'hint'),
+      );
     const labels = {
       respondent_added: 'Added',
       respondent_restored: 'Restored',

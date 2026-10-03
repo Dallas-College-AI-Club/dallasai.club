@@ -9,8 +9,14 @@ function node(tag, text, className) {
 }
 export function mountCustomSurveys(root, api) {
   let generation = 0,
-    selected = '';
+    selected = '',
+    builder;
+  function stopBuilder() {
+    builder?.dispose();
+    builder = null;
+  }
   async function load() {
+    stopBuilder();
     const current = ++generation;
     root.replaceChildren(node('p', 'Loading custom surveys…'));
     try {
@@ -26,7 +32,7 @@ export function mountCustomSurveys(root, api) {
       const create = node('button', 'Create custom survey');
       const edit = (id) => {
         generation++;
-        mountSurveyBuilder(
+        builder = mountSurveyBuilder(
           root,
           api,
           async (next) => {
@@ -71,7 +77,8 @@ export function mountCustomSurveys(root, api) {
             '/api/custom-surveys?action=results&id=' +
               encodeURIComponent(selected),
           );
-          if (current !== generation || request !== requestGeneration) return;
+          if (current !== generation || request !== requestGeneration)
+            return;
           content.replaceChildren(
             node(
               'p',
@@ -102,9 +109,26 @@ export function mountCustomSurveys(root, api) {
                 close.disabled = true;
                 closeNote.textContent =
                   'Closing stops previews and new answers. Saved results remain available.';
-                const confirm = node('button', 'Confirm close', 'secondary');
+                const confirm = node(
+                  'button',
+                  'Confirm close',
+                  'secondary',
+                );
+                const cancel = node(
+                  'button',
+                  'Cancel closing',
+                  'secondary',
+                );
+                cancel.onclick = () => {
+                  confirm.remove();
+                  cancel.remove();
+                  close.disabled = false;
+                  closeNote.textContent = '';
+                  close.focus();
+                };
                 confirm.onclick = async () => {
                   confirm.disabled = true;
+                  cancel.disabled = true;
                   try {
                     const { survey: latest } = await api(
                       '/api/custom-surveys?action=draft&id=' + survey.id,
@@ -116,13 +140,28 @@ export function mountCustomSurveys(root, api) {
                       expectedRevision: latest.edit_revision,
                       requestId: crypto.randomUUID(),
                     });
+                    if (
+                      current !== generation ||
+                      request !== requestGeneration
+                    )
+                      return;
+                    const reloadGeneration = generation + 1;
                     await load();
+                    if (generation !== reloadGeneration) return;
+                    const notice = node(
+                      'p',
+                      'Survey closed. Saved responses remain available.',
+                    );
+                    notice.setAttribute('role', 'status');
+                    root.prepend(notice);
                   } catch (error) {
                     closeNote.textContent = error.message;
                     confirm.disabled = false;
+                    cancel.disabled = false;
                   }
                 };
                 content.insertBefore(confirm, closeNote);
+                content.insertBefore(cancel, closeNote);
               };
               content.append(close, closeNote);
             }
@@ -130,11 +169,13 @@ export function mountCustomSurveys(root, api) {
           content.append(
             node(
               'p',
-              'Private link expires ' +
-                new Date(survey.expires_at).toLocaleString('en-US', {
-                  timeZone: 'America/Chicago',
-                }) +
-                ' Central.',
+              survey.status === 'draft'
+                ? 'Draft · the answering period begins when you publish.'
+                : 'Private link expires ' +
+                    new Date(survey.expires_at).toLocaleString('en-US', {
+                      timeZone: 'America/Chicago',
+                    }) +
+                    ' Central.',
             ),
           );
           if (survey.privateLink || survey.previewLink) {
@@ -171,7 +212,8 @@ export function mountCustomSurveys(root, api) {
                 notice.textContent =
                   'Preview link copied. Answer controls are disabled.';
               } catch {
-                notice.textContent = 'Copy this preview link: ' + preview.href;
+                notice.textContent =
+                  'Copy this preview link: ' + preview.href;
               }
             };
             const actions = node('div', undefined, 'entry-actions');
@@ -186,13 +228,15 @@ export function mountCustomSurveys(root, api) {
           );
           content.append(respondents);
           await mountRespondents(respondents, selected, api, load);
-          if (current !== generation || request !== requestGeneration) return;
+          if (current !== generation || request !== requestGeneration)
+            return;
           if (survey.definition) {
             const { survey: detail } = await api(
               '/api/custom-surveys?action=draft&id=' +
                 encodeURIComponent(selected),
             );
-            if (current !== generation || request !== requestGeneration) return;
+            if (current !== generation || request !== requestGeneration)
+              return;
             const history = node('details');
             history.append(node('summary', 'Survey activity'));
             for (const entry of detail.activity)
@@ -227,18 +271,35 @@ export function mountCustomSurveys(root, api) {
       refresh.onclick = load;
       await show();
     } catch (error) {
-      if (current === generation)
+      if (current === generation) {
         root.replaceChildren(node('p', error.message));
+        const retry = node('button', 'Try loading surveys again');
+        retry.onclick = load;
+        root.append(retry);
+      }
     }
   }
   return {
     load,
+    canLeave() {
+      return builder?.canLeave() !== false;
+    },
+    leave() {
+      if (builder?.canLeave() === false) return false;
+      if (builder) {
+        generation++;
+        stopBuilder();
+        root.replaceChildren();
+      }
+      return true;
+    },
     show(id) {
       selected = id;
       return load();
     },
     clear() {
       generation++;
+      stopBuilder();
       selected = '';
       root.replaceChildren();
     },

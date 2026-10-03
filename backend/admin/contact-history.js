@@ -15,6 +15,7 @@ const labels = {
   contribution: 'AI Review submission',
 };
 export function contactHistory(api, onChange = () => {}) {
+  const drafts = new Map();
   const dialog = node('dialog', undefined, 'contact-dialog');
   dialog.setAttribute('aria-labelledby', 'contact-heading');
   const close = node('button', 'Close', 'secondary'),
@@ -25,7 +26,7 @@ export function contactHistory(api, onChange = () => {}) {
       'hint',
     );
   heading.id = 'contact-heading';
-  const toolbar = node('div', undefined, 'heading');
+  const toolbar = node('div', undefined, 'heading contact-dialog-heading');
   toolbar.append(heading, close);
   const searchForm = node('form', undefined, 'survey-tools'),
     label = node('label', 'Find a contact by name or email'),
@@ -49,9 +50,12 @@ export function contactHistory(api, onChange = () => {}) {
   const content = node('div'),
     paging = node('div', undefined, 'pagination'),
     prev = node('button', 'Previous', 'secondary'),
-    next = node('button', 'Next', 'secondary');
+    next = node('button', 'Next', 'secondary'),
+    retry = node('button', 'Try loading contacts again', 'secondary');
+  retry.hidden = true;
+  retry.onclick = () => load();
   paging.append(prev, next);
-  dialog.append(toolbar, intro, searchForm, status, content, paging);
+  dialog.append(toolbar, intro, searchForm, status, retry, content, paging);
   document.body.append(dialog);
   let generation = 0,
     email = '',
@@ -65,6 +69,7 @@ export function contactHistory(api, onChange = () => {}) {
   });
   async function load() {
     const version = ++generation;
+    retry.hidden = true;
     status.textContent = 'Loading contacts…';
     content.replaceChildren();
     prev.disabled = next.disabled = true;
@@ -91,9 +96,18 @@ export function contactHistory(api, onChange = () => {}) {
           );
           button.append(
             node('strong', c.name || c.email),
-            node('span', c.emails.join(' · ')),
+            node('span', c.email),
             node('small', c.submissions + ' website submissions'),
           );
+          if (c.emails.length > 1)
+            button.append(
+              node(
+                'small',
+                new Set(c.emails).size -
+                  1 +
+                  ' additional linked email address(es)',
+              ),
+            );
           if (c.is_test)
             button.append(node('span', 'Test contact', 'contact-badge'));
           if (c.deleted_at)
@@ -122,7 +136,10 @@ export function contactHistory(api, onChange = () => {}) {
           node('p', 'Primary email: ' + email, 'contact-note-text'),
           node(
             'p',
-            'Linked emails: ' + data.contact.emails.join(' · '),
+            'Other linked emails: ' +
+              ([...new Set(data.contact.emails)]
+                .filter((address) => address !== email)
+                .join(' · ') || 'None'),
             'contact-note-text',
           ),
           node(
@@ -140,26 +157,39 @@ export function contactHistory(api, onChange = () => {}) {
         note.rows = 3;
         note.maxLength = 5000;
         note.required = true;
+        const address = data.contact.email;
+        const previous = drafts.get(address);
+        note.value = previous?.text || '';
         noteLabel.append(note);
         noteStatus.setAttribute('role', 'status');
         form.append(noteLabel, save, noteStatus);
         if (!data.contact.deleted_at) content.append(form);
-        let noteId = crypto.randomUUID();
+        let noteId = previous?.id || crypto.randomUUID();
+        if (previous)
+          noteStatus.textContent =
+            'Unsaved note restored. Select Save note to add it to the contact history.';
         note.oninput = () => {
           noteId = crypto.randomUUID();
+          if (note.value)
+            drafts.set(address, { text: note.value, id: noteId });
+          else drafts.delete(address);
         };
         form.onsubmit = async (event) => {
           event.preventDefault();
+          if (save.disabled) return;
+          const submittedId = noteId;
           save.disabled = true;
           note.disabled = true;
           noteStatus.textContent = 'Saving note…';
           try {
             await api('/api/surveys', {
               action: 'contact-note',
-              email,
-              noteId,
+              email: address,
+              noteId: submittedId,
               note: note.value,
             });
+            if (drafts.get(address)?.id === submittedId)
+              drafts.delete(address);
             if (version !== generation) return;
             offset = 0;
             await load();
@@ -231,7 +261,10 @@ export function contactHistory(api, onChange = () => {}) {
       prev.disabled = offset === 0;
       next.disabled = !data.hasMore;
     } catch (error) {
-      if (version === generation) status.textContent = error.message;
+      if (version === generation) {
+        status.textContent = error.message;
+        retry.hidden = false;
+      }
     }
   }
   function management(contact, version) {
@@ -275,6 +308,22 @@ export function contactHistory(api, onChange = () => {}) {
         if (!fresh()) return;
         if (result.purged || result.deleted) email = '';
         else email = result.email;
+        if (result.purged)
+          for (const address of contact.emails) drafts.delete(address);
+        if (result.merged) {
+          const combined = [
+            drafts.get(result.email),
+            ...contact.emails.map((address) => drafts.get(address)),
+          ].filter(Boolean);
+          for (const address of contact.emails) drafts.delete(address);
+          if (combined.length)
+            drafts.set(result.email, {
+              text: [...new Set(combined.map((draft) => draft.text))].join(
+                '\n\n',
+              ),
+              id: crypto.randomUUID(),
+            });
+        }
         offset = 0;
         await load();
         if (dialog.open)
@@ -498,7 +547,19 @@ export function contactHistory(api, onChange = () => {}) {
     offset += 50;
     load();
   };
+  window.addEventListener('beforeunload', (event) => {
+    if (drafts.size) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  });
   return {
+    canLeave() {
+      return (
+        !drafts.size ||
+        confirm('Discard your unsaved contact notes and sign out?')
+      );
+    },
     open(address = '') {
       email = address;
       view.value = 'active';
@@ -508,6 +569,7 @@ export function contactHistory(api, onChange = () => {}) {
     },
     clear() {
       generation++;
+      drafts.clear();
       if (dialog.open) dialog.close();
       content.replaceChildren();
       search.value = '';

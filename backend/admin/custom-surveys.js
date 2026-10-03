@@ -162,7 +162,7 @@ export function mountCustomSurveys(root, api) {
         }
       }
       select.onchange = show;
-      refresh.onclick = show;
+      refresh.onclick = load;
       await show();
     } catch (error) {
       if (current === generation)

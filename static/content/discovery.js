@@ -16,20 +16,27 @@ export function stationUpdates(id, snapshot = PUBLISHED) {
   if (id === 'projects')
     return [
       ...snapshot.discovery.projects,
-      ...(snapshot.projects?.PROPOSED_PROJECTS || PROPOSED_PROJECTS).map((project) => ({
-        id: project.id,
-        label: 'PROJECTS · IDEAS IN MOTION',
-        title: project.title,
-        body: project.summary,
-        action: 'Explore the concept',
-        mode: 'projects',
-      })),
+      ...(snapshot.projects?.PROPOSED_PROJECTS || PROPOSED_PROJECTS).map(
+        (project) => ({
+          id: project.id,
+          label: 'PROJECTS · IDEAS IN MOTION',
+          title: project.title,
+          body: project.summary,
+          action: 'Explore the concept',
+          mode: 'projects',
+        }),
+      ),
     ];
   if (id === 'events') {
     const { upcoming, past } = splitEvents(new Date(), snapshot.events);
     return [...upcoming, ...past].map((e) => ({
       id: 'event-' + e.id,
-      label: (upcoming.includes(e) ? 'COMING UP · ' : 'PAST EVENT · ') + eventDate(e),
+      label:
+        (upcoming.includes(e)
+          ? e.potential
+            ? 'POTENTIAL EVENT · '
+            : 'COMING UP · '
+          : 'PAST EVENT · ') + eventDate(e),
       title: e.title,
       body: e.summary,
       action: 'View events',

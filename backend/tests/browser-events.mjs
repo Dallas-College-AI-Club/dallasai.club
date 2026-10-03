@@ -199,7 +199,7 @@ try {
   await page.getByRole('button', { name: 'New event', exact: true }).click();
   assert.deepEqual(
     await page.locator('[name="category"] option').allTextContents(),
-    ['Workshop', 'Meeting', 'Talk', 'Hackathon'],
+    ['Workshop', 'Meeting', 'Talk', 'Hackathon', 'Social'],
   );
   for (const [key, value] of Object.entries(workshop)) {
     const input = page.locator('#event-form [name="' + key + '"]');
@@ -449,6 +449,7 @@ try {
   await publicPage.waitForFunction(
     () => document.querySelector('.event-gallery img')?.naturalWidth > 0,
   );
+  await publicPage.locator('#open-rsvp').click();
   await publicPage.locator('#event-rsvp [name="name"]').fill('Keep my details');
   await page.locator('[name="title"]').fill('Private draft title');
   await page.getByRole('button', { name: 'Save draft', exact: true }).click();
@@ -531,7 +532,7 @@ try {
   await publicPage
     .getByText('RSVPs are closed for this event.', { exact: true })
     .waitFor();
-  assert.equal(await publicPage.locator('#event-rsvp').count(), 0);
+  assert.equal(await publicPage.locator('#event-rsvp:visible').count(), 0);
   await page.locator('[name="title"]').fill(workshop.title);
   await page
     .getByRole('button', { name: 'Publish event', exact: true })
@@ -705,7 +706,7 @@ try {
     (await (await fetch(origin + '/api/events')).json()).events.length,
     0,
   );
-  assert.equal(await publicPage.locator('#event-rsvp').count(), 0);
+  assert.equal(await publicPage.locator('#event-rsvp:visible').count(), 0);
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await page
     .getByRole('button', { name: 'Send sign-in code', exact: true })

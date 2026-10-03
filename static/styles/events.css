@@ -506,3 +506,15 @@
   object-position: left center;
   border-radius: 12px;
 }
+
+.potential-events {
+  min-height: 0;
+  border-top: 1px solid var(--line, #cbd5c6);
+  margin-top: 20px;
+  padding-top: 12px;
+}
+.potential-notice {
+  padding: 14px;
+  border-radius: 10px;
+  background: var(--surface-alt, #e8eee1);
+}

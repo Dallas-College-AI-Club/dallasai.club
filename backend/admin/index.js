@@ -1,3 +1,4 @@
+import { mountSurveyResults } from './survey-results.js';
 import { createAuthClient } from 'better-auth/client';
 import { emailOTPClient } from 'better-auth/client/plugins';
 import { mountEventEditor } from './event-editor.js';
@@ -70,6 +71,8 @@ function showLogin() {
   q('#events-pane').hidden = true;
   q('#inbox-pane').hidden = false;
   editor.clear();
+  surveys.clear();
+  q('#surveys-pane').hidden = true;
 }
 function filters() {
   const params = new URLSearchParams([
@@ -106,12 +109,32 @@ function renderEntry(entry) {
       entry.state === 'active' ? 'Received in club inbox' : entry.state,
     ),
   );
+  if (entry.kind === 'rsvp') {
+    card.append(
+      node(
+        'p',
+        entry.data.eventTitle +
+          ' · ' +
+          (entry.data.eventDate?.slice(0, 10) || 'TBD'),
+      ),
+    );
+    if (entry.data.hasSurvey) {
+      const button = node('button', 'View survey answers');
+      button.onclick = () => {
+        if (showPane('surveys', true) === false) return;
+        history.replaceState({}, '', '#survey=' + entry.id);
+        surveys.show(entry.id);
+      };
+      card.append(button);
+    }
+  }
   const details = node('details');
   details.append(node('summary', 'Submission details'));
   for (const [key, value] of Object.entries(entry.data)) {
+    if (['hasSurvey', 'potential'].includes(key)) continue;
     details.append(
       node('strong', key.replace(/([A-Z])/g, ' $1')),
-      node('pre', String(value)),
+      node('pre', key === 'eventDate' && !value ? 'TBD' : String(value)),
     );
   }
   for (const file of entry.attachments) {
@@ -205,7 +228,8 @@ async function load({ background = false } = {}) {
     eventSelect.replaceChildren(
       new Option('All upcoming events', ''),
       ...(data.events || []).map(
-        (e) => new Option(e.title + ' · ' + e.date.slice(0, 10), e.id),
+        (e) =>
+          new Option(e.title + ' · ' + (e.date?.slice(0, 10) || 'TBD'), e.id),
       ),
     );
     if (
@@ -214,6 +238,11 @@ async function load({ background = false } = {}) {
       eventSelect.value = selectedEvent;
     if (location.hash === '#events' && q('#events-pane').hidden)
       showPane('events');
+    if (
+      (location.hash === '#surveys' || location.hash.startsWith('#survey=')) &&
+      q('#surveys-pane').hidden
+    )
+      showPane('surveys', true);
     q('#counts').replaceChildren(
       ...Object.entries(labels).map(([kind, label]) => {
         const count = data.counts.find((x) => x.kind === kind) || {
@@ -422,21 +451,33 @@ q('#signout').onclick = async () => {
   }
 };
 const editor = mountEventEditor(api);
+const surveys = mountSurveyResults(api);
 function showPane(name, keepHash = false) {
   if (name !== 'events' && !editor.canLeave()) return false;
-  q('#inbox-pane').hidden = name === 'events';
-  q('#events-pane').hidden = name !== 'events';
-  q('#inbox-tab').setAttribute('aria-pressed', String(name !== 'events'));
-  q('#events-tab').setAttribute('aria-pressed', String(name === 'events'));
+  for (const pane of ['inbox', 'events', 'surveys']) {
+    q('#' + pane + '-pane').hidden = name !== pane;
+    q('#' + pane + '-tab').setAttribute('aria-pressed', String(name === pane));
+  }
   if (!keepHash)
     history.replaceState(
       {},
       '',
-      name === 'events' ? '#events' : location.pathname,
+      name === 'inbox' ? location.pathname : '#' + name,
     );
   if (name === 'events') editor.show();
+  if (name === 'surveys')
+    surveys.show(
+      new URLSearchParams(location.hash.slice(1)).get('survey') || '',
+    );
 }
 window.addEventListener('hashchange', () => {
+  if (
+    signedIn &&
+    (location.hash === '#surveys' || location.hash.startsWith('#survey='))
+  ) {
+    showPane('surveys', true);
+    return;
+  }
   if (!signedIn || !new URLSearchParams(location.hash.slice(1)).get('entry'))
     return;
   if (showPane('inbox', true) === false) return;
@@ -446,6 +487,7 @@ window.addEventListener('hashchange', () => {
   q('#event-filter-label').hidden = true;
   load();
 });
+q('#surveys-tab').onclick = () => showPane('surveys');
 q('#events-tab').onclick = () => showPane('events');
 q('#inbox-tab').onclick = () => showPane('inbox');
 q('#refresh').onclick = () => {

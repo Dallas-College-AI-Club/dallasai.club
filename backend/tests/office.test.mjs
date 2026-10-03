@@ -92,7 +92,7 @@ after(async () => {
   await new Promise((resolve) => server.close(resolve));
   await db.close();
 });
-test('legacy event types collapse into four groups without rewriting event details or duplicating aliases', async () => {
+test('legacy event types include Social and collapse legacy aliases without rewriting event details or duplicating aliases', async () => {
   const originals = [
     'Club event',
     'Club meeting',
@@ -115,6 +115,7 @@ test('legacy event types collapse into four groups without rewriting event detai
     'Meeting',
     'Talk',
     'Hackathon',
+    'Social',
   ]);
   const types = await addEventType(
     db,

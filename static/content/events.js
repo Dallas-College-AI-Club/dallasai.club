@@ -15,7 +15,9 @@ function cleanEvent(event) {
     !/^[a-z0-9][a-z0-9-]{0,99}$/.test(event.id) ||
     typeof event.title !== 'string' ||
     typeof event.date !== 'string' ||
-    !Number.isFinite(Date.parse(event.date))
+    (event.date
+      ? !Number.isFinite(Date.parse(event.date))
+      : event.potential !== true)
   )
     throw new Error('Invalid event');
   let meetingUrl = '';
@@ -29,6 +31,14 @@ function cleanEvent(event) {
     id: event.id,
     title: event.title,
     date: event.date,
+    potential: event.potential === true,
+    requireEduEmail:
+      event.requireEduEmail ?? event.category?.toLowerCase() === 'social',
+    surveyIntro: String(event.surveyIntro || ''),
+    surveyVersion: String(event.surveyVersion || ''),
+    surveyQuestions: Array.isArray(event.surveyQuestions)
+      ? event.surveyQuestions
+      : [],
     end: event.end || null,
     category: String(event.category || 'Club event'),
     summary: String(event.summary || ''),

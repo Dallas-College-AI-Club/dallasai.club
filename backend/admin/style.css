@@ -961,3 +961,26 @@ input::file-selector-button {
     grid-template-columns: 1fr;
   }
 }
+
+.survey-editor-question {
+  border: 1px solid var(--line, #ced5cd);
+  border-radius: 12px;
+  margin: 20px 0;
+  padding: 20px;
+  min-width: 0;
+}
+.survey-response dt {
+  font-weight: 600;
+  margin-top: 20px;
+}
+.survey-response dd {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 8px 0 0;
+}
+#survey-event {
+  max-width: 100%;
+}
+.office-tabs {
+  flex-wrap: wrap;
+}

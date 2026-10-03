@@ -1,3 +1,4 @@
+import { rsvpDialog } from '../app/rsvp-dialog.js';
 import { readEventPlans, saveEventPlan } from '../storage/event-plans.js';
 import {
   formFooter,
@@ -33,7 +34,8 @@ export function monthCells(year, month) {
   ];
   return [...cells, ...Array(42 - cells.length).fill(null)];
 }
-const parts = (e) => e.date.slice(0, 10).split('-').map(Number);
+const parts = (e) =>
+  (e.date || new Date().toISOString()).slice(0, 10).split('-').map(Number);
 export function eventsMarkup() {
   return /* HTML */ `<header class="space-masthead">
       <div class="space-title-row">
@@ -70,6 +72,10 @@ export function eventsMarkup() {
           <i></i> Club event <span>All times Central</span>
         </p>
         <div id="calendar-agenda" class="calendar-agenda"></div>
+        <div
+          id="potential-events"
+          class="calendar-agenda potential-events"
+        ></div>
         <button class="calendar-read" id="calendar-read">
           View event details ↓
         </button>
@@ -131,7 +137,7 @@ export function mountEvents(root) {
   const stopWorkshop = mountForm(root.querySelector('#workshop-form'), {
     kind: 'workshop',
   });
-  let stopRSVP = () => {};
+  const rsvp = rsvpDialog(root);
   const q = (s) => root.querySelector(s),
     requested = new URLSearchParams(location.search).get('event');
   let fallback =
@@ -170,14 +176,7 @@ export function mountEvents(root) {
   };
   function detail() {
     const panel = q('#event-detail');
-    const existingRSVP = panel.querySelector('#event-rsvp');
-    const keepRSVP =
-      existingRSVP &&
-      existingRSVP.dataset.eventId === selected?.id &&
-      selected.registrationOpen !== false &&
-      !eventIsPast(selected);
-    if (keepRSVP) existingRSVP.remove();
-    else stopRSVP();
+    rsvp.update(selected && !eventIsPast(selected) ? selected : null);
     panel.scrollTop = 0;
     q('#calendar-read').hidden = !selected;
     if (!selected) {
@@ -193,16 +192,17 @@ export function mountEvents(root) {
       <div class="event-detail-meta">
         <span class="tag">${escapeHTML(selected.category)}</span
         ><span
-          >${privatePreview ? 'PRIVATE DRAFT PREVIEW' : past ? 'Past event' : 'Coming up'}</span
+          >${privatePreview ? 'PRIVATE DRAFT PREVIEW' : past ? 'Past event' : selected.potential ? 'Potential event' : 'Coming up'}</span
         >
       </div>
       <div class="event-detail-date">
-        ${selected.date ? eventDate(selected) : 'Date to be decided'}
+        ${selected.date ? eventDate(selected) : 'TBD'}
         <span
-          >${selected.date ? parts(selected)[0] + ' · ' + eventTime(selected) : 'Time and location can be added later.'}</span
+          >${selected.date ? parts(selected)[0] + ' · ' + eventTime(selected) : 'Date and time to be decided.'}</span
         >
       </div>
       <h2>${escapeHTML(selected.title)}</h2>
+      ${selected.potential ? '<p class="potential-notice">Potential event · Share your interest while we plan. Final details and seats are not yet confirmed.</p>' : ''}
       ${selected.targetAudience ? '<h3>Who is this for?</h3><p>' + escapeHTML(selected.targetAudience) + '</p>' : ''}
       ${selected.learningOutcomes?.length ? '<h3>Learning outcomes</h3><ul>' + selected.learningOutcomes.map((x) => '<li>' + escapeHTML(x) + '</li>').join('') + '</ul>' : ''}
       ${selected.summary ? /* HTML */ `<p class="event-description">${escapeHTML(selected.summary)}</p>` : ''}${
@@ -231,26 +231,21 @@ export function mountEvents(root) {
       }
       <div class="event-detail-actions">
         ${selected.meetingUrl ? '<a class="outline-link" target="_blank" rel="noopener" href="' + escapeHTML(selected.meetingUrl) + '">Open meeting link ↗</a>' : ''}
-        ${past || privatePreview ? '' : /* HTML */ `<button id="event-going" class="solid-link" aria-pressed="${going}">${going ? '✓ In my plans' : 'Save to my plans'}</button><button id="save-event" class="outline-link">Add to calendar ↓</button>`}${privatePreview ? '' : '<button id="ask-event-question" class="outline-link">Ask about this event</button>'}
+        ${past || privatePreview ? '' : /* HTML */ `<button id="event-going" class="solid-link" aria-pressed="${going}">${going ? '✓ In my plans' : 'Save to my plans'}</button>${selected.date ? '<button id="save-event" class="outline-link">Add to calendar ↓</button>' : ''}`}${privatePreview ? '' : '<button id="ask-event-question" class="outline-link">Ask about this event</button>'}
       </div>
       ${past || privatePreview ? '' : /* HTML */ `<p id="event-plan-status" class="event-plan-status" role="status">${going ? 'Saved on this device. Select again to remove.' : 'Save to your plans on this device.'}</p>`}`;
     if (q('#ask-event-question'))
       q('#ask-event-question').onclick = () => questions.open(selected);
-    if (keepRSVP) panel.append(existingRSVP);
-    else if (!privatePreview && !past && selected.registrationOpen !== false) {
+    if (!privatePreview && !past && selected.registrationOpen !== false) {
       panel.insertAdjacentHTML(
         'beforeend',
-        `<form id="event-rsvp" class="club-form rsvp-form"><h3>RSVP for this event</h3>${identityFields()}${formFooter('Save my RSVP', 'I would like to register for this event and receive messages about my RSVP.')}</form>`,
+        '<button id="open-rsvp" class="solid-link">RSVP' +
+          (selected.surveyQuestions?.length
+            ? ' & answer questions'
+            : ' for this event') +
+          '</button>',
       );
-      stopRSVP = mountForm(q('#event-rsvp'), {
-        kind: 'rsvp',
-        extra: { eventId: selected.id },
-        onDone: () => {
-          q('#event-detail').scrollIntoView({ block: 'start' });
-          q('#event-detail').focus({ preventScroll: true });
-        },
-      });
-      q('#event-rsvp').dataset.eventId = selected.id;
+      q('#open-rsvp').onclick = () => rsvp.open(selected);
     } else if (!privatePreview && !past) {
       panel.insertAdjacentHTML(
         'beforeend',
@@ -350,12 +345,38 @@ export function mountEvents(root) {
         (fallback
           ? '<button id="next-announced">View club events →</button>'
           : '');
+    const potential = (
+      previewEvent
+        ? [...EVENTS.filter((e) => e.id !== previewEvent.id), previewEvent]
+        : EVENTS
+    ).filter((e) => e.potential && !eventIsPast(e));
+    q('#potential-events').hidden = !potential.length;
+    q('#potential-events').innerHTML =
+      '<h3>Potential events</h3>' +
+      potential
+        .map(
+          (e) =>
+            '<button data-event="' +
+            e.id +
+            '" aria-pressed="' +
+            (selected?.id === e.id) +
+            '"><span>' +
+            eventDate(e) +
+            '</span><strong>' +
+            escapeHTML(e.title) +
+            '</strong><b aria-hidden="true">↗</b></button>',
+        )
+        .join('');
     root
       .querySelectorAll('[data-event]')
       .forEach(
         (b) =>
           (b.onclick = () =>
-            choose(EVENTS.find((e) => e.id === b.dataset.event))),
+            choose(
+              previewEvent?.id === b.dataset.event
+                ? previewEvent
+                : EVENTS.find((e) => e.id === b.dataset.event),
+            )),
       );
     if (q('#next-announced'))
       q('#next-announced').onclick = () => {
@@ -491,7 +512,7 @@ export function mountEvents(root) {
     document.removeEventListener('club:events-updated', updated);
     document.removeEventListener('club:events-status', freshness);
     stopWorkshop();
-    stopRSVP();
+    rsvp.destroy();
     questions.destroy();
     window.removeEventListener('message', previewMessage);
     document.removeEventListener('click', preventPreviewActions, true);

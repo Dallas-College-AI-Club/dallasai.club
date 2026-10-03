@@ -16,8 +16,8 @@ export const formFooter = (
   <label class="form-consent"><input name="consent" type="checkbox" required> <span>${consent}</span></label>
   <p class="form-note">Your information is shared with authorized club officers. <a href="privacy.html">How we use your information</a></p>
   <button type="submit" class="solid-link">${label}</button><p class="form-status" role="status" aria-live="polite"></p>`;
-export const identityFields = () =>
-  `<label>Your name<input name="name" autocomplete="name" maxlength="100" required></label><label>Email address<input name="email" type="email" autocomplete="email" maxlength="254" required placeholder="you@example.com"></label>`;
+export const identityFields = (educationOnly = false) =>
+  `<label>Your name<input name="name" autocomplete="name" maxlength="100" required></label><label>Email address<input name="email" type="email" autocomplete="email" maxlength="254" required placeholder="${educationOnly ? 'you@student.dallascollege.edu' : 'you@example.com'}" ${educationOnly ? 'pattern="[^\\s@]+@[^\\s@]+[.][eE][dD][uU]" title="Use a college or alumni email address ending in .edu."' : ''}>${educationOnly ? '<span>Use a college or alumni email address ending in .edu.</span>' : ''}</label>`;
 export async function request(endpoint, body, signal) {
   if (!formsURL)
     throw new Error('Forms are being connected. Please try again later.');
@@ -79,14 +79,21 @@ async function encodeFiles(files) {
 const confirmationTitles = {
   join: 'Welcome to the club!',
   subscribe: 'Subscription request received',
-  rsvp: 'You’re on the RSVP list',
+  rsvp: 'RSVP received',
   contribution: 'Contribution received',
   workshop: 'Workshop request received',
   question: 'Question received',
 };
 export function mountForm(
   form,
-  { kind, extra = {}, onSuccess = () => {}, doneURL = 'club.html', onDone },
+  {
+    kind,
+    extra = {},
+    onSuccess = () => {},
+    serialize = () => ({}),
+    doneURL = 'club.html',
+    onDone,
+  },
 ) {
   const controller = new AbortController();
   const dialog = form.closest('dialog');
@@ -134,6 +141,7 @@ export function mountForm(
         body = {
           ...Object.fromEntries(data),
           ...extra,
+          ...serialize(data),
           kind,
           consent: data.get('consent') === 'on',
         };

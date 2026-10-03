@@ -97,11 +97,13 @@ const searchEntries = () => [
         ...(e.learningOutcomes || []),
         ...e.agenda,
         ...e.preparation,
-        new Intl.DateTimeFormat('en-US', {
-          month: 'long',
-          year: 'numeric',
-          timeZone: 'UTC',
-        }).format(new Date(e.date.slice(0, 10))),
+        e.date
+          ? new Intl.DateTimeFormat('en-US', {
+              month: 'long',
+              year: 'numeric',
+              timeZone: 'UTC',
+            }).format(new Date(e.date.slice(0, 10)))
+          : 'TBD potential event',
       ].join(' '),
       href: e.url,
     })),

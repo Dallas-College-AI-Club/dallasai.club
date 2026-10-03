@@ -25,6 +25,9 @@
     },
     "api/maintenance.mjs": {
       "maxDuration": 30
+    },
+    "api/surveys.mjs": {
+      "maxDuration": 30
     }
   },
   "crons": [

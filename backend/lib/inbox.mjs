@@ -10,10 +10,11 @@ export function upcomingEvents(events, now = new Date()) {
   return events
     .filter(
       (e) =>
-        e.date &&
-        (/^\d{4}-\d{2}-\d{2}$/.test(e.date)
-          ? e.date >= today
-          : new Date(e.end || e.date) > now),
+        (e.potential === true && !e.date) ||
+        (e.date &&
+          (/^\d{4}-\d{2}-\d{2}$/.test(e.date)
+            ? e.date >= today
+            : new Date(e.end || e.date) > now)),
     )
     .sort((a, b) => a.date.localeCompare(b.date));
 }

@@ -1,4 +1,10 @@
-export const coreEventTypes = ['Workshop', 'Meeting', 'Talk', 'Hackathon'];
+export const coreEventTypes = [
+  'Workshop',
+  'Meeting',
+  'Talk',
+  'Hackathon',
+  'Social',
+];
 const aliases = new Map([
   ['club event', 'Meeting'],
   ['club meeting', 'Meeting'],

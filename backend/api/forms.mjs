@@ -15,23 +15,39 @@ export const confirmations = {
   question:
     'Your question has been received in the club inbox. An officer can reply to the email address you provided.',
 };
-export default async function handler(req, res) {
-  try {
-    if (!cors(req, res)) return;
-    const db = database();
-    await limit(db, req, 'forms');
-    const body = await jsonBody(req);
-    if (body.website)
-      return send(res, 200, {
-        message: 'Thank you. Your request has been received.',
+export function formsHandler({
+  getDatabase = database,
+  getEvents = liveEvents,
+  rateLimit = (db, req) => limit(db, req, 'forms'),
+} = {}) {
+  return async function handler(req, res) {
+    try {
+      if (!cors(req, res)) return;
+      const db = getDatabase();
+      await rateLimit(db, req);
+      const body = await jsonBody(req);
+      if (body.website)
+        return send(res, 200, {
+          message: 'Thank you. Your request has been received.',
+        });
+      const events = ['rsvp', 'question'].includes(body.kind)
+        ? await getEvents(db)
+        : [];
+      const entry = await submit(db, body, events);
+      // Success is returned only after the database transaction commits.
+      send(res, 200, {
+        message:
+          body.kind === 'rsvp'
+            ? entry.alreadySubmitted
+              ? 'You already have an RSVP for this event. Your original response is saved; contact the club to change it.'
+              : entry.data.potential
+                ? 'Your interest and responses have been received. This is a potential event; the details and your seat are not confirmed yet.'
+                : confirmations.rsvp
+            : confirmations[body.kind],
       });
-    const events = ['rsvp', 'question'].includes(body.kind)
-      ? await liveEvents(db)
-      : [];
-    await submit(db, body, events);
-    // Success is returned only after the database transaction commits.
-    send(res, 200, { message: confirmations[body.kind] });
-  } catch (error) {
-    fail(res, error);
-  }
+    } catch (error) {
+      fail(res, error);
+    }
+  };
 }
+export default formsHandler();

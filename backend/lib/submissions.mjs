@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { put, del } from '@vercel/blob';
 import { validate } from './validation.mjs';
+import { saveSurveyResponse } from './surveys.mjs';
 import { RequestError } from './errors.mjs';
 
 export async function submit(db, body, events, storage = { put, del }) {
@@ -76,7 +77,8 @@ export async function submit(db, body, events, storage = { put, del }) {
               file.bytes.length,
             ],
           );
-      return row;
+      if (inserted) await saveSurveyResponse(tx, row, input.survey);
+      return { ...row, alreadySubmitted: !inserted };
     });
     if (!inserted && stored.length)
       await storage.del(stored.map((x) => x.pathname)).catch(() => {});

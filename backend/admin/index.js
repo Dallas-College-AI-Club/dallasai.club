@@ -1,6 +1,7 @@
 import { mountSurveyResults } from './survey-results.js';
 import { createAuthClient } from 'better-auth/client';
 import { mountCustomSurveys } from './custom-surveys.js';
+import { mountSurveyArchive } from './survey-archive.js';
 import { emailOTPClient } from 'better-auth/client/plugins';
 import { mountEventEditor } from './event-editor.js';
 import { mountBrowserAlerts } from './browser-alerts.js';
@@ -76,6 +77,7 @@ function showLogin() {
   editor.clear();
   surveys.clear();
   customSurveys.clear();
+  surveyArchive.clear();
   q('#surveys-pane').hidden = true;
 }
 function filters() {
@@ -189,6 +191,7 @@ async function load({ background = false } = {}) {
     return;
   }
   loading = true;
+  if (location.hash === '#archived-survey-questions') selectSurveyArchive();
   const generation = sessionGeneration,
     requestedFilters = filters().toString();
   q('#entries').setAttribute('aria-busy', 'true');
@@ -243,7 +246,9 @@ async function load({ background = false } = {}) {
     if (location.hash === '#events' && q('#events-pane').hidden)
       showPane('events');
     if (
-      (location.hash === '#surveys' || location.hash.startsWith('#survey=')) &&
+      (location.hash === '#surveys' ||
+        location.hash.startsWith('#survey=') ||
+        location.hash.startsWith('#custom-survey=')) &&
       q('#surveys-pane').hidden
     )
       showPane('surveys', true);
@@ -292,6 +297,7 @@ async function load({ background = false } = {}) {
     q('#next').disabled = !data.hasMore;
     q('#page').textContent = 'Page ' + (offset / 50 + 1);
     q('#export').href = '/api/admin?' + filters() + '&export=csv';
+    surveyArchive.load(filters(), { background });
     const linked = new URLSearchParams(location.hash.slice(1)).get('entry');
     if (linked) {
       const card = document.getElementById('entry-' + linked);
@@ -457,12 +463,13 @@ q('#signout').onclick = async () => {
 const editor = mountEventEditor(api);
 const surveys = mountSurveyResults(api);
 const customSurveys = mountCustomSurveys(q('#custom-surveys-root'), api);
-function surveyGroup(custom) {
+const surveyArchive = mountSurveyArchive(q('#archived-survey-questions'), api);
+function surveyGroup(custom, id = '') {
   q('#custom-surveys-root').hidden = !custom;
   q('#event-surveys-root').hidden = custom;
   q('#custom-surveys-group').setAttribute('aria-pressed', String(custom));
   q('#event-surveys-group').setAttribute('aria-pressed', String(!custom));
-  if (custom) customSurveys.load();
+  if (custom) id ? customSurveys.show(id) : customSurveys.load();
 }
 q('#custom-surveys-group').onclick = () => surveyGroup(true);
 q('#event-surveys-group').onclick = () => {
@@ -483,16 +490,39 @@ function showPane(name, keepHash = false) {
     );
   if (name === 'events') editor.show();
   if (name === 'surveys') {
+    const customId = new URLSearchParams(location.hash.slice(1)).get(
+      'custom-survey',
+    );
+    if (customId) {
+      surveyGroup(true, customId);
+      return;
+    }
     surveyGroup(false);
     surveys.show(
       new URLSearchParams(location.hash.slice(1)).get('survey') || '',
     );
   }
 }
+function selectSurveyArchive() {
+  selectInboxStatus('closed');
+  q('#filters [name="kind"]').value = 'question';
+  q('#filters [name="eventId"]').value = '';
+  q('#event-filter-label').hidden = true;
+  history.replaceState({}, '', location.pathname);
+}
 window.addEventListener('hashchange', () => {
+  if (signedIn && location.hash === '#archived-survey-questions') {
+    if (showPane('inbox', true) === false) return;
+    offset = 0;
+    selectSurveyArchive();
+    load();
+    return;
+  }
   if (
     signedIn &&
-    (location.hash === '#surveys' || location.hash.startsWith('#survey='))
+    (location.hash === '#surveys' ||
+      location.hash.startsWith('#survey=') ||
+      location.hash.startsWith('#custom-survey='))
   ) {
     showPane('surveys', true);
     return;

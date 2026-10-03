@@ -130,6 +130,34 @@ test('per-event edu policy accepts college subdomains and alumni, and rejects lo
     ]),
   );
 });
+test('Any of these is exclusive, including Other; ordinary multiple selections remain valid', () => {
+  const indices = event.surveyQuestions.flatMap((q, index) =>
+    q.options.includes('Any of these') ? [index] : [],
+  );
+  assert.equal(indices.length, 2);
+  for (const index of indices) {
+    const q = event.surveyQuestions[index];
+    const answer = (value, other = '') => {
+      const b = body();
+      b.answers[index] = { questionId: q.id, value, other };
+      return b;
+    };
+    assert.ok(validate(answer(['Any of these']), [event]));
+    assert.ok(validate(answer([q.options[0], q.options[1]]), [event]));
+    assert.throws(
+      () => validate(answer(['Any of these', q.options[0]]), [event]),
+      { status: 400 },
+    );
+    assert.throws(
+      () =>
+        validate(answer(['Any of these', '__other__'], 'Another game'), [
+          event,
+        ]),
+      { status: 400 },
+    );
+  }
+});
+
 test('survey validation rejects stale schemas, missing and forged answers without accepting unknown options', () => {
   assert.throws(() => validate(body({ surveyVersion: 'outdated' }), [event]), {
     status: 409,

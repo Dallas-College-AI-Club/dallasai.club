@@ -1,7 +1,7 @@
 # Private custom surveys
 
 Open **Club office → Surveys → Custom surveys**. Officers can read the latest
-shared summaries side by side, refresh results, open the survey, and copy the
+submitted summaries grouped by respondent and chapter, refresh results, open the survey, and copy the
 private or question-preview link. These controls do not edit advisor answers.
 Event RSVP surveys remain in the separate Event surveys group.
 
@@ -14,7 +14,7 @@ request bodies or private link headers to logs or analytics.
 ## Access
 
 - Anyone with the current private link may preview the questions. The preview
-  has no answer fields, submissions, or results.
+  uses the original survey layout with disabled answer controls and no results.
 - Answering requires a code delivered by Neon Auth to an assigned advisor
   email. The server verifies the Neon session and email verification, binds
   the account ID to the survey member, and issues a survey-scoped device token.
@@ -40,6 +40,19 @@ unchecked. Source or wording edits invalidate only that response's flags and
 final audience consent. Every concern dial, resource offer, page comment, and
 ideal-responsibilities answer has its own choices.
 
+The review page has separate **Mark all wording reviewed** and **Include all in
+shared summary** buttons. They skip empty, stale, and removed responses and
+leave final audience consent unchecked. Full downloads use
+`formname-full-response_respondent-name_YYYY-MM-DD_HH-mm-ss-CT.docx` (or `.md`).
+
+Admins manage respondent names and email addresses in Custom surveys, including
+**Add myself for testing**. Removing access revokes every survey device session
+and moves any submitted answers to **Inbox → Archived → Questions**. The
+read-only archive uses the retained response, without making another copy.
+Restoring access removes it from the archive. Add, remove, restore, and public
+registration actions retain the actor and timestamp in the activity log.
+People who have not submitted answers do not appear in result cards.
+
 `survey-contract.mjs` rejects unexpected fields, unreviewed/excluded answers,
 invalid types/options/hours, extra custom labels, incorrect audience, and forged
 structured wording. The server regenerates structured wording from the immutable
@@ -62,16 +75,18 @@ invitation or response email is sent automatically.
 
 ## Deployment
 
-Apply `backend/011_custom_surveys.sql` to the approved forms database after the
-existing migrations. Its `custom_*` tables are independent of migration 010's
-event `survey_responses`. Runtime grants allow current responses, receipts,
-device sessions and identity binding; there are no HTTP management/write routes
-for officer results or membership grants.
+Apply migrations `011_custom_surveys.sql`, `012_survey_respondents.sql`, and
+`013_survey_builder.sql` to the approved forms database in order. Their
+`custom_*` tables are independent of migration 010's event `survey_responses`.
+Runtime grants cover response storage, device sessions, audited respondent
+management, and draft/publish/close operations. Admin result routes remain
+read-only.
 
 The existing `FORM_TOKEN_SECRET`, `AUTH_BASE_URL`, `NEON_AUTH_URL`,
 `NEON_AUTH_COOKIE_SECRET`, and `FORMS_DATABASE_URL` are reused. Rotating the form
 secret invalidates derived private links; coordinate link rotation separately.
-Existing approved Neon accounts may use the code flow. Do not grant an advisor
+Approved email addresses may use the Neon code flow, including first-time
+accounts. Do not grant an advisor
 the Neon admin role merely to answer a survey.
 
 After validation, open the approved round with
@@ -89,6 +104,33 @@ idempotency, and the scoped Neon proxy. Build with `npm run build`.
 at port 4187, with synthetic advisor addresses and code `123456`. The fixture
 prints the temporary test URLs. It is not included in the deployed public build.
 
-Future survey-builder audience choices are a separate design task after this
-rollout: Dallas College students, Dallas College staff, public, club officers,
-and advisors. This release adds the private Advisor Studio workflow only.
+## Create another survey
+
+Choose **Create custom survey**, then follow **Template → Audience → Questions
+→ Preview → Publish**. Blank and quick-feedback templates support text, single
+choice, multiple choice, and 1–5 rating questions. Choice order supports dragging
+and move buttons. Admins can save and resume drafts, try answers locally, and
+open a mock results popup without saving responses.
+
+Choose Dallas College students, Dallas College staff, open to the public, club
+officers, or advisors as the audience. Preview, answering, and results have
+independent permissions. Restricted audiences use an explicit approved roster;
+an email domain alone does not establish student or staff status. Public surveys
+can allow any verified email. A removed address cannot enroll itself again.
+
+New surveys have separate preview and answering links. A preview capability
+cannot submit answers or read results. Publicly shareable previews require no
+sign-in; restricted previews require a remembered approved device. Results can
+be admin-only or shared with current and future approved respondents, with that
+audience stated before consent. Original Advisor Studio sharing still uses the
+recipient list approved at submission time.
+
+Publishing starts the selected 1–90 day window (30 by default) and freezes
+questions and permissions. Closing ends access while retaining results and
+audit history. Draft changes and publication use revision checks and idempotent
+request receipts. The first Advisor Studio remains its dedicated original
+design; new surveys use the generic form renderer.
+
+For responsive checks, the isolated fixture also serves `/responsive`, a
+same-origin iframe with six fixed viewport sizes from 320 to 1440 pixels and
+visible layout measurements. It never ships in the public build.

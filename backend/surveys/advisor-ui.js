@@ -1,4 +1,5 @@
 import { makeDocx } from './personal-copy.js';
+import { markAllResponses, fullResponseFilename } from './review-actions.js';
 export function mountAdvisor(
   bootstrap,
   transport,
@@ -975,6 +976,18 @@ export function mountAdvisor(
         render();
       }
     }
+    if (t.dataset.bulkReview && !submitting) {
+      invalidate();
+      const count = markAllResponses(
+        reviewFields(),
+        state.review,
+        t.dataset.bulkReview,
+      );
+      render();
+      announce(
+        `${count} responses ${t.dataset.bulkReview === 'reviewed' ? 'marked as reviewed' : 'included in the shared summary'}.`,
+      );
+    }
     if (t.dataset.rankaction)
       rankOp(t.dataset.q, t.dataset.item, t.dataset.rankaction);
     if (t.dataset.add) {
@@ -1436,6 +1449,14 @@ export function mountAdvisor(
     refreshFinalControls(fields);
   }
   function refreshFinalControls(fields = reviewFields()) {
+    document
+      .querySelectorAll('[data-bulk-review]')
+      .forEach(
+        (b) =>
+          (b.disabled =
+            readOnly ||
+            !fields.some((f) => f.text.trim() && !f.stale && !f.archived)),
+      );
     const count = fields.filter((x) => x.included).length,
       issues = sharingIssues(fields);
     if ($('selection-summary'))
@@ -1468,7 +1489,7 @@ export function mountAdvisor(
           : '';
       })
       .join('');
-    return `<div class="playbook-person"><span class="eyebrow">Your advising playbook</span><h2>${esc(advisorName())}</h2></div><p class="share-guide">Each response has two separate choices: approve its wording and decide whether to share it. Only responses marked for inclusion and reviewed will be submitted. Questions you skipped stay out.</p>${summaryCard(ideal)}${grouped}<section class="send-panel"><h2>Share your playbook</h2><p>Submitting replaces your previously shared summary with this selection. Responses you leave out are removed from the current shared results.</p><p id="selection-summary" class="selection-summary">${count} ${count === 1 ? 'response' : 'responses'} selected for sharing.</p><p class="fine" id="sharing-issues" role="status">${count ? esc(issues.join(' ')) : ''}</p><label class="check final-approval"><input id="approve-playbook" type="checkbox" ${state.approved ? 'checked' : ''} ${issues.length ? 'disabled' : ''}><span>${esc(consentWording())}</span></label><div class="chiprow"><button id="submitPlaybook" class="primary" data-submit-control ${valid ? '' : 'disabled'}>Submit shared summary</button></div><div id="submit-status" role="status" aria-live="polite" class="submit-status"></div><div class="personal-copy"><h3>Keep a full copy for yourself</h3><p>These files contain all your responses, comments, and edited wording, including answers you do not include in the shared summary. Downloading does not submit anything.</p><div class="chiprow"><button id="exportFullWord" class="ghost" data-personal-export ${hasFullResponses() ? '' : 'disabled'}>Download full responses (.docx)</button><button id="exportFullMarkdown" class="ghost" data-personal-export ${hasFullResponses() ? '' : 'disabled'}>Download full responses (.md)</button></div></div></section>`;
+    return `<div class="playbook-person"><span class="eyebrow">Your advising playbook</span><h2>${esc(advisorName())}</h2></div><p class="share-guide">Each response has two separate choices: approve its wording and decide whether to share it. Only responses marked for inclusion and reviewed will be submitted. Questions you skipped stay out.</p><div class="chiprow review-bulk"><button data-bulk-review="reviewed" ${fields.some((f) => f.text.trim() && !f.stale) ? '' : 'disabled'}>Mark all wording reviewed</button><button data-bulk-review="included" ${fields.some((f) => f.text.trim() && !f.stale) ? '' : 'disabled'}>Include all in shared summary</button></div>${summaryCard(ideal)}${grouped}<section class="send-panel"><h2>Share your playbook</h2><p>Submitting replaces your previously shared summary with this selection. Responses you leave out are removed from the current shared results.</p><p id="selection-summary" class="selection-summary">${count} ${count === 1 ? 'response' : 'responses'} selected for sharing.</p><p class="fine" id="sharing-issues" role="status">${count ? esc(issues.join(' ')) : ''}</p><label class="check final-approval"><input id="approve-playbook" type="checkbox" ${state.approved ? 'checked' : ''} ${issues.length ? 'disabled' : ''}><span>${esc(consentWording())}</span></label><div class="chiprow"><button id="submitPlaybook" class="primary" data-submit-control ${valid ? '' : 'disabled'}>Submit shared summary</button></div><div id="submit-status" role="status" aria-live="polite" class="submit-status"></div><div class="personal-copy"><h3>Keep a full copy for yourself</h3><p>These files contain all your responses, comments, and edited wording, including answers you do not include in the shared summary. Downloading does not submit anything.</p><div class="chiprow"><button id="exportFullWord" class="ghost" data-personal-export ${hasFullResponses() ? '' : 'disabled'}>Download full responses (.docx)</button><button id="exportFullMarkdown" class="ghost" data-personal-export ${hasFullResponses() ? '' : 'disabled'}>Download full responses (.md)</button></div></div></section>`;
   }
   function editResponse(id) {
     const f = reviewFields().find((x) => x.id === id);
@@ -1670,7 +1691,11 @@ export function mountAdvisor(
   function saveFullMarkdown() {
     try {
       download(
-        `advisor-full-responses-${state.advisorId}.md`,
+        fullResponseFilename(
+          bootstrap.survey?.title || 'Advisor Studio',
+          advisorName(),
+          'md',
+        ),
         fullMarkdown(),
         'text/markdown;charset=utf-8',
       );
@@ -1685,7 +1710,11 @@ export function mountAdvisor(
     try {
       const bytes = makeDocx(fullResponseData(), BANK.questions);
       download(
-        `advisor-full-responses-${state.advisorId}.docx`,
+        fullResponseFilename(
+          bootstrap.survey?.title || 'Advisor Studio',
+          advisorName(),
+          'docx',
+        ),
         bytes,
         'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
       );

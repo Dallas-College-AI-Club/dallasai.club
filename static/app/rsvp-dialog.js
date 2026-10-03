@@ -174,6 +174,15 @@ export function rsvpDialog(root, { preview = false } = {}) {
         const inputs = [
           ...form.querySelectorAll('[name="answer-' + question.id + '"]'),
         ];
+        if (question.type === 'multiple') {
+          const exclusive = inputs.find(
+            (input) => input.value.trim().toLowerCase() === 'any of these',
+          );
+          for (const input of inputs) {
+            input.disabled = Boolean(exclusive?.checked && input !== exclusive);
+            if (input.disabled) input.checked = false;
+          }
+        }
         const selected = inputs
           .filter((input) => input.checked)
           .map((input) => input.value);

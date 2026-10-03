@@ -74,7 +74,7 @@ const currentSurveyFiles = new Set(
 );
 for (const file of await readdir(path.join(root, 'public/surveys'))) {
   if (
-    /^(advisor-ui|preview|chunk)-[A-Z0-9]+\.js$/.test(file) &&
+    /^(advisor-ui|preview|form-ui|chunk)-[A-Z0-9]+\.js$/.test(file) &&
     !currentSurveyFiles.has(file)
   )
     await unlink(path.join(root, 'public/surveys', file));

@@ -30,6 +30,8 @@ if (footer) {
   const icons = {
     Instagram:
       '<rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r=".7" fill="currentColor" stroke="none"/>',
+    Threads:
+      '<path d="M19.2 7.8C18.4 4 16 2 12.2 2 6.5 2 3.6 5.7 3.6 12s2.9 10 8.6 10c4.7 0 7.8-2.6 7.8-6.1 0-3.2-2.5-5.1-6.5-5.1-3.1 0-5.1 1.2-5.1 3.3 0 1.9 1.5 3 3.5 3 2.7 0 4.1-2 4.1-5.5 0-3.3-1.4-5.2-3.9-5.2-1.5 0-2.7.6-3.4 1.8"/>',
     LinkedIn:
       '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M7.5 10v7M7.5 7v.1M11.5 17v-7m0 3c0-4 5-4 5 0v4"/>',
   };

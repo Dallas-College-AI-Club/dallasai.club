@@ -53,5 +53,10 @@ export function renderContribution(root) {
   return mountForm(form, {
     kind: 'contribution',
     doneURL: 'club.html?mode=journal',
+    onSuccess: () => {
+      try {
+        localStorage.removeItem('dc-ai-contribution');
+      } catch {}
+    },
   });
 }

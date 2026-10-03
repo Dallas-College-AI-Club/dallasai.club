@@ -18,14 +18,12 @@ import {
   EVENTS,
   JOIN_URL,
   CONTACT_EMAIL,
-  WORKSHOP_REQUEST_URL,
   eventDate,
   eventTime,
   eventCalendar,
   eventIsPast,
   splitEvents,
 } from '../content/club.js';
-export { WORKSHOP_REQUEST_URL } from '../content/club.js';
 export function monthCells(year, month) {
   const first = new Date(Date.UTC(year, month, 1)),
     count = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
@@ -435,10 +433,7 @@ export function mountEvents(root) {
   q('#calendar-prev').onclick = () => shift(-1);
   q('#calendar-next').onclick = () => shift(1);
   const dialog = q('#workshop-dialog');
-  q('#workshop-request').onclick = () =>
-    WORKSHOP_REQUEST_URL
-      ? location.assign(WORKSHOP_REQUEST_URL)
-      : dialog.showModal();
+  q('#workshop-request').onclick = () => dialog.showModal();
   dialog.querySelector('.dialog-close').onclick = () => dialog.close();
   dialog.onclick = (e) => {
     if (e.target === dialog) {

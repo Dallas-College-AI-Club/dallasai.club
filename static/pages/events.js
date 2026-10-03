@@ -1,6 +1,6 @@
 import { eventText, eventList, eventAgenda } from '../app/event-format.js';
 import { rsvpDialog } from '../app/rsvp-dialog.js';
-import { readEventPlans, saveEventPlan } from '../storage/event-plans.js';
+import { eventImageViewer } from '../app/event-image-viewer.js';
 import {
   formFooter,
   identityFields,
@@ -130,7 +130,9 @@ export function mountEvents(root) {
   const preventPreviewActions = (event) => {
     if (
       event.target.closest('button,a,form') &&
-      !event.target.closest('.calendar-read,.event-calendar-back')
+      !event.target.closest(
+        '.calendar-read,.event-calendar-back,.rsvp-dialog,.rsvp-answer-preview,#open-rsvp,#event-rsvp-action',
+      )
     ) {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -144,12 +146,15 @@ export function mountEvents(root) {
   const stopWorkshop = mountForm(root.querySelector('#workshop-form'), {
     kind: 'workshop',
   });
-  const rsvp = rsvpDialog(root);
+  const rsvp = rsvpDialog(root, { preview: privatePreview });
+  const imageViewer = eventImageViewer();
   const q = (s) => root.querySelector(s),
     requested = new URLSearchParams(location.search).get('event');
   let fallback =
     splitEvents().upcoming[0] || splitEvents().past[0] || EVENTS[0];
-  let selected = EVENTS.find((e) => e.id === requested) || fallback;
+  let selected = privatePreview
+    ? null
+    : EVENTS.find((e) => e.id === requested) || fallback;
   let previewEvent = null;
   let [year, month] = parts(selected || { date: new Date().toISOString() });
   month--;
@@ -196,7 +201,8 @@ export function mountEvents(root) {
       return;
     }
     const past = selected.date ? eventIsPast(selected) : false;
-    let going = readEventPlans().includes(selected.id);
+    const canRSVP =
+      !past && !privatePreview && selected.registrationOpen !== false;
     panel.innerHTML = /* HTML */ `<button class="event-calendar-back">
         ← Back to calendar
       </button>
@@ -239,15 +245,15 @@ export function mountEvents(root) {
       }
       <div class="event-detail-actions">
         ${selected.meetingUrl ? '<a class="outline-link" target="_blank" rel="noopener" href="' + escapeHTML(selected.meetingUrl) + '">Open meeting link ↗</a>' : ''}
-        ${past || privatePreview ? '' : /* HTML */ `<button id="event-going" class="solid-link" aria-pressed="${going}">${going ? '✓ In my plans' : 'Save to my plans'}</button>${selected.date ? '<button id="save-event" class="outline-link">Add to calendar ↓</button>' : ''}`}${privatePreview ? '' : '<button id="ask-event-question" class="outline-link">Ask about this event</button>'}
-      </div>
-      ${past || privatePreview ? '' : /* HTML */ `<p id="event-plan-status" class="event-plan-status" role="status">${going ? 'Saved on this device. Select again to remove.' : 'Save to your plans on this device.'}</p>`}`;
+        ${past || privatePreview ? '' : /* HTML */ `${canRSVP ? '<button id="event-rsvp-action" class="solid-link">RSVP for this event</button>' : ''}${selected.date ? '<button id="save-event" class="outline-link">Add to calendar ↓</button>' : ''}`}${privatePreview ? '' : '<button id="ask-event-question" class="outline-link">Ask about this event</button>'}
+      </div>`;
     if (q('#ask-event-question'))
       q('#ask-event-question').onclick = () => questions.open(selected);
-    if (!privatePreview && !past && selected.registrationOpen !== false) {
+    if (privatePreview || (!past && selected.registrationOpen !== false)) {
       q('.event-registration').insertAdjacentHTML(
         'beforeend',
-        '<button id="open-rsvp" class="solid-link">RSVP' +
+        '<button id="open-rsvp" class="solid-link">' +
+          (privatePreview ? 'Try RSVP preview' : 'RSVP') +
           (selected.surveyQuestions?.length
             ? ' & answer questions'
             : ' for this event') +
@@ -260,32 +266,43 @@ export function mountEvents(root) {
         '<p>RSVPs are closed for this event.</p>',
       );
     }
-    panel.insertAdjacentHTML(
-      'beforeend',
-      `${selected.images?.length ? '<div class="event-gallery">' + selected.images.map((image) => '<figure><img loading="lazy" src="' + escapeHTML(privatePreview && /^data:image\/webp;base64,[A-Za-z0-9+/=]+$/.test(image.previewSrc || '') ? image.previewSrc : EVENTS_API_URL + '?image=' + encodeURIComponent(image.id)) + '" alt="' + escapeHTML(image.alt) + '"></figure>').join('') + '</div>' : ''}`,
-    );
+    if (selected.images?.length) {
+      const gallery = document.createElement('div');
+      gallery.className = 'event-gallery';
+      selected.images.forEach((image, index) => {
+        const figure = document.createElement('figure'),
+          img = document.createElement('img');
+        img.loading = 'lazy';
+        img.src =
+          privatePreview &&
+          /^data:image\/webp;base64,[A-Za-z0-9+/=]+$/.test(
+            image.previewSrc || '',
+          )
+            ? image.previewSrc
+            : EVENTS_API_URL + '?image=' + encodeURIComponent(image.id);
+        img.alt = image.alt || selected.title + ' — event image ' + (index + 1);
+        if (privatePreview) figure.append(img);
+        else {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'event-image-open';
+          button.setAttribute('aria-label', 'Enlarge ' + img.alt);
+          button.onclick = () => imageViewer.open(img.src, img.alt);
+          button.append(img);
+          const caption = document.createElement('figcaption');
+          caption.textContent = 'Click to enlarge';
+          figure.append(button, caption);
+        }
+        gallery.append(figure);
+      });
+      panel.append(gallery);
+    }
     q('.event-calendar-back').onclick = () => {
       q('.events-browser').scrollIntoView({ block: 'start' });
       q(`[data-event="${selected.id}"]`)?.focus({ preventScroll: true });
     };
-    const goingButton = q('#event-going');
-    if (goingButton)
-      goingButton.onclick = () => {
-        const next = !going;
-        if (saveEventPlan(selected.id, next)) {
-          going = next;
-          goingButton.setAttribute('aria-pressed', String(going));
-          goingButton.textContent = going
-            ? '✓ In my plans'
-            : 'Save to my plans';
-          q('#event-plan-status').textContent = going
-            ? 'Saved on this device. Select again to remove.'
-            : 'Removed from your plans.';
-        } else {
-          q('#event-plan-status').textContent =
-            'This browser could not save your plan. You can still get a calendar reminder.';
-        }
-      };
+    if (q('#event-rsvp-action'))
+      q('#event-rsvp-action').onclick = () => rsvp.open(selected);
     const save = q('#save-event');
     if (save)
       save.onclick = () => {
@@ -360,7 +377,7 @@ export function mountEvents(root) {
     ).filter((e) => e.potential && !eventIsPast(e));
     q('#potential-events').hidden = !potential.length;
     q('#potential-events').innerHTML =
-      '<h2>Potential events</h2><p>Help shape what comes next.</p>' +
+      '<span class="potential-eyebrow">HELP PLAN WHAT’S NEXT</span><h2>Potential events</h2><p>Explore an idea and share your interest.</p>' +
       potential
         .map(
           (e) =>
@@ -398,7 +415,10 @@ export function mountEvents(root) {
   }
   q('#calendar-read').onclick = () => {
     if (!selected) return;
-    q('#event-detail').scrollIntoView({ behavior: 'instant', block: 'start' });
+    q('#event-detail').scrollIntoView({
+      behavior: 'instant',
+      block: 'start',
+    });
     q('#event-detail').focus({ preventScroll: true });
   };
   const shift = (n) => {
@@ -432,7 +452,7 @@ export function mountEvents(root) {
   const freshness = () => {
     if (privatePreview) {
       q('#event-freshness').textContent =
-        'Private preview · Nothing is published. Registration and question forms are disabled.';
+        'Private preview · Try RSVP answers and preview the admin result. Nothing will be submitted or saved.';
       return;
     }
     q('#event-freshness').textContent = eventsFresh
@@ -521,6 +541,7 @@ export function mountEvents(root) {
     document.removeEventListener('club:events-status', freshness);
     stopWorkshop();
     rsvp.destroy();
+    imageViewer.destroy();
     questions.destroy();
     window.removeEventListener('message', previewMessage);
     document.removeEventListener('click', preventPreviewActions, true);

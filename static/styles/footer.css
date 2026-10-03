@@ -47,8 +47,17 @@
     Georgia,
     serif;
 }
+.site-footer .footer-signature {
+  width: max-content;
+  text-align: center;
+}
 .site-footer .footer-tagline {
   margin-top: 4px;
+  font-size: 18px;
+  line-height: 1.25;
+}
+.site-footer .footer-tagline em {
+  letter-spacing: 0.025em;
 }
 .footer-thought em {
   display: block;

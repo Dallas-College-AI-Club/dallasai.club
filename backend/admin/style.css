@@ -1136,3 +1136,165 @@ input::file-selector-button {
   object-fit: contain;
   border-radius: 12px;
 }
+/* Event response management and contact history. */
+.survey-tools,
+.survey-response-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: end;
+  margin-block: 16px;
+}
+.survey-tools label {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+.survey-tools .survey-star-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-block: 12px;
+  flex: 0 1 auto;
+}
+.survey-star-filter input {
+  width: auto;
+  margin: 0;
+}
+.survey-event-group,
+.survey-summary-group {
+  padding: 18px;
+  margin-block: 16px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  min-width: 0;
+}
+.survey-event-group > summary,
+.survey-summary-group > summary {
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.survey-response {
+  padding: 16px;
+  margin-block: 10px;
+}
+.survey-response > summary {
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
+.survey-response > summary span,
+.survey-response > summary small {
+  display: block;
+  color: var(--muted);
+  margin: 6px 0 0 18px;
+}
+.survey-response-actions button {
+  min-height: 40px;
+}
+.survey-summary-group section {
+  border-top: 1px solid var(--line);
+  padding-block: 12px;
+}
+.survey-counts {
+  padding-left: 20px;
+}
+.contact-dialog {
+  box-sizing: border-box;
+  width: min(820px, 94vw);
+  max-height: 90dvh;
+  padding: 24px;
+  background: var(--page);
+  color: var(--text);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+}
+.contact-dialog::backdrop {
+  background: #0009;
+}
+.contact-dialog h2 {
+  overflow-wrap: anywhere;
+}
+.contact-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  margin-block: 10px;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+.contact-choice small {
+  color: var(--muted);
+}
+.contact-entry {
+  border-top: 1px solid var(--line);
+  padding-block: 14px;
+}
+.contact-entry h3 {
+  margin-block: 4px;
+}
+.contact-note-form {
+  padding: 16px;
+  margin-block: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.contact-note-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.event-save-confirmation {
+  margin-bottom: 24px;
+  padding: 20px;
+  border: 2px solid var(--success);
+  border-radius: 12px;
+  background: var(--surface);
+  scroll-margin-top: 24px;
+}
+.event-save-confirmation strong {
+  font-size: 1.15rem;
+  color: var(--success);
+}
+.event-save-confirmation p {
+  margin: 10px 0 0;
+}
+.event-choice.potential-choice {
+  border-left: 4px solid var(--accent);
+}
+@media (max-width: 600px) {
+  .survey-event-group,
+  .survey-summary-group,
+  .contact-dialog {
+    padding: 14px;
+  }
+  .survey-response {
+    padding: 12px;
+  }
+  .survey-tools > button {
+    width: 100%;
+  }
+}
+.survey-option-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 8px 0;
+}
+.survey-option-row input {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.survey-option-row button {
+  flex: 0 0 auto;
+  padding: 10px;
+}
+.survey-option-row .choice-drag {
+  cursor: grab;
+  touch-action: none;
+}
+.survey-option-row.dragging {
+  outline: 2px dashed var(--accent);
+}

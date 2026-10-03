@@ -15,10 +15,12 @@ if (footer) {
         <span>Dallas College<strong>AI Club</strong></span>
       </a>
       <div class="footer-thought">
-        ${coladdeMark()}
-        <p class="footer-tagline">
-          Different perspectives. <em>Shared possibilities.</em>
-        </p>
+        <div class="footer-signature">
+          ${coladdeMark()}
+          <p class="footer-tagline">
+            Different perspectives. <em>Shared possibilities.</em>
+          </p>
+        </div>
       </div>
       <nav aria-label="Follow the club"></nav>
     </div>

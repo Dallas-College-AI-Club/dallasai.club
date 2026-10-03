@@ -49,6 +49,7 @@ before(async () => {
     '008_event_archive.sql',
     '009_submission_comments.sql',
     '010_event_surveys.sql',
+    '014_event_response_management.sql',
   ])
     await db.exec(await readFile(new URL('../' + f, import.meta.url), 'utf8'));
 });
@@ -119,7 +120,9 @@ test('per-event edu policy accepts college subdomains and alumni, and rejects lo
     'member@bad_.edu',
     'member@bad/host.edu',
   ])
-    assert.throws(() => validate(body({ email }), [event]), { status: 400 });
+    assert.throws(() => validate(body({ email }), [event]), {
+      status: 400,
+    });
   assert.ok(
     validate(body({ email: 'member@gmail.com' }), [
       { ...event, requireEduEmail: false },
@@ -265,7 +268,9 @@ test('survey pagination, event and entry filters are independent, and unauthoriz
       .responses.length,
     1,
   );
-  await assert.rejects(surveyResults(db, { entryId: 'bad' }), { status: 400 });
+  await assert.rejects(surveyResults(db, { entryId: 'bad' }), {
+    status: 400,
+  });
   for (const offset of [-1, 0.5, 100001, NaN])
     await assert.rejects(surveyResults(db, { offset }), { status: 400 });
   let queried = false;
@@ -297,6 +302,6 @@ test('survey pagination, event and entry filters are independent, and unauthoriz
   );
   assert.equal(response.statusCode, 200);
   assert.equal(response.body.responses.length, 50);
-  await allowed({ method: 'POST', url: '/api/surveys' }, response);
+  await allowed({ method: 'DELETE', url: '/api/surveys' }, response);
   assert.equal(response.statusCode, 405);
 });

@@ -127,7 +127,10 @@ export function mountEventEditor(api) {
           img = node('img');
         img.src = '/api/events?image=' + encodeURIComponent(image.id);
         img.alt = image.alt || 'Uploaded event image';
-        const label = node('label', 'Image ' + (index + 1) + ' description'),
+        const label = node(
+            'label',
+            'Image ' + (index + 1) + ' description (optional)',
+          ),
           input = node('input');
         input.value = image.alt || '';
         input.maxLength = 300;
@@ -186,6 +189,8 @@ export function mountEventEditor(api) {
       .filter((r) => r.draft.title.toLowerCase().includes(search))
       .sort(
         (a, b) =>
+          Number(Boolean(b.draft.potential)) -
+            Number(Boolean(a.draft.potential)) ||
           Number(!b.published || b.revision !== b.published_revision) -
             Number(!a.published || a.revision !== a.published_revision) ||
           (b.draft.date || '').localeCompare(a.draft.date || ''),
@@ -198,15 +203,18 @@ export function mountEventEditor(api) {
         (!row.published || row.revision !== row.published_revision);
       const group = row.archived_at
         ? 'Archived events'
-        : isDraft
-          ? 'Drafts & unpublished changes'
-          : 'Published events';
+        : row.draft.potential
+          ? 'Potential events · gather interest'
+          : isDraft
+            ? 'Drafts & unpublished changes'
+            : 'Published events';
       if (group !== previousGroup) {
         listItems.push(node('h3', group, 'event-list-group'));
         previousGroup = group;
       }
       const button = node('button', undefined, 'event-choice');
       button.classList.toggle('has-draft', isDraft);
+      button.classList.toggle('potential-choice', Boolean(row.draft.potential));
       button.type = 'button';
       button.setAttribute('aria-pressed', String(row.id === current?.id));
       button.append(
@@ -272,7 +280,10 @@ export function mountEventEditor(api) {
     renderImages();
     survey.set(row.draft.surveyQuestions);
     typeOptions(row.draft.category);
-    for (const [key, value] of Object.entries({ ...blank(), ...row.draft })) {
+    for (const [key, value] of Object.entries({
+      ...blank(),
+      ...row.draft,
+    })) {
       const input = form.elements.namedItem(key);
       if (!input || key === 'category') continue;
       if (input.type === 'checkbox') input.checked = value !== false;
@@ -353,7 +364,10 @@ export function mountEventEditor(api) {
           );
           if (!response.ok)
             throw Error('Could not load the preview image. Please try again.');
-          return { ...image, previewSrc: await dataUrl(await response.blob()) };
+          return {
+            ...image,
+            previewSrc: await dataUrl(await response.blob()),
+          };
         }),
       ),
     };
@@ -388,10 +402,10 @@ export function mountEventEditor(api) {
         controls.forEach((input) => {
           input.disabled = false;
         });
-        edit(data.event, true);
+        edit(data.event);
         say(
           action === 'publish'
-            ? 'Published. The website will show this event on its next refresh.'
+            ? 'Published successfully — live on the website. Editing is complete.'
             : action === 'archive'
               ? 'Archived. Content, images, and RSVPs are kept. You can edit this event here or restore it as a draft.'
               : action === 'restore'
@@ -400,8 +414,23 @@ export function mountEventEditor(api) {
                   ? 'Unpublished. Your draft and existing RSVPs are kept.'
                   : data.event.archived_at
                     ? 'Changes saved. This event is still archived and private.'
-                    : 'Draft saved. The website has not changed.',
+                    : 'Draft saved successfully. These saved changes are private until you publish. Editing is complete.',
         );
+        const confirmation = node('div', undefined, 'event-save-confirmation');
+        confirmation.setAttribute('role', 'status');
+        confirmation.tabIndex = -1;
+        confirmation.append(
+          node('strong', q('#event-status').textContent),
+          node(
+            'p',
+            data.event.draft.title +
+              ' · Saved ' +
+              activityTime(data.event.updated_at),
+          ),
+        );
+        overview.prepend(confirmation);
+        confirmation.scrollIntoView({ block: 'start' });
+        confirmation.focus({ preventScroll: true });
       }
     } catch (e) {
       if (version === generation) say(e.message);
@@ -528,7 +557,7 @@ export function mountEventEditor(api) {
         images.push({ ...result.image, alt: '' });
       }
       q('#image-status').textContent =
-        'Uploaded. Add a description for each image, then save your draft.';
+        'Uploaded. Save your draft to keep these images. Descriptions are optional.';
     } catch (error) {
       q('#image-status').textContent = error.message;
     } finally {

@@ -88,6 +88,40 @@ Name and email are built in. The RSVP survey editor adds up to 20 written-answer
 
 Migration 010 stores one immutable question/answer snapshot per RSVP in `club_forms.survey_responses`. Basic RSVP and answers commit in one transaction. A duplicate email/event cannot overwrite answers; the confirmation explains that the original is saved. A changed question version causes an open old form to request reopening before submitting. Contact an officer to change or cancel an existing response.
 
-Inbox shows event, date/TBD, name and email with a link to **View survey answers**. Surveys shows complete responses, filtered by event or RSVP and paginated by 50, including responses to past or archived events. Only authenticated officers can read this API. Question and event snapshots retain their original wording after edits. Surveys currently has no analytics or email notifications.
+Inbox shows event, date/TBD, name and email with a link to **View survey answers**. Surveys shows complete responses, filtered by event or RSVP and paginated by 50, including responses to past or archived events. Only authenticated officers can read this API. Question and event snapshots retain their original wording after edits. Event surveys include plain summaries and CSV exports; graphical analytics are tracked in [issue #34](https://github.com/Dallas-College-AI-Club/dallasai.club/issues/34). No email notifications are sent.
 
 After building the public and admin sites, `node tests/browser-surveys.mjs` exercises the question editor, TBD publication, conditional email validation, full database persistence, Inbox/Surveys, safe text rendering, reload, mobile layouts and clearing results on sign-out.
+
+## Managing event answers and contacts
+
+In **Surveys → Event surveys**, expand an event, then a person to read their answers.
+Use **Star / Unstar**, **Archive / Restore**, the **Active / Archived / All saved**
+selector, **Starred only**, and the name/email search. Archiving a response hides it
+from the default survey view without changing its answers or its basic Inbox RSVP.
+Opening a specific RSVP from Inbox also finds archived responses.
+
+**Compile summary** and **Export matching CSV** use the selected filters across all
+pages. Each event also has summary/export buttons. Changed question versions remain
+separate. Choice percentages use the people who answered that question as the
+denominator; multi-select totals can exceed 100%. Written and Other answers are
+collapsible. CSV preserves multiline answers and neutralizes spreadsheet formulas.
+Reports refuse more than 10,000 matches explicitly; narrow the event/search rather
+than receiving a silently incomplete export.
+
+**Contacts & follow-up**, available from Inbox and Event surveys, consolidates
+website submissions by normalized email. A contact shows the names used, submitted
+messages, Inbox comments, response-management activity and officer follow-up notes.
+Notes carry the authenticated author and database timestamp. Retrying a saved note
+does not create duplicates. This does not read a mailbox or send emails. Private
+standalone-survey drafts and unsubmitted answers are not included.
+
+Apply `backend/014_event_response_management.sql` after migrations 009 and 010,
+before deploying these controls. It backfills contacts from existing entries and
+captures future submissions with a trigger. State is kept in `survey_response_state`
+separately from immutable `survey_responses`; notes are append-only. Keep this
+additive migration on a code rollback. It does not delete or archive existing data.
+
+Answer choices can be edited individually and reordered using drag handles or
+keyboard-accessible arrow buttons. Bulk entry with one option per line still works.
+In the event preview, try answers and open **Preview admin result** to review a
+clearly labeled sample. Those trial answers are never submitted or saved to Neon.

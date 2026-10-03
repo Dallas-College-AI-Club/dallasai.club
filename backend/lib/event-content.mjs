@@ -104,7 +104,7 @@ export function draftContent(input, publish = false) {
       throw new RequestError(400, 'Upload a valid event image.');
     return {
       id: image.id,
-      alt: text(image.alt, 'the image description', 300, publish),
+      alt: text(image.alt, 'the image description', 300),
     };
   });
   if (

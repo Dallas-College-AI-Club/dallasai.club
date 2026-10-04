@@ -3400,6 +3400,10 @@ try {
           ]);
       });
       sample.on('pageerror', (error) => errors.push(error.message));
+      sample.on('dialog', async (dialog) => {
+        errors.push('Unexpected sample dialog: ' + dialog.message());
+        await dialog.dismiss();
+      });
       await expect(sample.locator('.choice-match')).toHaveCount(3);
       await sample
         .getByRole('button', { name: 'Welcome', exact: true })

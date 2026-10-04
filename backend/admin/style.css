@@ -960,6 +960,19 @@ input::file-selector-button {
   color: var(--muted);
   font-size: 12px;
 }
+/* Highlights, like the selected event card: a tint and an accent line on
+   what needs attention or is open; everything else stays plain lines. */
+.count.has-new,
+.entry[open],
+.response-person[open] {
+  border-color: var(--accent);
+}
+.count.has-new {
+  background: var(--selected);
+}
+.count.has-new strong {
+  color: var(--accent);
+}
 .filters {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1520,6 +1533,9 @@ input::file-selector-button {
   border-radius: 16px;
   overflow: hidden;
 }
+.response-person[open] > summary {
+  background: var(--selected);
+}
 .response-person > summary {
   padding: 20px 24px;
   cursor: pointer;
@@ -1648,7 +1664,16 @@ input::file-selector-button {
   background: var(--surface);
   min-width: 0;
 }
-.survey-event-group > summary,
+/* Group headings are small capitals, like the event list's groups. */
+.survey-event-group > summary {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+  overflow-wrap: anywhere;
+}
 .survey-summary-group > summary {
   font-size: 1.05rem;
   font-weight: 600;

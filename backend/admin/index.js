@@ -339,7 +339,7 @@ function updateCounts(data) {
           new: 0,
           total: 0,
         },
-        box = node('div', undefined, 'count');
+        box = node('div', undefined, count.new ? 'count has-new' : 'count');
       box.append(
         node('span', kindLabel(kind, 'plural')),
         node('strong', count.new.toLocaleString('en-US')),

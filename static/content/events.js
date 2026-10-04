@@ -36,6 +36,8 @@ function cleanEvent(event) {
     requireEduEmail:
       event.requireEduEmail ?? event.category?.toLowerCase() === 'social',
     surveyIntro: String(event.surveyIntro || ''),
+    rsvpDeadline: String(event.rsvpDeadline || ''),
+    shortLink: String(event.shortLink || ''),
     surveyVersion: String(event.surveyVersion || ''),
     surveyQuestions: Array.isArray(event.surveyQuestions)
       ? event.surveyQuestions

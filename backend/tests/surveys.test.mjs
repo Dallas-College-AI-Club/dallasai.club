@@ -16,6 +16,11 @@ import { validate } from '../lib/validation.mjs';
 import { submit } from '../lib/submissions.mjs';
 import { surveysHandler } from '../api/surveys.mjs';
 import { RequestError } from '../lib/errors.mjs';
+import {
+  reportRows,
+  summarizeResponses,
+  responsesCSV,
+} from '../lib/survey-report.mjs';
 const game = JSON.parse(
   await readFile(
     new URL('./fixtures/game-night.json', import.meta.url),
@@ -115,6 +120,418 @@ beforeEach(() =>
   db.exec('TRUNCATE club_forms.entries,club_forms.events CASCADE'),
 );
 after(() => db.close());
+test('availability is one optional answer with exclusive whole-list states and structured alternatives', async () => {
+  const q = {
+    id: randomUUID(),
+    label: 'When could you come?',
+    type: 'availability',
+    required: false,
+    allowOther: false,
+    options: ['Afternoon', 'Evening'],
+    dates: ['2026-10-16', '2026-10-17'],
+  };
+  const revised = publicContent(event.id, { ...game, surveyQuestions: [q] });
+  const available = {
+    status: 'available',
+    selections: [{ date: '2026-10-16', periods: ['Evening'] }],
+    alternatives: [],
+  };
+  const alternative = {
+    status: 'alternative',
+    selections: [],
+    alternatives: [
+      { date: '2026-11-03', time: '18:30' },
+      { date: '2026-11-04', time: '' },
+    ],
+  };
+  const variants = [
+    '',
+    available,
+    { status: 'unsure', selections: [], alternatives: [] },
+    {
+      status: 'unavailable',
+      selections: [],
+      alternatives: [{ date: '2026-11-02', time: '00:00' }],
+    },
+    alternative,
+  ];
+  const request = (value, n = 0) =>
+    body({
+      eventId: revised.id,
+      email: 'availability-' + n + '@example.edu',
+      surveyVersion: revised.surveyVersion,
+      answers: [{ questionId: q.id, value, other: '' }],
+    });
+  for (const value of [
+    null,
+    {},
+    [],
+    { ...available, extra: true },
+    { ...available, status: 'wrong' },
+    { ...available, selections: [] },
+    { ...available, status: 'unavailable' },
+    { ...available, status: 'unsure' },
+    { ...alternative, status: 'available' },
+    { ...alternative, status: 'unsure' },
+    { ...alternative, alternatives: [] },
+    {
+      ...available,
+      selections: [{ date: '2026-10-18', periods: ['Evening'] }],
+    },
+    {
+      ...available,
+      selections: [{ date: '2026-10-16', periods: ['Morning'] }],
+    },
+    { ...available, selections: [{ date: '2026-10-16', periods: [] }] },
+    {
+      ...available,
+      selections: [{ date: '2026-10-16', periods: ['Evening', 'Evening'] }],
+    },
+    {
+      ...available,
+      selections: [...available.selections, ...available.selections],
+    },
+    { ...alternative, alternatives: [{ date: '2026-02-30', time: '' }] },
+    { ...alternative, alternatives: [{ date: '2026-11-03', time: '24:00' }] },
+    {
+      ...alternative,
+      alternatives: [{ date: '2026-11-03', time: '18:30', extra: true }],
+    },
+    {
+      ...alternative,
+      alternatives: [alternative.alternatives[0], alternative.alternatives[0]],
+    },
+    {
+      ...alternative,
+      alternatives: Array.from({ length: 11 }, (_, i) => ({
+        date: '2026-11-03',
+        time: '18:' + String(i).padStart(2, '0'),
+      })),
+    },
+  ])
+    assert.throws(() => validateSurvey(request(value), revised), {
+      status: 400,
+    });
+  for (const dates of [
+    [],
+    ['2026-02-30'],
+    ['2026-10-16', '2026-10-16'],
+    [
+      ...Array.from(
+        { length: 31 },
+        (_, i) => '2026-10-' + String(i + 1).padStart(2, '0'),
+      ),
+      '2026-11-01',
+    ],
+  ])
+    assert.throws(() => surveyQuestions([{ ...q, dates }]), { status: 400 });
+  for (const options of [[], Array.from({ length: 13 }, (_, i) => String(i))])
+    assert.throws(() => surveyQuestions([{ ...q, options }]), { status: 400 });
+  assert.deepEqual(
+    surveyQuestions([{ ...q, dates: [...q.dates].reverse() }])[0].dates,
+    q.dates,
+  );
+  const required = publicContent(event.id, {
+    ...game,
+    surveyQuestions: [{ ...q, required: true }],
+  });
+  assert.deepEqual(
+    validateSurvey(
+      request({
+        status: 'available',
+        selections: [
+          { date: '2026-10-17', periods: ['Evening', 'Afternoon'] },
+          { date: '2026-10-16', periods: ['Afternoon'] },
+        ],
+        alternatives: [],
+      }),
+      revised,
+    ).answers[0].value.selections,
+    [
+      { date: '2026-10-16', periods: ['Afternoon'] },
+      { date: '2026-10-17', periods: ['Afternoon', 'Evening'] },
+    ],
+  );
+  assert.throws(
+    () =>
+      validateSurvey(
+        { ...request(''), surveyVersion: required.surveyVersion },
+        required,
+      ),
+    { status: 400 },
+  );
+  await saveEvent(
+    db,
+    { action: 'publish', id: event.id, revision: 0, event: game },
+    'officer@example.edu',
+    [],
+  );
+  const old = await submit(db, body(), await liveEvents(db, []));
+  const previous = (
+    await db.query(
+      'SELECT * FROM club_forms.survey_responses WHERE entry_id=$1',
+      [old.id],
+    )
+  ).rows[0];
+  await saveEvent(
+    db,
+    {
+      action: 'publish',
+      id: event.id,
+      revision: 1,
+      event: { ...game, surveyQuestions: [q] },
+    },
+    'officer@example.edu',
+    [],
+  );
+  const live = await liveEvents(db, []),
+    requests = variants.map((value, i) => request(value, i));
+  const receipts = await Promise.all(
+    requests.flatMap((body) =>
+      Array.from({ length: 3 }, () => submit(db, body, live)),
+    ),
+  );
+  assert.equal(new Set(receipts.map((r) => r.id)).size, 5);
+  const rows = await reportRows(db, { eventId: event.id });
+  assert.equal(rows.length, 6);
+  for (const [i, value] of variants.entries())
+    assert.deepEqual(
+      rows.find((r) => r.email === 'availability-' + i + '@example.edu')
+        .answers[0].value,
+      value,
+    );
+  assert.deepEqual(
+    (
+      await db.query(
+        'SELECT * FROM club_forms.survey_responses WHERE entry_id=$1',
+        [old.id],
+      )
+    ).rows[0],
+    previous,
+  );
+  const summary = summarizeResponses(rows).groups.find(
+    (g) => g.version === revised.surveyVersion,
+  ).questions[0];
+  assert.equal(summary.answered, 4);
+  assert.equal(summary.skipped, 1);
+  assert.equal(
+    summary.choices.find((c) => c.value === '2026-10-16 · Evening').count,
+    1,
+  );
+  assert.equal(
+    summary.choices.find((c) => c.value === 'Not available').count,
+    1,
+  );
+  const csv = responsesCSV(rows);
+  assert.match(csv, /When could you come\? — 2026-10-16 · Evening/);
+  assert.match(csv, /Suggested: 2026-11-03 · 18:30/);
+  assert.match(csv, /Suggested: 2026-11-04/);
+  assert.doesNotMatch(csv, /\[object Object\]/);
+});
+test('RSVP basic answer types validate, save, and retain zero and calendar values', async () => {
+  const examples = [
+    ['short', 'Brief answer', ['x'.repeat(301), []]],
+    ['text', 'First line\nSecond line', ['x'.repeat(3001), {}]],
+    [
+      'date',
+      '2028-02-29',
+      ['2027-02-29', '2028-13-01', '0000-01-01', 20281023],
+    ],
+    ['number', 0, ['0', NaN, Infinity, Number.MAX_SAFE_INTEGER + 1, {}]],
+    ['time', '18:30', ['24:00', '12:60', '6:30 PM', '18:30:00', 1830]],
+    [
+      'email',
+      'advisor@example.edu',
+      ['not-email', 'a@', 'a\nb@example.edu', 'x'.repeat(255) + '@example.edu'],
+    ],
+  ];
+  const questions = surveyQuestions(
+    examples.map(([type]) => ({
+      id: randomUUID(),
+      label: type,
+      type,
+      required: true,
+      options: [],
+      allowOther: false,
+    })),
+  );
+  const typedEvent = publicContent('basic-types', {
+    ...game,
+    surveyQuestions: questions,
+  });
+  const request = body({
+    eventId: typedEvent.id,
+    surveyVersion: typedEvent.surveyVersion,
+    answers: questions.map((q, i) => ({
+      questionId: q.id,
+      value: examples[i][1],
+      other: '',
+    })),
+  });
+  for (const [index, [, , invalid]] of examples.entries()) {
+    for (const value of [...invalid, '']) {
+      const answers = structuredClone(request.answers);
+      answers[index].value = value;
+      assert.throws(() => validateSurvey({ ...request, answers }, typedEvent), {
+        status: 400,
+      });
+    }
+    assert.throws(
+      () =>
+        surveyQuestions([
+          { ...questions[index], options: ['Wrong', 'Options'] },
+        ]),
+      { status: 400 },
+    );
+    assert.throws(
+      () => surveyQuestions([{ ...questions[index], allowOther: true }]),
+      { status: 400 },
+    );
+  }
+  const saved = await submit(db, request, [typedEvent]);
+  const results = await surveyResults(db, { eventId: typedEvent.id });
+  assert.equal(results.responses[0].entry_id, saved.id);
+  assert.deepEqual(results.responses[0].answers, request.answers);
+  assert.deepEqual(
+    summarizeResponses(results.responses).groups[0].questions.map(
+      (q) => q.written[0].value,
+    ),
+    examples.map((e) => e[1]),
+  );
+  const csv = responsesCSV(results.responses);
+  for (const [, value] of examples)
+    assert.ok(csv.includes(String(value).replaceAll('\n', ' ')), String(value));
+  const optional = {
+    ...typedEvent,
+    surveyQuestions: questions.map((q) => ({ ...q, required: false })),
+  };
+  const blank = {
+    surveyVersion: surveyVersion(optional.surveyQuestions),
+    answers: questions.map((q) => ({ questionId: q.id, value: '', other: '' })),
+  };
+  assert.equal(
+    validateSurvey(blank, optional).answers.length,
+    questions.length,
+  );
+});
+
+test('Game Night date-period choices survive concurrent retries and preserve historical answers', async () => {
+  const historical = await submit(db, body(), [event]);
+  const dates = [
+    '2026-10-16',
+    '2026-10-17',
+    '2026-10-18',
+    '2026-10-23',
+    '2026-10-24',
+    '2026-10-25',
+    '2026-10-30',
+    '2026-10-31',
+    '2026-11-01',
+  ];
+  const revised = {
+    ...game,
+    surveyQuestions: game.surveyQuestions.flatMap((q) =>
+      q.label.startsWith('When could')
+        ? dates.map((date) => ({
+            ...q,
+            id: randomUUID(),
+            label: 'Available periods',
+            choiceDate: date,
+            options: [
+              'Morning',
+              'Afternoon',
+              'Evening',
+              'Not available',
+              'Not sure yet',
+            ],
+            allowOther: false,
+            exclusiveOption: 3,
+          }))
+        : [q],
+    ),
+  };
+  const available = revised.surveyQuestions[3];
+  for (const choiceDate of [
+    '2026-02-29',
+    '0000-01-01',
+    '10/16/2026',
+    '',
+    20261016,
+  ])
+    assert.throws(() => surveyQuestions([{ ...available, choiceDate }]), {
+      status: 400,
+    });
+  assert.throws(
+    () =>
+      surveyQuestions([
+        { ...available, type: 'text', options: [], exclusiveOption: undefined },
+      ]),
+    { status: 400 },
+  );
+  await saveEvent(
+    db,
+    { action: 'publish', id: event.id, revision: 0, event: revised },
+    'officer@example.edu',
+    [],
+  );
+  const live = await liveEvents(db, []);
+  assert.deepEqual(
+    live[0].surveyQuestions
+      .filter((q) => q.choiceDate)
+      .map((q) => q.choiceDate),
+    dates,
+  );
+  const requests = Array.from({ length: 90 }, (_, i) =>
+    body({
+      email: `period-${i}@example.edu`,
+      surveyVersion: live[0].surveyVersion,
+      answers: live[0].surveyQuestions.map((q) => ({
+        questionId: q.id,
+        other: '',
+        value: q.choiceDate
+          ? [q.options[i % 5]]
+          : q.type === 'multiple'
+            ? [q.options[0]]
+            : q.type === 'text'
+              ? 'Test answer'
+              : q.options[0],
+      })),
+    }),
+  );
+  const replies = await Promise.all(
+    requests.flatMap((request) =>
+      Array.from({ length: 3 }, () => submit(db, request, live)),
+    ),
+  );
+  assert.equal(new Set(replies.map((r) => r.id)).size, 90);
+  const rows = await reportRows(db, { eventId: event.id });
+  assert.equal(rows.length, 91);
+  assert.deepEqual(
+    rows.find((r) => r.entry_id === historical.id).questions,
+    event.surveyQuestions,
+  );
+  for (const request of requests) {
+    const saved = rows.find((r) => r.email === request.email);
+    assert.deepEqual(saved.answers, request.answers);
+    assert.deepEqual(saved.questions, live[0].surveyQuestions);
+  }
+  const report = summarizeResponses(rows);
+  assert.equal(report.groups.length, 2);
+  for (const q of report.groups
+    .find((g) => g.version === live[0].surveyVersion)
+    .questions.filter((q) => q.choiceDate))
+    assert.deepEqual(
+      q.choices.map((c) => c.count),
+      [18, 18, 18, 18, 18],
+    );
+  const csv = responsesCSV(rows);
+  for (const date of dates)
+    assert.ok(csv.includes(date + ' · Available periods — Morning'));
+  const invalid = structuredClone(requests[0]);
+  invalid.answers[3].value = ['Morning', 'Not available'];
+  await assert.rejects(() => submit(db, invalid, live), { status: 400 });
+});
+
 test('potential events publish with TBD while scheduled events require dates; Social defaults to edu with an explicit override', () => {
   assert.equal(event.date, '');
   assert.equal(event.requireEduEmail, true);

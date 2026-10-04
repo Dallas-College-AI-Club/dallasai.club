@@ -1,6 +1,6 @@
 # Private custom surveys
 
-Officers can select **Preview sample comparison** for Advisor Studio in Club
+Officers can select **Test sample** for Advisor Studio in Club
 Office to test the full survey with fictional Jordan Morgan and Alex Rivera
 responses. Choose either sample respondent, edit answers and comments, review
 and include responses, test submission, and download personal copies. **Reset
@@ -25,7 +25,29 @@ Drafts appear first. Expand a survey to read its saved responses in place; linke
 event surveys show separate RSVP and feedback sections. **Event surveys** also
 groups registrations and linked feedback by event, including past events.
 Officers can expand or collapse answers, compile summaries, export matching CSV,
-open the survey, manage respondents, and copy its private or question-preview link.
+open the survey, manage respondents, and copy its sharing link. **Open private survey**
+always opens the original respondent invitation, whose welcome page still offers
+**Preview questions**. Drafts retain their separate question-preview link. **Manage
+survey** opens the dedicated Office view; it does not open the respondent survey.
+
+For a published survey, expand **Short link** to save an existing TinyURL or another
+HTTPS short address. **Copy link** and **QR code** use that address; clearing the field
+restores the original invitation. Check that the short address opens the correct
+survey before sharing it. Saving a link records the officer's change and does not
+change the invitation, questions, answering access, expiry or responses. Manually
+entered short links are format-checked, not followed by the server.
+
+When no short link is saved and the field is empty, **Create short link** generates and
+saves one for the current invitation. Copy and QR then use it. An existing saved link
+is preserved, including Advisor Studio's `https://tinyurl.com/advisor-survey`.
+Retries reuse the same generated address instead of spending another link from the
+account allowance. Short.io is used first, with TinyURL as a backup when configured.
+Once saved, the short address stays the same even if the preferred provider recovers.
+If both services are unavailable, the original invitation still works; retry or save
+an existing short address. Automatic creation uses the server's `SHORT_IO_API_KEY`,
+connected `SHORT_IO_DOMAIN`, and optional `TINYURL_API_TOKEN` backup. API credentials
+are never sent to the browser.
+Expired and closed surveys do not offer sharing controls, even if a short link is saved.
 
 ## Event feedback and creation
 
@@ -40,18 +62,38 @@ RSVP questions collect answers during registration and share the event's publica
 state. Feedback surveys have their own publication, expiration, answering link and QR
 code. Publishing feedback does not register anyone for the event. After publishing,
 use **QR code → Download QR** to save a scannable SVG. The QR is generated locally and
-contains the same private answering link; respondents still verify their email.
+contains the same sharing link as **Copy link**; respondents still verify their email.
 
-Builder surveys support written answers, single choice, multiple choice, 1–5 rating,
-calendar date and number. A multiple-choice question can mark one answer exclusive;
-choosing it clears and blocks the other answers. RSVP questions support written,
-single and multiple choice, including an explicit exclusive answer and legacy
+Both builders support short and long written answers, single choice, multiple choice,
+calendar dates, exact times, numbers and email addresses. Custom surveys also support
+a 1–5 rating. A multiple-choice question can mark one answer exclusive;
+choosing it clears and blocks the other answers. RSVP questions also recognize legacy
 “Any of these” / “None of these” labels. Uncheck the exclusive answer to choose others.
+
+For availability, use one **Date availability** question. Add the dates and edit
+the periods, such as Afternoon/Evening or exact time ranges. Leave **Required
+question** unchecked to allow skipping it. Respondents mark date/period pairs in
+one grid, or choose a whole-list answer: **Not available**, **Not sure yet**, or
+**Suggest alternative dates**. The grid grays out for those answers. Unavailable
+respondents can optionally suggest dates; the alternative-date choice requires
+one. Each suggested date has an optional time. State the timezone once in help text.
 
 Neon stores survey definitions and structured answers as JSON with stable question
 IDs, not a changing SQL column per question. CSV export turns question titles into
-column headings. Calendar answers retain `YYYY-MM-DD` without timezone conversion;
-event timestamps and submission timestamps use the existing Central Time rules.
+column headings, including a choice question's date when supplied. Calendar answers
+retain `YYYY-MM-DD` and clock times retain 24-hour `HH:mm`, without timezone conversion.
+Numbers are JSON numbers (including zero); email answers are trimmed and lowercased.
+Period questions retain their ISO date as `choiceDate` in the definition/snapshot.
+New availability questions instead store `dates` and period `options` in their
+definition; answers store `{status, selections: [{date, periods}], alternatives:
+[{date, time}]}`. A skipped optional question stays empty. Custom surveys also save
+readable answer text for CSV and result views. See [event editing](event-editor.md)
+for the shared implementation map and validation rules.
+RSVP choice values are labels; custom choice values are indexes into their frozen
+definition, with readable text also saved. Use question IDs when joining answers;
+use the saved question version when interpreting historical responses.
+
+Event timestamps and submission timestamps use the existing Central Time rules.
 RSVP answers retain a snapshot of the questions at submission. Custom survey
 questions and permissions are fixed when published.
 
@@ -266,8 +308,8 @@ prints the temporary test URLs. It is not included in the deployed public build.
 ## Create another survey
 
 Choose **Create custom survey**, then follow **Template → Audience → Questions
-→ Preview → Publish**. Blank and quick-feedback templates support text, single
-choice, multiple choice, and 1–5 rating questions. Choice order supports dragging
+→ Preview → Publish**. Blank and quick-feedback templates support the answer types
+listed above. Choice order supports dragging
 and move buttons. In a multiple-choice question, check **Exclusive** beside one
 choice, such as “Any of these” or “None of these”. Choosing it clears and blocks the
 other choices until it is unchecked, and the server rejects it combined with others.

@@ -11,6 +11,7 @@ import { dateTime, day, plural } from './format.js';
 import { submissionEditor } from './submission-editor.js';
 import { isPaused } from './session.js';
 import { mountFeedbackGroups } from './custom-surveys.js';
+import { availabilityValues } from '../surveys/availability-values.js';
 // onReset runs when the filters replace a single-response view, so the
 // address can drop the response. openContacts(email) shows the Contacts tab.
 export function mountSurveyResults(
@@ -286,7 +287,11 @@ export function mountSurveyResults(
         for (const question of group.questions) {
           const part = node('section');
           part.append(
-            node('h4', question.label),
+            node(
+              'h4',
+              (question.choiceDate ? question.choiceDate + ' · ' : '') +
+                question.label,
+            ),
             node(
               'p',
               question.answered +
@@ -326,7 +331,7 @@ export function mountSurveyResults(
             written.append(
               node(
                 'summary',
-                question.type === 'text'
+                !['single', 'multiple'].includes(question.type)
                   ? 'Written answers (' + question.written.length + ')'
                   : 'Other answers (' + question.written.length + ')',
               ),
@@ -520,13 +525,21 @@ export function mountSurveyResults(
     const answers = node('dl');
     for (const question of response.questions) {
       const answer = response.answers.find((a) => a.questionId === question.id);
-      const values = (
-        Array.isArray(answer?.value) ? answer.value : [answer?.value || '']
-      )
-        .filter(Boolean)
-        .map((v) => (v === '__other__' ? 'Other: ' + answer.other : v));
+      const values =
+        question.type === 'availability'
+          ? availabilityValues(answer?.value)
+          : (Array.isArray(answer?.value)
+              ? answer.value
+              : [answer?.value ?? '']
+            )
+              .filter((value) => value !== '')
+              .map((v) => (v === '__other__' ? 'Other: ' + answer.other : v));
       answers.append(
-        node('dt', question.label),
+        node(
+          'dt',
+          (question.choiceDate ? question.choiceDate + ' · ' : '') +
+            question.label,
+        ),
         node('dd', values.length ? values.join('\n') : 'No answer'),
       );
     }
@@ -543,6 +556,7 @@ export function mountSurveyResults(
       version: cardVersion,
       create: card,
       update: (el, response) => el.patch(response),
+      empty: () => node('p', 'No RSVP responses match these filters.', 'hint'),
     });
     group.summary.textContent = group.title;
     group.rsvpHeading.textContent =
@@ -606,6 +620,15 @@ export function mountSurveyResults(
       const eventChoices = new Map(
         data.events.map((event) => [event.id, event]),
       );
+      // Registration exists before the first answer, including without questions.
+      // Saved responses still supply events whose registration has since closed.
+      for (const event of eventData.events)
+        if (event.draft?.registrationOpen || event.published?.registrationOpen)
+          eventChoices.set(event.id, {
+            id: event.id,
+            title: event.draft?.title || event.published?.title || event.id,
+            date: event.draft?.date || event.published?.date,
+          });
       for (const survey of catalog.surveys) {
         const id = survey.definition?.eventId,
           event = eventData.events.find((e) => e.id === id);
@@ -624,6 +647,29 @@ export function mountSurveyResults(
       );
       q('#survey-event').value = eventId;
       shown.clear();
+      // Browse empty events on the first page; response filters still narrow the
+      // list. An explicitly selected event keeps its own empty state and reports.
+      if (
+        type.value !== 'feedback' &&
+        !entryId &&
+        (eventId ||
+          (offset === 0 &&
+            !search.value.trim() &&
+            !star.checked &&
+            view.value !== 'archived' &&
+            attendance.value === 'all' &&
+            feedback.value === 'all'))
+      )
+        for (const event of eventChoices.values()) {
+          if (eventId && event.id !== eventId) continue;
+          shown.set(event.id, {
+            title: event.title,
+            rows: [],
+            list: node('div'),
+            summary: node('summary'),
+            rsvpHeading: node('summary'),
+          });
+        }
       for (const response of type.value === 'feedback'
         ? []
         : [...priorRows, ...data.responses]) {

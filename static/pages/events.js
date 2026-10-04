@@ -1,5 +1,6 @@
 import { eventText, eventList, eventAgenda } from '../app/event-format.js';
 import { rsvpDialog } from '../app/rsvp-dialog.js';
+import { eventSharing } from '../app/event-sharing.js';
 import { eventImageViewer } from '../app/event-image-viewer.js';
 import {
   formFooter,
@@ -135,7 +136,7 @@ export function mountEvents(root) {
     if (
       event.target.closest('button,a,form') &&
       !event.target.closest(
-        '.calendar-read,.event-calendar-back,.rsvp-dialog,.rsvp-answer-preview,#open-rsvp,#event-rsvp-action',
+        '.calendar-read,.event-calendar-back,.rsvp-dialog,.rsvp-answer-preview,#open-rsvp,#event-rsvp-action,.event-sharing',
       )
     ) {
       event.preventDefault();
@@ -253,6 +254,7 @@ export function mountEvents(root) {
         ${selected.meetingUrl ? '<a class="outline-link" target="_blank" rel="noopener" href="' + escapeHTML(selected.meetingUrl) + '">Open meeting link ↗</a>' : ''}
         ${past || privatePreview ? '' : /* HTML */ `${canRSVP ? '<button id="event-rsvp-action" class="solid-link">RSVP for this event</button>' : ''}${selected.date ? '<button id="save-event" class="outline-link">Add to calendar ↓</button>' : ''}`}${privatePreview ? '' : '<button id="ask-event-question" class="outline-link">Ask about this event</button>'}
       </div>`;
+    q('.event-registration').before(eventSharing(selected));
     if (q('#ask-event-question'))
       q('#ask-event-question').onclick = () => questions.open(selected);
     if (privatePreview || (!past && selected.registrationOpen !== false)) {
@@ -288,8 +290,7 @@ export function mountEvents(root) {
           )
             ? image.previewSrc
             : EVENTS_API_URL + '?image=' + encodeURIComponent(image.id);
-        img.alt =
-          image.alt || selected.title + ' — event image ' + (index + 1);
+        img.alt = image.alt || selected.title + ' — event image ' + (index + 1);
         if (privatePreview) figure.append(img);
         else {
           const button = document.createElement('button');
@@ -487,8 +488,7 @@ export function mountEvents(root) {
   };
   const updated = () => {
     if (privatePreview) return;
-    fallback =
-      splitEvents().upcoming[0] || splitEvents().past[0] || EVENTS[0];
+    fallback = splitEvents().upcoming[0] || splitEvents().past[0] || EVENTS[0];
     const previous = selected;
     selected =
       EVENTS.find((e) => e.id === (selected?.id || requested)) || fallback;

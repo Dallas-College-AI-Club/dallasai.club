@@ -81,6 +81,64 @@ the editor deployment. They preserve original events, responses, images, and his
 Archived events remain private, and database publication status overrides the
 original static registry even during a public API outage.
 
+## RSVP forms and saved data
+
+RSVP forms support short answers, long written answers, single and multiple choices,
+dates, times, numbers, email addresses and **Date availability**. Availability is
+one question with a grid of up to 31 dates and 1–12 editable periods. Leave
+**Required answer** unchecked to allow skipping it. Game Night uses Afternoon and
+Evening and requires one availability answer; individual dates do not require a
+selection. Other events can use Morning or exact labels such as 18:30–20:00.
+Specify the timezone once in the question's help text.
+
+**Not available** and **Not sure yet** apply to all dates and disable the grid.
+**Not available** also allows optional alternative dates; **Suggest alternative
+dates** asks for at least one. Each suggested date has an optional clock time.
+**Clear availability** returns to an unanswered question.
+
+Set **Reply-by date (optional)** to show the deadline in a rounded box on the
+event page, RSVP form and officer overview. This is the requested reply date;
+**Accept RSVPs** still controls registration. The top of each event and RSVP form
+has its public event QR, **Share event**, and **Download QR**. Phones use native
+sharing when supported; otherwise Share copies the event link. The existing QR
+library generates SVG through the event API without reading respondent data.
+
+First publication creates a stable short link using the same provider as custom
+surveys. The public address, Share action and QR all use that saved link. Editing,
+archiving or restoring keeps it; duplicating an event creates a different link.
+**Open the new short link and QR in tabs to check them after publishing** is on
+by default. Clear it to opt out; the setting is saved with the event. Draft saves
+do not create links or open tabs. If the browser blocks a tab, the saved overview
+retains links to open both checks. If link creation fails, the event still saves
+and **Create short link** retries without publishing again.
+
+The data path is deliberately direct:
+
+- `backend/admin/survey-editor.js` edits the event's question definitions.
+- `static/app/rsvp-dialog.js` renders both public RSVP and private trial forms.
+- `backend/surveys/availability-ui.js` supplies the shared grid for RSVP, custom
+  surveys and officer response editing; `availability-values.js` formats results.
+- `backend/lib/surveys.mjs` validates the question version and every answer.
+- `backend/lib/survey-availability.mjs` validates dates, periods and global states.
+- `backend/lib/submissions.mjs` saves the RSVP and its question/answer snapshot in
+  one database transaction. A retry returns the original record.
+- `backend/lib/survey-report.mjs` reads those saved snapshots for summaries and CSV.
+
+Question IDs identify answers. Publishing revised questions generates a new version;
+earlier responses keep their original definitions and meanings. Dates use `YYYY-MM-DD`,
+times use `HH:mm`, numbers remain JSON numbers, and emails are trimmed/lowercased.
+An availability answer is either an empty string (skipped) or an object with
+`status`, `selections: [{date, periods}]`, and `alternatives: [{date, time}]`.
+Dates are ISO strings; an omitted suggested time is an empty string. Status is
+`available`, `unavailable`, `unsure`, or `alternative`. The server rejects mixed
+global states and selected periods, unlisted slots, invalid dates/times and duplicates.
+CSV includes a readable answer and separate date/period columns. Older choice
+questions retain their labels and optional `choiceDate` metadata unchanged.
+
+Event surveys lists RSVP-enabled events before the first response. Reopening a survey
+page starts its dropdown filters at their defaults; a direct event link remains scoped
+to that event. Saved responses remain available after closure or archiving.
+
 ## Verification
 
 `npm ci --include=dev --ignore-scripts`, `npm test`, and `npm run build`

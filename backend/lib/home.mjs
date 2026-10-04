@@ -11,8 +11,8 @@ const preview = (data) => {
 export async function homeSummary(db, published, upcoming) {
   const upcomingIds = upcoming.map((event) => event.id);
   const titles = new Map(published.map((event) => [event.id, event]));
-  // Active RSVPs per event with new submissions; cancelled RSVPs are not counted.
-  const rsvpGroups = (
+  // Count active RSVPs once for review groups and confirmed/potential events.
+  const rsvpTotals = (
     await db.query(
       `SELECT data->>'eventId' AS id,
         (array_agg(data->>'eventTitle' ORDER BY created_at DESC))[1] AS title,
@@ -20,15 +20,17 @@ export async function homeSummary(db, published, upcoming) {
         count(*)::int AS total,
         count(*) FILTER (WHERE review_status='new')::int AS new
       FROM club_forms.entries WHERE kind='rsvp' AND review_status IN ('new','reviewed') AND state<>'cancelled' AND data->>'eventId' IS NOT NULL
-      GROUP BY 1 HAVING count(*) FILTER (WHERE review_status='new')>0`,
+      GROUP BY 1`,
     )
-  ).rows
-    .map((group) => ({
-      ...group,
-      title: titles.get(group.id)?.title || group.title,
-      date: titles.get(group.id)?.date || group.date,
-      past: !upcomingIds.includes(group.id),
-    }))
+  ).rows.map((group) => ({
+    ...group,
+    title: titles.get(group.id)?.title || group.title,
+    date: titles.get(group.id)?.date || group.date,
+    past: !upcomingIds.includes(group.id),
+  }));
+  const totals = new Map(rsvpTotals.map((group) => [group.id, group.total]));
+  const rsvpGroups = rsvpTotals
+    .filter((group) => group.new > 0)
     .sort(
       (a, b) =>
         Number(a.past) - Number(b.past) ||
@@ -40,24 +42,23 @@ export async function homeSummary(db, published, upcoming) {
       WHERE review_status='new' AND kind<>'rsvp' ORDER BY created_at DESC,id LIMIT 5`,
     )
   ).rows.map(({ data, ...entry }) => ({ ...entry, preview: preview(data) }));
-  const dated = upcoming.find((event) => event.date);
+  const dated = upcoming.find((event) => event.date && !event.potential);
   const nextEvent = dated
     ? {
         id: dated.id,
         title: dated.title,
         date: dated.date,
         category: dated.category || '',
-        rsvps: (
-          await db.query(
-            `SELECT count(*)::int AS n FROM club_forms.entries WHERE kind='rsvp' AND review_status IN ('new','reviewed') AND state<>'cancelled' AND data->>'eventId'=$1`,
-            [dated.id],
-          )
-        ).rows[0].n,
+        rsvps: totals.get(dated.id) || 0,
       }
     : null;
   const potential = upcoming
-    .filter((event) => !event.date)
-    .map(({ id, title }) => ({ id, title }));
+    .filter((event) => event.potential || !event.date)
+    .map(({ id, title, registrationOpen }) => ({
+      id,
+      title,
+      rsvps: registrationOpen === false ? null : totals.get(id) || 0,
+    }));
   const unpublished = (
     await db.query(
       `SELECT id,draft->>'title' AS title,draft->>'date' AS date,

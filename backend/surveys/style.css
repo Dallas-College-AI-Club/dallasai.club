@@ -1,3 +1,9 @@
+@import url('./availability.css');
+.survey-deadline {
+  padding: 14px 16px;
+  border: 1px solid currentColor;
+  border-radius: 14px;
+}
 :root {
   color-scheme: dark;
   --bg: #10131d;
@@ -244,6 +250,7 @@ header {
 }
 select,
 input[type='number'],
+.custom-form .question input:not([type='radio']):not([type='checkbox']),
 textarea {
   background: #111928;
   color: var(--ink);
@@ -1877,8 +1884,10 @@ input:invalid {
   opacity: 0.5;
   cursor: not-allowed;
 }
-.custom-form textarea {
+.custom-form textarea,
+.custom-form .question input:not([type='radio']):not([type='checkbox']) {
   width: 100%;
+  min-width: 0;
 }
 .custom-form h1,
 .custom-form .form-option span {

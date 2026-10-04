@@ -994,6 +994,7 @@ const sections = {
       if (hub) {
         shownEntry = null;
         customShown = null;
+        q('#survey-collection').value = '';
         return loadSurveyLibrary();
       }
       if (creating) {
@@ -1021,7 +1022,11 @@ const sections = {
       surveys.show(entry, event, route.query.followup === '1');
     },
     // Leaving a custom survey asks its unsaved builder first.
-    leave: () => customSurveys.leave(),
+    leave() {
+      if (!customSurveys.leave()) return false;
+      shownEntry = customShown = null;
+      return true;
+    },
   },
   contacts: {
     pane: q('#contacts-pane'),
@@ -1045,6 +1050,26 @@ const sections = {
     },
   },
 };
+// A selected navigation tab is still a request to open its default view.
+for (const id of [
+  'surveys-tab',
+  'all-surveys-group',
+  'event-surveys-group',
+  'custom-surveys-group',
+])
+  q('#' + id).onclick = (event) => {
+    if (
+      event.button !== 0 ||
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.altKey ||
+      event.currentTarget.getAttribute('href') !== location.hash
+    )
+      return;
+    event.preventDefault();
+    if (sections.surveys.leave()) sections.surveys.enter(router.route());
+  };
 const titles = {
   home: 'Home',
   inbox: 'Inbox',

@@ -1,6 +1,7 @@
 import { lock, node } from './ui.js';
 import { drafts } from './session.js';
 import { FIELD_SCHEMA } from './format.js';
+import { availabilityFields } from '../surveys/availability-ui.js';
 const campuses = [
   'Brookhaven',
   'Cedar Valley',
@@ -234,18 +235,39 @@ function questionInput(parent, question, answer) {
   );
   if (question.description)
     group.append(node('p', question.description, 'hint'));
+  if (question.choiceDate)
+    group.append(node('p', 'Date: ' + question.choiceDate, 'hint'));
   parent.append(group);
-  if (question.type === 'text') {
+  if (question.type === 'availability') {
+    const control = availabilityFields(question, { value: answer?.value });
+    group.append(control.root);
+    return () => ({
+      questionId: question.id,
+      value: control.read(),
+      other: '',
+    });
+  }
+  if (!['single', 'multiple'].includes(question.type)) {
     const control = input(
       group,
       'Answer',
-      answer?.value || '',
-      3000,
+      answer?.value ?? '',
+      question.type === 'text' ? 3000 : question.type === 'email' ? 254 : 300,
       question.required,
     );
+    if (['date', 'time', 'number', 'email'].includes(question.type))
+      control.type = question.type;
+    if (question.type === 'number') control.step = 'any';
+    if (question.type === 'date') {
+      control.min = '0001-01-01';
+      control.max = '9999-12-31';
+    }
     return () => ({
       questionId: question.id,
-      value: control.value,
+      value:
+        question.type === 'number' && control.value !== ''
+          ? control.valueAsNumber
+          : control.value,
       other: '',
     });
   }

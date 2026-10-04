@@ -7,6 +7,7 @@ import { officeFixture } from './helpers/office-fixture.mjs';
 import { builderSample } from './helpers/survey-response-samples.mjs';
 import { changeDraft } from '../lib/survey-builder.mjs';
 import { saveEvent } from '../lib/events.mjs';
+import { privateSurveyToken } from '../lib/custom-surveys.mjs';
 
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH,
@@ -193,6 +194,475 @@ async function csv(page, button) {
 }
 
 try {
+  await check(
+    'Basic question types work from builder and preview through respondent save and reload',
+    async (page, fixture) => {
+      await page.goto(fixture.origin + '/admin/#/surveys/new');
+      await page
+        .getByLabel('Survey title', { exact: true })
+        .fill('Basic answers survey');
+      await page
+        .getByRole('button', { name: 'Save and continue →', exact: true })
+        .click();
+      await page
+        .getByLabel('Target audience', { exact: true })
+        .selectOption('public');
+      await page
+        .getByLabel('Who can answer?', { exact: true })
+        .selectOption('verified');
+      await page
+        .getByRole('button', { name: 'Save and continue →', exact: true })
+        .click();
+      const types = [
+        'text',
+        'short',
+        'date',
+        'number',
+        'email',
+        'single',
+        'multiple',
+        'scale',
+        'time',
+        'availability',
+      ];
+      for (const type of types) {
+        await page
+          .getByRole('button', { name: 'Add question', exact: true })
+          .click();
+        const question = page.locator('.builder-question').last();
+        await question
+          .getByLabel('Question', { exact: true })
+          .fill('Basic ' + type);
+        await question
+          .getByLabel('Answer type', { exact: true })
+          .selectOption(type);
+        await question
+          .getByLabel('Required question', { exact: true })
+          .setChecked(type !== 'availability');
+        if (['single', 'multiple', 'availability'].includes(type))
+          for (const [i, choice] of (type === 'availability'
+            ? ['Afternoon', 'Evening']
+            : ['First', 'Second']
+          ).entries())
+            await question
+              .getByLabel('Choice ' + (i + 1), { exact: true })
+              .fill(choice);
+        if (type === 'availability') {
+          for (const [i, date] of ['2026-10-16', '2026-10-17'].entries()) {
+            await question
+              .getByRole('button', { name: 'Add date', exact: true })
+              .click();
+            await question
+              .getByLabel('Date ' + (i + 1), { exact: false })
+              .fill(date);
+          }
+        }
+        if (type === 'multiple')
+          await question
+            .getByLabel('Date for these choices (optional)', { exact: true })
+            .fill('2026-10-16');
+      }
+      await page
+        .getByRole('button', { name: 'Save and continue →', exact: true })
+        .click();
+      await page.locator('.survey-trial > summary').click();
+      const fillAnswers = async (root) => {
+        for (const [type, value] of [
+          ['text', 'First line\nSecond line'],
+          ['short', 'Brief'],
+          ['date', '2028-02-29'],
+          ['number', '0'],
+          ['email', 'advisor@example.edu'],
+          ['time', '18:30'],
+        ])
+          await root
+            .locator('input,textarea')
+            .and(root.getByLabel(new RegExp('^Basic ' + type)))
+            .fill(value);
+        await root.getByRole('radio', { name: 'First', exact: true }).check();
+        await root
+          .getByRole('checkbox', { name: 'First', exact: true })
+          .check();
+        await root
+          .getByRole('checkbox', { name: 'Second', exact: true })
+          .check();
+        await root
+          .getByRole('combobox', { name: /^Basic scale/ })
+          .selectOption('4');
+        const availability = root.locator('.availability');
+        await availability
+          .getByRole('checkbox', {
+            name: 'Fri, Oct 16, 2026 · Afternoon',
+            exact: true,
+          })
+          .check();
+        await availability
+          .getByRole('radio', { name: 'Not sure yet', exact: true })
+          .check();
+        await expect(availability.getByRole('checkbox').first()).toBeDisabled();
+        await expect(
+          availability.getByRole('checkbox').first(),
+        ).not.toBeChecked();
+        await availability
+          .getByRole('radio', { name: 'Not available', exact: true })
+          .check();
+        await expect(
+          availability.getByLabel('Suggested date', { exact: true }),
+        ).toBeVisible();
+        await availability
+          .getByLabel('Time (optional)', { exact: true })
+          .fill('00:00');
+        assert.equal(
+          await availability
+            .getByLabel('Suggested date', { exact: true })
+            .evaluate((el) => el.checkValidity()),
+          false,
+        );
+        await availability
+          .getByLabel('Suggested date', { exact: true })
+          .fill('2026-11-05');
+        await availability
+          .getByLabel('Time (optional)', { exact: true })
+          .fill('00:00');
+        await availability
+          .getByRole('button', { name: 'Add another date', exact: true })
+          .click();
+        await availability
+          .getByLabel('Suggested date', { exact: true })
+          .nth(1)
+          .fill('2026-11-06');
+      };
+      await fillAnswers(page.locator('.survey-trial'));
+      await page
+        .getByRole('button', {
+          name: 'Preview how results will look',
+          exact: true,
+        })
+        .click();
+      const trial = page.getByRole('dialog', {
+        name: 'Example admin results',
+        exact: true,
+      });
+      await expect(trial).toContainText('advisor@example.edu');
+      await expect(trial).toContainText('2028-02-29');
+      await trial
+        .getByRole('button', { name: 'Close results preview', exact: true })
+        .click();
+      const preview = await page.context().newPage();
+      await preview.goto(
+        await page
+          .getByRole('link', { name: 'Open styled preview ↗', exact: true })
+          .getAttribute('href'),
+      );
+      await preview
+        .getByRole('button', { name: 'Preview the questions →', exact: true })
+        .click();
+      await expect(preview.locator('.question')).toHaveCount(10);
+      await expect(
+        preview.locator(
+          '.question input:enabled,.question textarea:enabled,.question select:enabled',
+        ),
+      ).toHaveCount(0);
+      await preview.close();
+      await page
+        .getByRole('button', { name: 'Save and continue →', exact: true })
+        .click();
+      await page
+        .getByRole('button', { name: 'Publish survey', exact: true })
+        .click();
+      await expect(
+        page.getByRole('button', { name: 'Close survey', exact: true }),
+      ).toBeVisible();
+      const survey = (
+        await fixture.db.query(
+          'SELECT id FROM club_forms.custom_surveys WHERE title=$1',
+          ['Basic answers survey'],
+        )
+      ).rows[0];
+      await page.goto(
+        fixture.origin + '/surveys/#invite=' + privateSurveyToken(survey.id),
+      );
+      await page
+        .getByRole('button', { name: 'Continue to questions →', exact: true })
+        .click();
+      await page
+        .getByRole('textbox', { name: 'Email address', exact: true })
+        .fill('typed@example.com');
+      await page
+        .getByRole('button', { name: 'Send sign-in code', exact: true })
+        .click();
+      await page
+        .getByRole('textbox', { name: 'Sign-in code', exact: true })
+        .fill('123456');
+      await page
+        .getByRole('button', { name: 'Verify and continue', exact: true })
+        .click();
+      await fillAnswers(page);
+      await page.getByRole('textbox', { name: /^Basic email/ }).fill('invalid');
+      await page
+        .getByRole('button', { name: 'Review answers →', exact: true })
+        .click();
+      await expect(
+        page.getByRole('heading', { name: 'Review your answers', exact: true }),
+      ).toHaveCount(0);
+      await page
+        .getByRole('textbox', { name: /^Basic email/ })
+        .fill('advisor@example.edu');
+      await page.setViewportSize({ width: 320, height: 820 });
+      assert.ok(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      );
+      await page
+        .getByRole('button', { name: 'Review answers →', exact: true })
+        .click();
+      await expect(page.locator('.answer-copy').nth(3)).toHaveText('0');
+      await expect(page.locator('.answer-copy').nth(4)).toHaveText(
+        'advisor@example.edu',
+      );
+      await page.getByRole('checkbox').check();
+      await page
+        .getByRole('button', { name: 'Submit answers', exact: true })
+        .click();
+      await expect(
+        page.getByRole('heading', {
+          name: 'Your response is saved',
+          exact: true,
+        }),
+      ).toBeVisible();
+      const saved = (
+        await fixture.db.query(
+          'SELECT responses FROM club_forms.custom_survey_responses WHERE survey_id=$1',
+          [survey.id],
+        )
+      ).rows[0];
+      assert.deepEqual(
+        saved.responses.map((a) => a.value),
+        [
+          'First line\nSecond line',
+          'Brief',
+          '2028-02-29',
+          0,
+          'advisor@example.edu',
+          0,
+          [0, 1],
+          4,
+          '18:30',
+          {
+            status: 'unavailable',
+            selections: [],
+            alternatives: [
+              { date: '2026-11-05', time: '00:00' },
+              { date: '2026-11-06', time: '' },
+            ],
+          },
+        ],
+      );
+      assert.equal(
+        (
+          await fixture.db.query(
+            'SELECT definition FROM club_forms.custom_surveys WHERE id=$1',
+            [survey.id],
+          )
+        ).rows[0].definition.questions[6].choiceDate,
+        '2026-10-16',
+      );
+      await page.reload();
+      await page
+        .getByRole('button', { name: 'Continue to questions →', exact: true })
+        .click();
+      await expect(
+        page.getByRole('spinbutton', { name: /^Basic number/ }),
+      ).toHaveValue('0');
+      await expect(
+        page.getByRole('textbox', { name: /^Basic email/ }),
+      ).toHaveValue('advisor@example.edu');
+      await expect(
+        page
+          .locator('.availability')
+          .getByRole('radio', { name: 'Not available', exact: true }),
+      ).toBeChecked();
+      await expect(
+        page.getByLabel('Suggested date', { exact: true }).nth(0),
+      ).toHaveValue('2026-11-05');
+      await expect(
+        page.getByLabel('Time (optional)', { exact: true }).nth(0),
+      ).toHaveValue('00:00');
+      await expect(
+        page.getByLabel('Suggested date', { exact: true }).nth(1),
+      ).toHaveValue('2026-11-06');
+      await page
+        .getByRole('button', { name: 'Clear availability', exact: true })
+        .click();
+      await page
+        .getByRole('button', { name: 'Review answers →', exact: true })
+        .click();
+      await expect(page.locator('.answer-copy').last()).toHaveText(
+        'Not answered',
+      );
+    },
+  );
+
+  await check(
+    'Reopening survey pages resets dropdowns and keeps explicit event links scoped',
+    async (page, fixture, ids) => {
+      await page.locator('#surveys-tab').click();
+      await page.locator('#survey-collection').selectOption('events');
+      await expect(page.locator('#survey-library')).toContainText(
+        'Office feedback A',
+      );
+      await page.locator('#home-tab').click();
+      await page.locator('#surveys-tab').click();
+      await expect(page.locator('#survey-collection')).toHaveValue('');
+      const root = await events(page, fixture, ids.event);
+      await root.locator('#survey-view').selectOption('archived');
+      await root
+        .getByRole('combobox', { name: /^Attendance/ })
+        .selectOption('attended');
+      await page.locator('#home-tab').click();
+      await page.locator('#surveys-tab').click();
+      await page.locator('#event-surveys-group').click();
+      await expect(root.locator('#survey-event')).toHaveValue('');
+      await expect(root.locator('#survey-view')).toHaveValue('active');
+      await expect(
+        root.getByRole('combobox', { name: /^Response type/ }),
+      ).toHaveValue('all');
+      await expect(
+        root.getByRole('combobox', { name: /^Attendance/ }),
+      ).toHaveValue('all');
+      await expect(
+        root.getByRole('combobox', { name: /^Feedback status/ }),
+      ).toHaveValue('all');
+      // Repeating the same destination must reset dropdowns too.
+      await root.locator('#survey-view').selectOption('archived');
+      await page.locator('#event-surveys-group').click();
+      await expect(root.locator('#survey-view')).toHaveValue('active');
+      await events(page, fixture, ids.other);
+      await expect(root.locator('#survey-event')).toHaveValue(ids.other);
+      await expect(root.locator('.survey-response')).toHaveCount(1);
+      await page.goto(
+        fixture.origin +
+          '/admin/#/inbox?status=archived&type=rsvp-all&event=' +
+          ids.event,
+      );
+      await page.locator('#home-tab').click();
+      await page.locator('#inbox-tab').click();
+      await expect(page.locator('#filters [name="kind"]')).toHaveValue('');
+      await expect(page.locator('#filters [name="eventId"]')).toHaveValue('');
+      await expect(
+        page.locator('[data-inbox-status="active"]'),
+      ).toHaveAttribute('aria-pressed', 'true');
+    },
+  );
+
+  await check(
+    'RSVP-enabled events appear before any response and retain empty filter/report scope',
+    async (page, fixture, ids) => {
+      for (const [id, action, registrationOpen] of [
+        ['empty-workshop', 'publish', true],
+        ['draft-workshop', 'draft', true],
+        ['disabled-workshop', 'publish', false],
+      ])
+        await saveEvent(
+          fixture.db,
+          {
+            id,
+            revision: 0,
+            action,
+            event: {
+              ...fixture.event.draft,
+              title: id,
+              date: '2030-10-23',
+              registrationOpen,
+              surveyQuestions: [],
+            },
+          },
+          'officer@example.com',
+        );
+      await page.goto(fixture.origin + '/admin/#/surveys/events');
+      const root = page.locator('#event-surveys-root'),
+        select = root.locator('#survey-event'),
+        empty = root.locator('.survey-event-group').filter({
+          has: page.locator(':scope > summary', { hasText: 'empty-workshop' }),
+        });
+      await expect(
+        select.locator('option[value="empty-workshop"]'),
+      ).toHaveCount(1);
+      await expect(
+        select.locator('option[value="draft-workshop"]'),
+      ).toHaveCount(1);
+      await expect(
+        select.locator('option[value="disabled-workshop"]'),
+      ).toHaveCount(0);
+      await expect(empty).toBeVisible();
+      await expect(empty).toContainText('RSVP · 0 responses on this page');
+      await expect(empty).toContainText(
+        'No RSVP responses match these filters.',
+      );
+      await select.selectOption('empty-workshop');
+      await expect(root.locator('.survey-event-group')).toHaveCount(1);
+      await expect(select).toHaveValue('empty-workshop');
+      await root
+        .getByRole('combobox', { name: /^Response type/ })
+        .selectOption('rsvp');
+      await expect(empty).toBeVisible();
+      await root.locator('#survey-search').fill('Nobody');
+      await expect(empty).toContainText(
+        'No RSVP responses match these filters.',
+      );
+      await root
+        .getByRole('button', { name: 'Compile event summary', exact: true })
+        .click();
+      const report = page.getByRole('dialog', {
+        name: 'Compiled answers',
+        exact: true,
+      });
+      await expect(report).toContainText('0');
+      await expect(report.locator('.survey-summary-group')).toHaveCount(0);
+      await report.getByRole('button', { name: 'Close', exact: true }).click();
+      const exported = await csv(
+        page,
+        root.getByRole('button', { name: 'Export event CSV', exact: true }),
+      );
+      assert.ok(!exported.includes('Alex Sample'));
+      assert.equal(exported.trim().split(/\r?\n/).length, 1);
+      await select.selectOption('');
+      await expect(root.locator('.survey-event-group')).toHaveCount(0);
+      await root.locator('#survey-search').fill('');
+      await expect(empty).toBeVisible();
+      await root
+        .getByRole('combobox', { name: /^Response type/ })
+        .selectOption('feedback');
+      await expect(empty).toHaveCount(0);
+      await expect(root.locator('.survey-event-group')).toHaveCount(1);
+      await root
+        .getByRole('combobox', { name: /^Response type/ })
+        .selectOption('all');
+      await select.selectOption(ids.event);
+      await expect(root.locator('.survey-response')).toHaveCount(2);
+      // Closing registration and archiving the event must keep saved answers accessible.
+      await saveEvent(
+        fixture.db,
+        {
+          id: ids.event,
+          revision: fixture.event.revision,
+          action: 'archive',
+        },
+        'officer@example.com',
+      );
+      await root.locator('#survey-reload').click();
+      await expect(select).toHaveValue(ids.event);
+      await expect(root.locator('.survey-response')).toHaveCount(2);
+      await page.setViewportSize({ width: 375, height: 812 });
+      assert.ok(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      );
+    },
+  );
+
   await check(
     'Inline cards separate RSVP and feedback, expand later pages, and refresh attendance',
     async (page, fixture, ids) => {

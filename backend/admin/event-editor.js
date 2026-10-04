@@ -8,8 +8,10 @@ import { dateTime, day } from './format.js';
 import { drafts, isPaused } from './session.js';
 const blank = () => ({
   potential: false,
+  checkSharing: true,
   requireEduEmail: false,
   surveyIntro: '',
+  rsvpDeadline: '',
   surveyQuestions: [],
   title: '',
   category: 'Workshop',
@@ -167,6 +169,7 @@ export function mountEventEditor(api) {
     const content = Object.fromEntries(new FormData(form));
     content.requireEduEmail = form.elements.requireEduEmail.checked;
     content.potential = form.elements.potential.checked;
+    content.checkSharing = form.elements.checkSharing.checked;
     content.surveyQuestions = survey.value();
     content.registrationOpen = form.elements.registrationOpen.checked;
     content.images = images.map((image) => ({ ...image }));
@@ -281,6 +284,12 @@ export function mountEventEditor(api) {
           }
         }),
       );
+      if (row.published && !row.published.shortLink) {
+        const createLink = node('button', 'Create short link');
+        createLink.type = 'button';
+        createLink.onclick = () => retrySharing(row);
+        overview.append(createLink);
+      }
       overview.append(updatedNote, activityPanel);
       const surveys = node('section', undefined, 'event-overview-section');
       const create = node('a', 'Create event feedback survey', 'button-link');
@@ -355,8 +364,9 @@ export function mountEventEditor(api) {
     form.querySelector('[value="publish"]').hidden = Boolean(row.archived_at);
     q('#view-event').hidden = !row.published;
     q('#view-event').href =
+      row.published?.shortLink ||
       'https://dallasai.club/club.html?mode=events&event=' +
-      encodeURIComponent(row.id);
+        encodeURIComponent(row.id);
     list();
     say();
   }
@@ -415,6 +425,68 @@ export function mountEventEditor(api) {
     frame.src = previewOrigin + '/club.html?mode=events&preview=1';
     dialog.showModal();
   }
+  function openShareChecks(enabled) {
+    if (!enabled) return [];
+    // Reserve tabs during the click, before the asynchronous save. Browsers
+    // otherwise block them after the response loses its user activation.
+    return [0, 1].map(() => {
+      const tab = window.open('about:blank', '_blank');
+      if (tab) tab.opener = null;
+      return tab;
+    });
+  }
+  function finishShareChecks(tabs, row) {
+    if (!tabs.length) return;
+    if (!row.published?.shortLink) {
+      tabs.forEach((tab) => tab?.close());
+      return;
+    }
+    const links = [
+      row.published.shortLink,
+      '/api/events?qr=' + encodeURIComponent(row.id),
+    ];
+    let opened = 0;
+    tabs.forEach((tab, index) => {
+      if (!tab || tab.closed) return;
+      tab.location.replace(links[index]);
+      opened++;
+    });
+    overview.append(
+      node(
+        'p',
+        opened === 2
+          ? 'Short link and QR opened in separate tabs for checking.'
+          : 'Your browser blocked a check tab. Use View published event and Open event QR to open the checks.',
+        'hint',
+      ),
+    );
+  }
+  async function retrySharing(row) {
+    if (busy || current !== row) return;
+    busy = true;
+    const version = generation;
+    const tabs = openShareChecks(row.draft.checkSharing !== false);
+    say('Creating short link…');
+    try {
+      const data = await api('/api/events', {
+        action: 'share-link',
+        id: row.id,
+      });
+      if (version !== generation) {
+        tabs.forEach((tab) => tab?.close());
+        return;
+      }
+      rows = [data.event, ...rows.filter((r) => r.id !== data.event.id)];
+      edit(data.event);
+      finishShareChecks(tabs, data.event);
+      say('Short link and QR are ready.');
+    } catch (error) {
+      tabs.forEach((tab) => tab?.close());
+      if (version === generation) say(error.message);
+    } finally {
+      busy = false;
+    }
+  }
   async function save(action) {
     if (busy || !current || !editing) return;
     busy = true;
@@ -427,11 +499,19 @@ export function mountEventEditor(api) {
       revision: current.revision,
       event: values(),
     };
+    const tabs = openShareChecks(
+      action === 'publish' &&
+        !current.published?.shortLink &&
+        body.event.checkSharing,
+    );
     const unlock = lock(form);
     say(action === 'preview' ? 'Preparing preview…' : 'Saving…');
     try {
       const data = await api('/api/events', body);
-      if (version !== generation) return;
+      if (version !== generation) {
+        tabs.forEach((tab) => tab?.close());
+        return;
+      }
       if (action === 'preview') {
         await preview(data.event);
         say('Preview only. Your changes have not been saved.');
@@ -468,8 +548,12 @@ export function mountEventEditor(api) {
         overview.prepend(confirmation);
         confirmation.scrollIntoView({ block: 'start' });
         confirmation.focus({ preventScroll: true });
+        if (data.sharingError)
+          overview.append(node('p', data.sharingError, 'hint'));
+        finishShareChecks(tabs, data.event);
       }
     } catch (e) {
+      tabs.forEach((tab) => tab?.close());
       if (version === generation) say(e.message);
     } finally {
       busy = false;
@@ -504,7 +588,11 @@ export function mountEventEditor(api) {
   };
   q('#duplicate-event').onclick = () => {
     if (!canLeave()) return;
-    newEvent({ ...values(), title: values().title + ' (copy)' });
+    newEvent({
+      ...values(),
+      title: values().title + ' (copy)',
+      checkSharing: true,
+    });
   };
   // Both change the public website, so they ask in the shared dialog.
   q('#unpublish-event').onclick = async () => {

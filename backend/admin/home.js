@@ -31,7 +31,7 @@ const number = (value, words) =>
     'p',
     { className: 'tile-number' },
     node('strong', Number(value).toLocaleString('en-US')),
-    ' ' + words,
+    node('span', ' ' + words),
   );
 // The event card from the Events list, with its yellow DRAFT badge.
 function draftCard(event, openEvent) {
@@ -109,7 +109,7 @@ export function renderHome(root, data, actions) {
       : node('p', 'Nothing new. You’re all caught up.', 'hint'),
     link('Open inbox', '#/inbox', 'button-link primary'),
   );
-  // The next dated event; undated potential events get their own line.
+  // The next confirmed event and each potential event's received RSVPs.
   const next = tile('Next event');
   if (data.nextEvent) {
     const event = data.nextEvent;
@@ -124,26 +124,30 @@ export function renderHome(root, data, actions) {
       button('Open event', () => openEvent(event.id)),
     );
   } else next.append(node('p', 'No upcoming event has a date yet.', 'hint'));
-  if (data.potential.length)
-    next.append(
-      node(
-        'p',
-        'Date TBD: ' + data.potential.map((event) => event.title).join(', '),
-        'hint',
-      ),
-    );
+  if (data.potential.length) {
+    for (const event of data.potential) {
+      const row = node('div', undefined, 'potential-event');
+      row.dataset.event = event.id;
+      row.append(
+        node('p', 'Potential event', 'tile-label'),
+        node('h3', event.title),
+      );
+      if (event.rsvps !== null)
+        row.append(number(event.rsvps, event.rsvps === 1 ? 'RSVP' : 'RSVPs'));
+      row.append(button('Open event', () => openEvent(event.id)));
+      next.append(row);
+    }
+  }
   // The open custom survey. Its PDF and CSV downloads are in the survey.
   const survey = tile('Custom survey');
   if (data.survey)
     survey.append(
       node('h3', data.survey.title),
+      node('p', 'Open · ' + plural(data.survey.responses, 'response'), 'hint'),
       node(
         'p',
-        'Open · ' +
-          plural(data.survey.responses, 'response') +
-          ' · link expires ' +
-          dateTime(data.survey.expires_at),
-        'hint',
+        'Link expires ' + dateTime(data.survey.expires_at),
+        'event-deadline',
       ),
       ...(data.survey.latest
         ? [node('p', 'Latest response ' + dateTime(data.survey.latest), 'hint')]

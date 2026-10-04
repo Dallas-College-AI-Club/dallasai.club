@@ -1,5 +1,7 @@
 import { responseSections } from './results-ui.js';
 import { hasAnswer } from './form-values.js';
+import { availabilityFields } from './availability-ui.js';
+import { availabilityValues } from './availability-values.js';
 const node = (tag, text, cls) => {
   const e = document.createElement(tag);
   if (text !== undefined) e.textContent = text;
@@ -20,26 +22,45 @@ export function questionFields(
   const form = node('div');
   for (const q of definition.questions) {
     const card = node('section', undefined, 'question');
-    const title = node('h2', q.title + (q.required ? ' *' : ''));
+    const title = node(
+      'h2',
+      (q.choiceDate ? q.choiceDate + ' · ' : '') +
+        q.title +
+        (q.required ? ' *' : ''),
+    );
     title.id = 'question-' + q.id;
     card.append(title);
     if (q.description) card.append(node('p', q.description, 'sub'));
     const group = node('div');
     group.setAttribute('aria-labelledby', title.id);
-    if (q.type === 'text') {
-      const input = node('textarea');
-      input.rows = 4;
-      input.maxLength = 5000;
+    if (q.type === 'availability') {
+      group.append(
+        availabilityFields(q, {
+          value: values[q.id],
+          readOnly,
+          onChange: (value) => onChange(q.id, value),
+        }).root,
+      );
+    } else if (q.type === 'text' || q.type === 'short' || q.type === 'email') {
+      const input = node(q.type === 'text' ? 'textarea' : 'input');
+      if (q.type === 'email') input.type = 'email';
+      if (q.type === 'text') input.rows = 4;
+      input.maxLength =
+        q.type === 'text' ? 5000 : q.type === 'email' ? 254 : 300;
       input.value = values[q.id] || '';
       input.setAttribute('aria-labelledby', title.id);
       input.disabled = readOnly;
       input.required = q.required;
       input.oninput = () => onChange(q.id, input.value);
       group.append(input);
-    } else if (q.type === 'date' || q.type === 'number') {
+    } else if (['date', 'time', 'number'].includes(q.type)) {
       const input = node('input');
       input.type = q.type;
       if (q.type === 'number') input.step = 'any';
+      if (q.type === 'date') {
+        input.min = '0001-01-01';
+        input.max = '9999-12-31';
+      }
       input.value = values[q.id] ?? '';
       input.required = q.required;
       input.disabled = readOnly;
@@ -220,7 +241,7 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
     heading(welcome.title);
     main.append(
       node('p', welcome.intro, 'welcome-copy'),
-      node('p', expiry, 'micro'),
+      node('p', expiry, 'micro survey-deadline'),
       node(
         'p',
         welcome.permissions.results === 'respondents'
@@ -379,8 +400,9 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
   function answerText(q) {
     const v = values[q.id];
     if (!hasAnswer(v)) return 'Not answered';
-    return ['text', 'date', 'number'].includes(q.type)
-      ? v.trim()
+    if (q.type === 'availability') return availabilityValues(v).join('\n');
+    return ['text', 'short', 'email', 'date', 'time', 'number'].includes(q.type)
+      ? String(v).trim()
       : q.type === 'scale'
         ? v + ' / 5'
         : (q.type === 'single' ? [v] : v).map((i) => q.options[i]).join('\n');
@@ -405,12 +427,22 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
       field?.focus();
       return;
     }
+    const invalid = [...main.querySelectorAll('input,textarea,select')].find(
+      (input) => !input.checkValidity(),
+    );
+    if (invalid) {
+      invalid.reportValidity();
+      return;
+    }
     status.textContent = '';
     intro();
     main.append(node('h2', 'Review your answers'));
     for (const q of definition.questions) {
       const card = node('section', undefined, 'question');
-      card.append(node('h3', q.title), node('p', answerText(q), 'answer-copy'));
+      card.append(
+        node('h3', (q.choiceDate ? q.choiceDate + ' · ' : '') + q.title),
+        node('p', answerText(q), 'answer-copy'),
+      );
       main.append(card);
     }
     const label = node('label', undefined, 'form-option'),

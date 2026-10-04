@@ -20,3 +20,12 @@ enableRobotsTXT = true
 [[module.mounts]]
   source = "backend/lib/event-format.mjs"
   target = "static/app/event-format.js"
+[[module.mounts]]
+  source = "backend/surveys/availability-ui.js"
+  target = "static/app/availability-ui.js"
+[[module.mounts]]
+  source = "backend/surveys/availability-values.js"
+  target = "static/app/availability-values.js"
+[[module.mounts]]
+  source = "backend/surveys/availability.css"
+  target = "static/app/availability.css"

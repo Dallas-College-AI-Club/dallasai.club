@@ -6,6 +6,11 @@ import {
 import { createHash } from 'node:crypto';
 import { RequestError } from './errors.mjs';
 import { exclusiveSurveyChoice } from './event-format.mjs';
+import { email, isCalendarDate } from './validation.mjs';
+import {
+  availabilityDates,
+  validateAvailability,
+} from './survey-availability.mjs';
 const questionId =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function text(value, label, max, required = false) {
@@ -34,20 +39,45 @@ export function surveyQuestions(input = []) {
         'Each RSVP question needs a unique identifier.',
       );
     ids.add(question.id);
-    if (!['text', 'single', 'multiple'].includes(question.type))
+    if (
+      ![
+        'text',
+        'short',
+        'single',
+        'multiple',
+        'date',
+        'time',
+        'number',
+        'email',
+        'availability',
+      ].includes(question.type)
+    )
       throw new RequestError(400, 'Choose a valid question type.');
     if (
       typeof question.required !== 'boolean' ||
       typeof question.allowOther !== 'boolean'
     )
       throw new RequestError(400, 'Check the RSVP question settings.');
-    const choices = question.type !== 'text';
+    const choices = ['single', 'multiple'].includes(question.type);
+    const availability = question.type === 'availability';
+    if (
+      question.choiceDate !== undefined &&
+      (!choices || !isCalendarDate(question.choiceDate))
+    )
+      throw new RequestError(400, 'Choose a valid date for these choices.');
     if (
       !Array.isArray(question.options) ||
       question.options.length > 30 ||
-      (choices && question.options.length < 2)
+      (choices && question.options.length < 2) ||
+      (availability &&
+        (question.options.length < 1 || question.options.length > 12))
     )
-      throw new RequestError(400, 'Choice questions need 2–30 options.');
+      throw new RequestError(
+        400,
+        availability
+          ? 'Availability needs 1–12 time periods.'
+          : 'Choice questions need 2–30 options.',
+      );
     const options = question.options.map((option) =>
       text(option, 'the answer option', 200, true),
     );
@@ -66,8 +96,11 @@ export function surveyQuestions(input = []) {
       options.length
     )
       throw new RequestError(400, 'Use different answer options.');
-    if (!choices && (options.length || question.allowOther))
-      throw new RequestError(400, 'Text questions do not use answer options.');
+    if (
+      (!choices && !availability && options.length) ||
+      (!choices && question.allowOther)
+    )
+      throw new RequestError(400, 'Only choice questions use answer options.');
     return {
       id: question.id,
       label: text(question.label, 'the question', 300, true),
@@ -76,6 +109,8 @@ export function surveyQuestions(input = []) {
       required: question.required,
       options,
       allowOther: choices && question.allowOther,
+      ...(availability ? { dates: availabilityDates(question.dates) } : {}),
+      ...(question.choiceDate ? { choiceDate: question.choiceDate } : {}),
       ...(question.exclusiveOption !== undefined
         ? { exclusiveOption: question.exclusiveOption }
         : {}),
@@ -124,9 +159,37 @@ export function validateSurvey(body, event) {
     const answer = byId.get(question.id);
     const other = text(answer.other, 'the Other answer', 1000);
     let value;
-    if (question.type === 'text')
-      value = text(answer.value, question.label, 3000, question.required);
-    else {
+    if (question.type === 'availability') {
+      value = validateAvailability(answer.value, question);
+    } else if (question.type === 'number') {
+      value = answer.value ?? '';
+      if (value === '' && !question.required) value = '';
+      else if (
+        typeof value !== 'number' ||
+        !Number.isFinite(value) ||
+        Math.abs(value) > Number.MAX_SAFE_INTEGER
+      )
+        throw new RequestError(400, 'Enter a valid number: ' + question.label);
+    } else if (!['single', 'multiple'].includes(question.type)) {
+      value = text(
+        answer.value,
+        question.label,
+        question.type === 'text' ? 3000 : question.type === 'email' ? 254 : 300,
+        question.required,
+      );
+      if (value && question.type === 'date' && !isCalendarDate(value))
+        throw new RequestError(
+          400,
+          'Choose a valid calendar date: ' + question.label,
+        );
+      if (
+        value &&
+        question.type === 'time' &&
+        !/^([01]\d|2[0-3]):[0-5]\d$/.test(value)
+      )
+        throw new RequestError(400, 'Enter a valid time: ' + question.label);
+      if (value && question.type === 'email') value = email(value);
+    } else {
       const values =
         question.type === 'multiple'
           ? answer.value

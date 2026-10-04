@@ -105,7 +105,10 @@ export function surveyResultsCSV(rows, definition) {
     'Email',
     'Submitted (Central)',
     'Status',
-    ...ordered.map((column) => column.title),
+    ...ordered.map(
+      (column) =>
+        (column.choiceDate ? column.choiceDate + ' · ' : '') + column.title,
+    ),
   ];
   const lines = rows.map((row) => [
     // As on screen, a respondent without a name is shown by email.

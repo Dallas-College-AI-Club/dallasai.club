@@ -467,6 +467,14 @@
                     this for each event.
                   </p>
                   <label
+                    >Reply-by date (optional)<input
+                      name="rsvpDeadline"
+                      type="date"
+                      min="0001-01-01"
+                      max="9999-12-31"
+                    />
+                  </label>
+                  <label
                     >Introduction (optional)<textarea
                       name="surveyIntro"
                       maxlength="2000"
@@ -494,6 +502,11 @@
                     Publish event
                   </button>
                 </div>
+                <label class="check">
+                  <input type="checkbox" name="checkSharing" checked />
+                  Open the new short link and QR in tabs to check them after
+                  publishing
+                </label>
                 <div class="event-actions secondary-actions">
                   <button type="button" id="duplicate-event">
                     Duplicate event

@@ -58,6 +58,105 @@ const action = (id, definition, expectedRevision = 0, action = 'save') => ({
   action,
   requestId: randomUUID(),
 });
+test('custom availability preserves optional answers, dates and suggested times through saves', async () => {
+  const f = await fixture();
+  process.env.AUTH_BASE_URL = 'https://club.example';
+  try {
+    const definition = {
+      ...draft(),
+      audience: 'public',
+      permissions: { preview: 'link', answer: 'verified', results: 'admins' },
+      questions: [
+        {
+          id: randomUUID(),
+          title: 'Availability',
+          description: 'All times Central.',
+          type: 'availability',
+          required: false,
+          options: ['Afternoon', 'Evening'],
+          dates: ['2026-10-16', '2026-10-17'],
+        },
+      ],
+    };
+    const id = randomUUID();
+    await changeDraft(f.db, actor, action(id, definition));
+    await changeDraft(f.db, actor, action(id, definition, 1, 'publish'));
+    const token = privateSurveyToken(id),
+      survey = await linkedSurvey(f.db, token);
+    const values = [
+      '',
+      {
+        status: 'available',
+        selections: [{ date: '2026-10-17', periods: ['Afternoon', 'Evening'] }],
+        alternatives: [],
+      },
+      { status: 'unavailable', selections: [], alternatives: [] },
+      { status: 'unsure', selections: [], alternatives: [] },
+      {
+        status: 'alternative',
+        selections: [],
+        alternatives: [{ date: '2026-11-05', time: '19:30' }],
+      },
+    ];
+    const memberIds = [];
+    for (const [i, value] of values.entries()) {
+      const device = await rememberDevice(f.db, survey, {
+        id: 'availability-' + i,
+        email: 'availability-' + i + '@example.edu',
+        emailVerified: true,
+      });
+      memberIds.push(device.member.advisor_id);
+      const req = {
+          headers: { cookie: deviceCookie(survey) + '=' + device.token },
+        },
+        body = {
+          requestId: randomUUID(),
+          expectedRevision: 0,
+          contentVersion: FORM_VERSION,
+          advisorId: device.member.advisor_id,
+          consent: 'admins',
+          answers: [{ id: definition.questions[0].id, value }],
+        };
+      if (i === 1)
+        assert.throws(
+          () =>
+            validateFormResponse(
+              {
+                ...body,
+                answers: [
+                  {
+                    id: definition.questions[0].id,
+                    value: { ...value, status: 'unsure' },
+                  },
+                ],
+              },
+              survey,
+              device.member,
+            ),
+          { status: 400 },
+        );
+      await Promise.all([
+        submitSurvey(f.db, req, token, body),
+        submitSurvey(f.db, req, token, body),
+      ]);
+    }
+    const rows = await currentResponses(f.db, id);
+    assert.equal(rows.length, 5);
+    for (const [i, value] of values.entries())
+      assert.deepEqual(
+        rows.find((r) => r.advisor_id === memberIds[i]).responses[0]?.value ??
+          '',
+        value,
+      );
+    const csv = surveyResultsCSV(rows, definition);
+    assert.match(csv, /2026-10-17 · Afternoon/);
+    assert.match(csv, /Not sure yet/);
+    assert.match(csv, /Suggested: 2026-11-05 · 19:30/);
+    assert.doesNotMatch(csv, /\[object Object\]/);
+  } finally {
+    await f.db.close();
+  }
+});
 test('calendar and numeric answers validate strictly and export under their question headings', () => {
   const d = draft();
   d.questions[0].type = 'date';
@@ -92,6 +191,7 @@ test('calendar and numeric answers validate strictly and export under their ques
     '2026-02-31',
     '2026-13-01',
     '10/04/2026',
+    '0000-01-01',
     '',
     20261004,
   ])
@@ -112,6 +212,61 @@ test('calendar and numeric answers validate strictly and export under their ques
   );
   assert.match(csv.split('\r\n')[0], /Preferred date.*Guests/);
   assert.match(csv, /2028-02-29/);
+});
+
+test('short and email answers validate, normalize and export without changing long answers', () => {
+  const d = draft();
+  d.questions[0].type = 'email';
+  d.questions[1].type = 'short';
+  validateDefinition(d, true);
+  const answer = (email, short) =>
+    validateFormResponse(
+      {
+        requestId: randomUUID(),
+        expectedRevision: 0,
+        contentVersion: FORM_VERSION,
+        advisorId: 'member',
+        consent: 'admins',
+        answers: [
+          { id: d.questions[0].id, value: email },
+          { id: d.questions[1].id, value: short },
+        ],
+      },
+      { definition: d },
+      { advisor_id: 'member' },
+    );
+  const responses = answer(' Advisor@Example.edu ', ' A short answer ');
+  assert.deepEqual(
+    responses.map((r) => r.value),
+    ['advisor@example.edu', 'A short answer'],
+  );
+  for (const value of [
+    'bad',
+    'a@',
+    'a\nb@example.edu',
+    'x'.repeat(255) + '@example.edu',
+    '',
+    {},
+  ])
+    assert.throws(() => answer(value, 'Short'), { status: 400 });
+  for (const value of ['x'.repeat(301), {}])
+    assert.throws(() => answer('a@example.edu', value), { status: 400 });
+  assert.equal(answer('a@example.edu', '  ').length, 1);
+  assert.match(
+    surveyResultsCSV(
+      [
+        {
+          display_name: 'Example',
+          email: 'member@example.edu',
+          active: true,
+          submitted_at: '2026-10-04T12:00:00Z',
+          responses,
+        },
+      ],
+      d,
+    ),
+    /advisor@example.edu/,
+  );
 });
 
 test('linked event surveys persist in the catalog and keep a separate answer link', async () => {
@@ -147,6 +302,109 @@ test('linked event surveys persist in the catalog and keep a separate answer lin
         .rows[0].n,
       0,
     );
+  } finally {
+    await f.db.close();
+  }
+});
+test('time and dated period choices validate, persist and export under concurrent submissions', async () => {
+  const f = await fixture();
+  try {
+    const d = draft();
+    d.audience = 'public';
+    d.permissions.answer = 'verified';
+    d.questions[0] = {
+      ...d.questions[0],
+      type: 'multiple',
+      title: 'Available periods',
+      choiceDate: '2026-10-16',
+      options: ['Morning', 'Afternoon', 'Evening'],
+    };
+    d.questions[1] = {
+      ...d.questions[1],
+      type: 'time',
+      title: 'Arrival time',
+      required: true,
+    };
+    for (const choiceDate of ['2026-02-29', '0000-01-01', '', 20261016])
+      assert.throws(
+        () =>
+          validateDefinition({
+            ...d,
+            questions: [{ ...d.questions[0], choiceDate }],
+          }),
+        { status: 400 },
+      );
+    assert.throws(
+      () =>
+        validateDefinition({
+          ...d,
+          questions: [{ ...d.questions[1], choiceDate: '2026-10-16' }],
+        }),
+      { status: 400 },
+    );
+    const { id } = await create(f, d);
+    await changeDraft(f.db, actor, action(id, d, 1, 'publish'));
+    const survey = await linkedSurvey(f.db, privateSurveyToken(id));
+    const requests = [];
+    for (let i = 0; i < 32; i++) {
+      const device = await rememberDevice(f.db, survey, {
+        id: 'period-' + i,
+        email: `period-${i}@example.com`,
+        emailVerified: true,
+      });
+      requests.push({
+        req: { headers: { cookie: deviceCookie(survey) + '=' + device.token } },
+        body: {
+          requestId: randomUUID(),
+          expectedRevision: 0,
+          contentVersion: FORM_VERSION,
+          advisorId: device.member.advisor_id,
+          consent: 'admins',
+          answers: [
+            { id: d.questions[0].id, value: [0, 2] },
+            { id: d.questions[1].id, value: '18:30' },
+          ],
+        },
+      });
+    }
+    const first = requests[0];
+    for (const value of ['24:00', '12:60', '6:30 PM', '18:30:00', 1830])
+      assert.throws(
+        () =>
+          validateFormResponse(
+            {
+              ...first.body,
+              answers: [
+                first.body.answers[0],
+                { id: d.questions[1].id, value },
+              ],
+            },
+            survey,
+            { advisor_id: first.body.advisorId },
+          ),
+        { status: 400 },
+      );
+    const receipts = await Promise.all(
+      requests.flatMap(({ req, body }) =>
+        Array.from({ length: 3 }, () =>
+          submitSurvey(f.db, req, privateSurveyToken(id), body),
+        ),
+      ),
+    );
+    assert.equal(new Set(receipts.map((r) => r.id)).size, 32);
+    const rows = await currentResponses(f.db, id);
+    assert.equal(rows.length, 32);
+    for (const row of rows)
+      assert.deepEqual(
+        row.responses.map((a) => a.value),
+        [[0, 2], '18:30'],
+      );
+    const saved = (await getDraft(f.db, id)).definition;
+    assert.equal(saved.questions[0].choiceDate, '2026-10-16');
+    const csv = surveyResultsCSV(rows, saved);
+    assert.match(csv, /2026-10-16 · Available periods/);
+    assert.match(csv, /Morning; Evening/);
+    assert.match(csv, /18:30/);
   } finally {
     await f.db.close();
   }

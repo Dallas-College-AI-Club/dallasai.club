@@ -203,7 +203,9 @@ test('Home: newest New submissions, next dated event, potential events, drafts a
     category: 'Workshop',
     rsvps: 2,
   });
-  assert.deepEqual(home.potential, [{ id: 'maybe', title: 'Maybe someday' }]);
+  assert.deepEqual(home.potential, [
+    { id: 'maybe', title: 'Maybe someday', rsvps: 0 },
+  ]);
   assert.deepEqual(
     home.unpublished.map((event) => [event.id, event.title, event.live]).sort(),
     [
@@ -213,6 +215,46 @@ test('Home: newest New submissions, next dated event, potential events, drafts a
   );
   assert.equal(home.survey.title, 'Advisor Studio');
   assert.equal(home.survey.responses, 2);
+});
+
+test('potential event counts include reviewed RSVPs and zero-response events without counting closed or cancelled responses', async () => {
+  events.push(
+    {
+      id: 'dated-potential',
+      title: 'Dated potential',
+      date: '2098-01-01',
+      potential: true,
+    },
+    {
+      id: 'closed-potential',
+      title: 'Closed potential',
+      date: '',
+      potential: true,
+      registrationOpen: false,
+    },
+  );
+  try {
+    await rsvp('maybe', { status: 'reviewed' });
+    await rsvp('maybe', { status: 'closed' });
+    await rsvp('maybe', { state: 'cancelled' });
+    const home = await get('?home=1');
+    assert.equal(home.nextEvent.id, 'next');
+    assert.equal(home.potential.find((e) => e.id === 'maybe').rsvps, 1);
+    assert.equal(
+      home.potential.find((e) => e.id === 'dated-potential').rsvps,
+      0,
+    );
+    assert.equal(
+      home.potential.find((e) => e.id === 'closed-potential').rsvps,
+      null,
+    );
+    assert.equal(
+      home.rsvpGroups.some((e) => e.id === 'maybe'),
+      false,
+    );
+  } finally {
+    events.splice(-2);
+  }
 });
 
 test('Home activity lists officer actions with labels, never member data', async () => {

@@ -2,6 +2,7 @@ import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { fixture } from './helpers/custom-survey-fixture.mjs';
 import { definition, canonicalResponse } from '../lib/survey-contract.mjs';
 import {
@@ -9,9 +10,15 @@ import {
   submitSurvey,
   linkedSurvey,
   privateSurveyToken,
+  digest,
 } from '../lib/custom-surveys.mjs';
 import { changeDraft, FORM_VERSION } from '../lib/survey-builder.mjs';
 import { customSurveysHandler } from '../api/custom-surveys.mjs';
+import {
+  changeSurveyShareLink,
+  generateSurveyShareLink,
+  createShortLink,
+} from '../lib/survey-share-link.mjs';
 let f, server, origin, cookie;
 const rank = () => ({
   id: 'q-spark',
@@ -79,12 +86,15 @@ beforeEach(async () => {
     'TRUNCATE club_forms.custom_survey_responses,club_forms.custom_survey_receipts,club_forms.custom_survey_devices',
   );
   await f.db.query(
-    "UPDATE club_forms.custom_surveys SET status='open',expires_at=now()+interval '30 days' WHERE id=$1",
+    "UPDATE club_forms.custom_surveys SET status='open',expires_at=now()+interval '30 days',short_link=NULL WHERE id=$1",
     [f.id],
   );
   await f.db.query(
     'UPDATE club_forms.custom_survey_members SET user_id=NULL,active=true',
   );
+  await f.db.query('DELETE FROM club_forms.audit WHERE action=$1', [
+    'custom-survey-share-link:' + f.id,
+  ]);
   const result = await request(
     'verify-device',
     {},
@@ -134,6 +144,1045 @@ test('admin sample requires officer access and never opens the survey database',
       assert.ok(!JSON.stringify(body).includes('pearlman'));
     }
   }
+});
+
+const share = (shortLink, expectedShortLink = null, options = {}) =>
+  request(
+    'share-link',
+    { id: f.id, shortLink, expectedShortLink },
+    {
+      cookie: 'test-officer=yes',
+      ...options,
+    },
+  );
+const shareAudit = async () =>
+  (
+    await f.db.query(
+      'SELECT actor,action FROM club_forms.audit WHERE action=$1 ORDER BY id',
+      ['custom-survey-share-link:' + f.id],
+    )
+  ).rows;
+const storedShare = async () =>
+  (
+    await f.db.query(
+      'SELECT short_link FROM club_forms.custom_surveys WHERE id=$1',
+      [f.id],
+    )
+  ).rows[0].short_link;
+
+test('survey short link persists, clears and retries without changing the actual survey or invitation', async () => {
+  assert.equal((await request('submit', submission())).status, 200);
+  const snapshot = async () => {
+    const survey = (
+      await f.db.query(
+        "SELECT to_jsonb(s)-'short_link' AS survey FROM club_forms.custom_surveys s WHERE id=$1",
+        [f.id],
+      )
+    ).rows[0].survey;
+    const rows = {};
+    for (const table of ['members', 'responses', 'receipts', 'devices'])
+      rows[table] = (
+        await f.db.query(
+          `SELECT to_jsonb(r) AS row FROM club_forms.custom_survey_${table} r WHERE survey_id=$1 ORDER BY to_jsonb(r)::text`,
+          [f.id],
+        )
+      ).rows;
+    return {
+      survey,
+      rows,
+      welcome: await (await request('welcome')).json(),
+      preview: await (await request('preview')).json(),
+    };
+  };
+  const before = await snapshot(),
+    link = 'https://tinyurl.com/advisor-survey';
+  assert.equal(await storedShare(), null);
+  let response = await share('  ' + link + '  ');
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { id: f.id, short_link: link });
+  assert.equal(await storedShare(), link);
+  const catalog = await (
+    await request('catalog', undefined, { cookie: 'test-officer=yes' })
+  ).json();
+  assert.equal(
+    catalog.surveys.find((survey) => survey.id === f.id).short_link,
+    link,
+  );
+  assert.equal((await share(link)).status, 200);
+  assert.deepEqual(await shareAudit(), [
+    {
+      actor: 'officer@example.com',
+      action: 'custom-survey-share-link:' + f.id,
+    },
+  ]);
+  assert.deepEqual(await snapshot(), before);
+  response = await share('  ', link);
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { id: f.id, short_link: null });
+  assert.equal(await storedShare(), null);
+  assert.equal((await share('', link)).status, 200);
+  assert.equal((await shareAudit()).length, 2);
+  assert.deepEqual(await snapshot(), before);
+});
+
+test('survey short link requires an officer, the admin origin and POST before database access', async () => {
+  const handler = customSurveysHandler({
+    authorize: f.authorize,
+    getDatabase: () =>
+      assert.fail('Rejected requests must not access survey data.'),
+  });
+  for (const action of ['share-link', 'generate-share-link'])
+    for (const [method, cookie, requestOrigin, status] of [
+      ['POST', '', origin, 401],
+      ['POST', 'test-neon=pearlman', origin, 401],
+      ['POST', 'test-officer=yes', 'https://outside.example.com', 403],
+      ['POST', 'test-officer=yes', undefined, 403],
+      ['GET', 'test-officer=yes', origin, 405],
+      ['PUT', 'test-officer=yes', origin, 405],
+    ]) {
+      const res = { setHeader() {}, end() {} };
+      await handler(
+        {
+          method,
+          url: '/api/custom-surveys?action=' + action,
+          headers: { cookie, origin: requestOrigin },
+        },
+        res,
+      );
+      assert.equal(
+        res.statusCode,
+        status,
+        [method, cookie, requestOrigin].join(' '),
+      );
+    }
+  assert.equal(await storedShare(), null);
+  assert.deepEqual(await shareAudit(), []);
+});
+
+test('survey short link rejects unsafe URLs and malformed edit requests without persistence', async () => {
+  for (const link of [
+    null,
+    123,
+    '/relative',
+    '//tinyurl.com/a',
+    'https:tinyurl.com/a',
+    'http://tinyurl.com/a',
+    'javascript:alert(1)',
+    'https://user:secret@tinyurl.com/a',
+    'https://user@tinyurl.com/a',
+    'https://:secret@tinyurl.com/a',
+    'https://localhost/a',
+    'https://tinyurl/a',
+    'https://office.local/a',
+    'https://office.internal/a',
+    'https://office.test/a',
+    'https://127.0.0.1/a',
+    'https://10.0.0.1/a',
+    'https://2130706433/a',
+    'https://[::1]/a',
+    'https://bad_host.com/a',
+    'https://-bad.com/a',
+    'https://bad..com/a',
+    'https://' + 'a'.repeat(64) + '.com/a',
+    'https://' + ('a'.repeat(60) + '.').repeat(5) + 'com/a',
+    'https://tinyurl.com/a\nb',
+    'https://tinyurl.com/a b',
+    'https://tinyurl.com\\a',
+    'https://tinyurl.com/' + 'a'.repeat(2049),
+    'https://tinyurl.com/' + 'a/../'.repeat(500),
+    'https://tinyurl.com/' + '한'.repeat(300),
+  ])
+    assert.equal((await share(link)).status, 400, String(link));
+  for (const body of [
+    { id: f.id, shortLink: '' },
+    { id: f.id, shortLink: '', expectedShortLink: 123 },
+    {
+      id: f.id,
+      shortLink: '',
+      expectedShortLink: null,
+      title: 'Changed title',
+    },
+    { id: 'invalid', shortLink: '', expectedShortLink: null },
+  ])
+    assert.equal(
+      (await request('share-link', body, { cookie: 'test-officer=yes' }))
+        .status,
+      400,
+    );
+  assert.equal(
+    (
+      await request(
+        'share-link',
+        { id: randomUUID(), shortLink: '', expectedShortLink: null },
+        { cookie: 'test-officer=yes' },
+      )
+    ).status,
+    404,
+  );
+  assert.equal(await storedShare(), null);
+  assert.deepEqual(await shareAudit(), []);
+});
+
+test('survey short link accepts the length boundary and a public international hostname', async () => {
+  const prefix = 'https://tinyurl.com/',
+    link = prefix + 'a'.repeat(2048 - prefix.length);
+  assert.equal((await share(link)).status, 200);
+  assert.equal(await storedShare(), link);
+  assert.equal((await share('https://xn--bcher-kva.de/a', link)).status, 200);
+  assert.equal(await storedShare(), 'https://xn--bcher-kva.de/a');
+  assert.equal(
+    (await share('https://bücher.de/설문?q=한', 'https://xn--bcher-kva.de/a'))
+      .status,
+    200,
+  );
+  assert.equal(
+    await storedShare(),
+    'https://xn--bcher-kva.de/%EC%84%A4%EB%AC%B8?q=%ED%95%9C',
+  );
+});
+
+test('survey short link stale editors cannot overwrite or clear a newer change', async () => {
+  const links = ['https://tinyurl.com/one', 'https://tinyurl.com/two'];
+  const responses = await Promise.all(links.map((link) => share(link)));
+  assert.deepEqual(
+    responses.map((response) => response.status).sort(),
+    [200, 409],
+  );
+  const winner =
+    links[responses.findIndex((response) => response.status === 200)];
+  assert.equal(await storedShare(), winner);
+  assert.equal((await share('', null)).status, 409);
+  assert.equal(await storedShare(), winner);
+  assert.equal((await shareAudit()).length, 1);
+  assert.equal((await share('https://tinyurl.com/three', winner)).status, 200);
+  assert.equal(await storedShare(), 'https://tinyurl.com/three');
+});
+
+test('survey short link and its audit roll back together when audit persistence fails', async () => {
+  const failure = new Error('isolated audit failure');
+  const query = (tx, sql, values) => {
+    if (sql.startsWith('INSERT INTO club_forms.audit')) throw failure;
+    return tx.query(sql, values);
+  };
+  const db = {
+    query: (sql, values) => query(f.db, sql, values),
+    transaction: (run) =>
+      f.db.transaction((tx) =>
+        run({
+          query: (sql, values) => query(tx, sql, values),
+        }),
+      ),
+  };
+  await assert.rejects(
+    changeSurveyShareLink(
+      db,
+      { email: 'officer@example.com' },
+      {
+        id: f.id,
+        shortLink: 'https://tinyurl.com/rolled-back',
+        expectedShortLink: null,
+      },
+    ),
+    (error) => error === failure,
+  );
+  assert.equal(await storedShare(), null);
+  assert.deepEqual(await shareAudit(), []);
+  assert.equal((await share('https://tinyurl.com/rolled-back')).status, 200);
+  assert.equal((await shareAudit()).length, 1);
+});
+
+test('survey short link migration grants only its new column and can be reapplied', async () => {
+  await f.db.exec('CREATE ROLE club_forms_api');
+  try {
+    const migration = await readFile(
+      new URL('../022_survey_share_link.sql', import.meta.url),
+      'utf8',
+    );
+    await f.db.exec(migration);
+    await f.db.exec(migration);
+    assert.deepEqual(
+      (
+        await f.db.query(
+          "SELECT has_column_privilege('club_forms_api','club_forms.custom_surveys','short_link','UPDATE') AS link,has_column_privilege('club_forms_api','club_forms.custom_surveys','title','UPDATE') AS title,has_column_privilege('club_forms_api','club_forms.custom_surveys','definition','UPDATE') AS definition",
+        )
+      ).rows[0],
+      { link: true, title: false, definition: false },
+    );
+    assert.deepEqual(
+      (
+        await f.db.query(
+          "SELECT is_nullable,column_default FROM information_schema.columns WHERE table_schema='club_forms' AND table_name='custom_surveys' AND column_name='short_link'",
+        )
+      ).rows[0],
+      { is_nullable: 'YES', column_default: null },
+    );
+  } finally {
+    await f.db.exec('DROP OWNED BY club_forms_api; DROP ROLE club_forms_api');
+  }
+});
+
+async function shortIO(run) {
+  const base = process.env.AUTH_BASE_URL,
+    token = process.env.SHORT_IO_API_KEY,
+    domain = process.env.SHORT_IO_DOMAIN,
+    backup = process.env.TINYURL_API_TOKEN;
+  process.env.AUTH_BASE_URL = 'https://office.example.com';
+  process.env.SHORT_IO_API_KEY = 'isolated-shortio-key';
+  process.env.SHORT_IO_DOMAIN = 'go.dallasai.club';
+  delete process.env.TINYURL_API_TOKEN;
+  try {
+    return await run();
+  } finally {
+    process.env.AUTH_BASE_URL = base;
+    if (token === undefined) delete process.env.SHORT_IO_API_KEY;
+    else process.env.SHORT_IO_API_KEY = token;
+    if (domain === undefined) delete process.env.SHORT_IO_DOMAIN;
+    else process.env.SHORT_IO_DOMAIN = domain;
+    if (backup === undefined) delete process.env.TINYURL_API_TOKEN;
+    else process.env.TINYURL_API_TOKEN = backup;
+  }
+}
+const generatedPayload = () => {
+  const url = new URL(
+      '/surveys/#invite=' + privateSurveyToken(f.id),
+      process.env.AUTH_BASE_URL,
+    ).href,
+    alias = 'dai-' + digest(url).slice(0, 24);
+  return {
+    originalURL: url,
+    path: alias,
+    secureShortURL: 'https://go.dallasai.club/' + alias,
+    archived: false,
+    hasPassword: false,
+    success: true,
+  };
+};
+const providerResponse = (payload = generatedPayload(), status = 200) =>
+  new Response(JSON.stringify(payload), {
+    status,
+    headers: { 'Content-Type': 'application/json' },
+  });
+const backupPayload = () => {
+  const original = generatedPayload();
+  return {
+    code: 0,
+    errors: [],
+    data: {
+      url: original.originalURL,
+      alias: original.path,
+      domain: 'tinyurl.com',
+      tiny_url: 'https://tinyurl.com/' + original.path,
+      deleted: false,
+      archived: false,
+      expires_at: null,
+    },
+  };
+};
+const generate = (fetchImpl, db = f.db) =>
+  generateSurveyShareLink(
+    db,
+    { email: 'officer@example.com' },
+    { id: f.id },
+    fetchImpl,
+  );
+
+test('Short.io generation derives the actual invitation, saves once and preserves survey data', async () => {
+  assert.equal((await request('submit', submission())).status, 200);
+  const snapshot = async () => {
+    const survey = (
+      await f.db.query(
+        "SELECT to_jsonb(s)-'short_link' AS survey FROM club_forms.custom_surveys s WHERE id=$1",
+        [f.id],
+      )
+    ).rows[0].survey;
+    const rows = {};
+    for (const table of ['members', 'responses', 'receipts', 'devices'])
+      rows[table] = (
+        await f.db.query(
+          `SELECT to_jsonb(r) AS row FROM club_forms.custom_survey_${table} r WHERE survey_id=$1 ORDER BY to_jsonb(r)::text`,
+          [f.id],
+        )
+      ).rows;
+    return {
+      survey,
+      rows,
+      welcome: await (await request('welcome')).json(),
+      preview: await (await request('preview')).json(),
+    };
+  };
+  const before = await snapshot();
+  await shortIO(async () => {
+    const expected = generatedPayload(),
+      calls = [];
+    process.env.TINYURL_API_TOKEN = 'isolated-tinyurl-token';
+    const provider = async (url, options) => {
+      calls.push({ url, options });
+      return providerResponse();
+    };
+    const results = await Promise.all([generate(provider), generate(provider)]);
+    assert.deepEqual(
+      results,
+      Array(2).fill({ id: f.id, short_link: expected.secureShortURL }),
+    );
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].url, 'https://api.short.io/links');
+    const options = calls[0].options;
+    assert.equal(options.method, 'POST');
+    assert.equal(options.redirect, 'error');
+    assert.equal(options.headers.Authorization, 'isolated-shortio-key');
+    assert.equal(options.headers['Content-Type'], 'application/json');
+    assert.ok(options.signal instanceof AbortSignal);
+    assert.deepEqual(JSON.parse(options.body), {
+      originalURL: expected.originalURL,
+      domain: 'go.dallasai.club',
+      path: expected.path,
+      allowDuplicates: false,
+    });
+    assert.ok(expected.path.length >= 5 && expected.path.length <= 30);
+    assert.equal(await storedShare(), expected.secureShortURL);
+    assert.deepEqual(await shareAudit(), [
+      {
+        actor: 'officer@example.com',
+        action: 'custom-survey-share-link:' + f.id,
+      },
+    ]);
+    delete process.env.SHORT_IO_API_KEY;
+    assert.deepEqual(
+      await generate(() => assert.fail('Retry must reuse the saved URL.')),
+      results[0],
+    );
+  });
+  assert.deepEqual(await snapshot(), before);
+});
+
+test('Short.io generation preserves a manually saved advisor link without a provider call', async () => {
+  const link = 'https://tinyurl.com/advisor-survey';
+  assert.equal((await share(link)).status, 200);
+  await shortIO(async () => {
+    delete process.env.SHORT_IO_API_KEY;
+    assert.deepEqual(
+      await generate(() => assert.fail('Do not replace the advisor link.')),
+      { id: f.id, short_link: link },
+    );
+  });
+  assert.equal(await storedShare(), link);
+  assert.equal((await shareAudit()).length, 1);
+});
+
+test('Short.io generation rejects unavailable surveys, unconfigured service and supplied destinations', async () => {
+  await shortIO(async () => {
+    const provider = () =>
+      assert.fail('Unavailable surveys must not reach Short.io.');
+    for (const state of [
+      {
+        status: 'draft',
+        expires: new Date(Date.now() + 100000),
+        digest: digest(f.token),
+      },
+      {
+        status: 'closed',
+        expires: new Date(Date.now() + 100000),
+        digest: digest(f.token),
+      },
+      {
+        status: 'archived',
+        expires: new Date(Date.now() + 100000),
+        digest: digest(f.token),
+      },
+      {
+        status: 'open',
+        expires: new Date(Date.now() - 1000),
+        digest: digest(f.token),
+      },
+      {
+        status: 'open',
+        expires: new Date(Date.now() + 100000),
+        digest: 'mismatched-digest',
+      },
+    ]) {
+      await f.db.query(
+        'UPDATE club_forms.custom_surveys SET status=$2,expires_at=$3,link_digest=$4 WHERE id=$1',
+        [f.id, state.status, state.expires, state.digest],
+      );
+      await assert.rejects(generate(provider), (error) => error.status === 409);
+    }
+    await f.db.query(
+      "UPDATE club_forms.custom_surveys SET status='open',expires_at=now()+interval '30 days',link_digest=$2 WHERE id=$1",
+      [f.id, digest(f.token)],
+    );
+    delete process.env.SHORT_IO_API_KEY;
+    await assert.rejects(
+      generate(provider),
+      (error) => error.status === 503 && /not configured/.test(error.message),
+    );
+    process.env.SHORT_IO_API_KEY = 'isolated-shortio-key';
+    for (const body of [
+      {},
+      { id: 'invalid' },
+      { id: f.id, url: 'https://outside.example.com' },
+    ])
+      await assert.rejects(
+        generateSurveyShareLink(f.db, {}, body, provider),
+        (error) => error.status === 400,
+      );
+    await assert.rejects(
+      generateSurveyShareLink(f.db, {}, { id: randomUUID() }, provider),
+      (error) => error.status === 404,
+    );
+    process.env.AUTH_BASE_URL = 'http://office.example.com';
+    await assert.rejects(generate(provider), (error) => error.status === 409);
+  });
+  assert.equal(await storedShare(), null);
+  assert.deepEqual(await shareAudit(), []);
+});
+
+test('Short.io generation recovers a lost provider acknowledgement through the exact deterministic alias', async () => {
+  await shortIO(async () => {
+    const payload = generatedPayload(),
+      calls = [];
+    let created = false;
+    const provider = async (url, options) => {
+      calls.push({ url, options });
+      if (options.method === 'POST') {
+        if (created) return providerResponse({}, 409);
+        created = true;
+        throw new Error(
+          'Provider lost acknowledgement: isolated-shortio-key ' +
+            payload.originalURL,
+        );
+      }
+      return providerResponse(payload);
+    };
+    await assert.rejects(
+      generate(provider),
+      (error) =>
+        error.status === 503 &&
+        !error.message.includes('isolated-shortio-key') &&
+        !error.message.includes('#invite='),
+    );
+    assert.equal(await storedShare(), null);
+    assert.deepEqual(await shareAudit(), []);
+    assert.deepEqual(await generate(provider), {
+      id: f.id,
+      short_link: payload.secureShortURL,
+    });
+    assert.deepEqual(
+      calls.map(({ url, options }) => [url, options.method]),
+      [
+        ['https://api.short.io/links', 'POST'],
+        ['https://api.short.io/links', 'POST'],
+        [
+          'https://api.short.io/links/expand?domain=go.dallasai.club&path=' +
+            payload.path,
+          'GET',
+        ],
+      ],
+    );
+    assert.equal(calls[1].options.body, calls[0].options.body);
+    assert.equal(calls[2].options.signal, calls[1].options.signal);
+    assert.equal(calls[2].options.redirect, 'error');
+    assert.equal(calls[2].options.body, undefined);
+    assert.equal((await shareAudit()).length, 1);
+  });
+});
+
+test('Short.io generation validates provider destination, alias, availability and result before saving', async () => {
+  await shortIO(async () => {
+    const changes = [
+      { originalURL: 'https://outside.example.com' },
+      { path: 'different' },
+      { secureShortURL: 'https://outside.example.com/different' },
+      { secureShortURL: 'http://go.dallasai.club/different' },
+      { hasPassword: true },
+      { archived: true },
+      { success: false },
+      { cloaking: true },
+      { androidURL: 'https://outside.example.com' },
+      { iphoneURL: 'https://outside.example.com' },
+      { splitURL: 'https://outside.example.com' },
+      { expiresAt: '2000-01-01T00:00:00Z' },
+      { expiresAt: 'invalid-date' },
+    ];
+    for (const recovery of [false, true])
+      for (const change of changes) {
+        const payload = generatedPayload();
+        Object.assign(payload, change);
+        let calls = 0;
+        const provider = async () => {
+          calls++;
+          return recovery && calls === 1
+            ? providerResponse({}, 409)
+            : providerResponse(payload);
+        };
+        await assert.rejects(
+          generate(provider),
+          (error) => error.status === 503,
+          JSON.stringify(change),
+        );
+        assert.equal(await storedShare(), null);
+        assert.deepEqual(await shareAudit(), []);
+      }
+    for (const payload of [{ error: 'private failure' }, {}])
+      await assert.rejects(
+        generate(async () => providerResponse(payload)),
+        (error) => error.status === 503,
+      );
+    for (const status of [401, 405, 429, 503, 302])
+      await assert.rejects(
+        generate(async () =>
+          providerResponse(
+            { ...generatedPayload(), extra: 'isolated-shortio-key' },
+            status,
+          ),
+        ),
+        (error) =>
+          error.status === 503 &&
+          !error.message.includes('isolated-shortio-key'),
+      );
+    await assert.rejects(
+      generate(async () => new Response('invalid json')),
+      (error) => error.status === 503,
+    );
+    const payload = generatedPayload();
+    payload.expiresAt = new Date(Date.now() + 60000).toISOString();
+    assert.equal(
+      (await generate(async () => providerResponse(payload))).short_link,
+      payload.secureShortURL,
+    );
+  });
+});
+
+test('Short.io provider helper validates shared HTTPS targets and aliases without a database', async () => {
+  await shortIO(async () => {
+    const target = 'https://dallasai.club/events/game-night/#rsvp';
+    for (const alias of [
+      null,
+      '',
+      'four',
+      'a'.repeat(31),
+      'path/alias',
+      'query?alias',
+      'space alias',
+    ])
+      await assert.rejects(
+        createShortLink(target, alias, () =>
+          assert.fail('Invalid alias must not reach the provider.'),
+        ),
+        (error) => error.status === 400,
+      );
+    for (const url of [
+      '',
+      'http://dallasai.club/events/',
+      'https://localhost/a',
+      'https://user:password@dallasai.club/',
+    ])
+      await assert.rejects(
+        createShortLink(url, 'dai-event-example', () =>
+          assert.fail('Invalid target must not reach the provider.'),
+        ),
+        (error) => error.status === 400,
+      );
+    for (const domain of [
+      '',
+      'localhost',
+      'office.local',
+      'go.dallasai.club/path',
+      'user@go.dallasai.club',
+      'go.dallasai.club?query=yes',
+    ]) {
+      process.env.SHORT_IO_DOMAIN = domain;
+      let calls = 0;
+      await assert.rejects(
+        createShortLink(target, 'dai-event-example', async () => {
+          calls++;
+          return providerResponse();
+        }),
+        (error) => error.status === 503,
+      );
+      assert.equal(calls, 0, domain);
+    }
+    process.env.SHORT_IO_DOMAIN = 'go.dallasai.club';
+    for (const alias of ['abcde', 'dai-event-' + 'a'.repeat(20)]) {
+      let calls = 0;
+      const link = await createShortLink(
+        target,
+        alias,
+        async (url, options) => {
+          calls++;
+          assert.equal(url, 'https://api.short.io/links');
+          assert.deepEqual(JSON.parse(options.body), {
+            originalURL: target,
+            domain: 'go.dallasai.club',
+            path: alias,
+            allowDuplicates: false,
+          });
+          return providerResponse({
+            originalURL: target,
+            path: alias,
+            secureShortURL: 'https://go.dallasai.club/' + alias,
+            hasPassword: false,
+            archived: false,
+            expiresAt: null,
+          });
+        },
+      );
+      assert.equal(link, 'https://go.dallasai.club/' + alias);
+      assert.equal(calls, 1);
+    }
+  });
+});
+
+test('Short.io generation refuses persistence if the survey expires during the provider request', async () => {
+  await shortIO(async () => {
+    await f.db.query(
+      "UPDATE club_forms.custom_surveys SET expires_at=now()+interval '1 second' WHERE id=$1",
+      [f.id],
+    );
+    await assert.rejects(
+      generate(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1100));
+        return providerResponse();
+      }),
+      (error) => error.status === 409,
+    );
+    assert.equal(await storedShare(), null);
+    assert.deepEqual(await shareAudit(), []);
+  });
+});
+
+test('Short.io generation times out, rolls back audit failures and recovers provider-created links', async () => {
+  await shortIO(async () => {
+    const started = Date.now();
+    await assert.rejects(
+      generate(
+        (_url, { signal }) =>
+          new Promise((_resolve, reject) => {
+            signal.addEventListener('abort', () => reject(signal.reason), {
+              once: true,
+            });
+            // AbortSignal.timeout uses an unref'd timer; keep this isolated test alive.
+            const timer = setTimeout(
+              () => reject(new Error('Timeout guard missing')),
+              6500,
+            );
+            signal.addEventListener('abort', () => clearTimeout(timer), {
+              once: true,
+            });
+          }),
+      ),
+      (error) => error.status === 503,
+    );
+    assert.ok(Date.now() - started < 6000);
+    assert.equal(await storedShare(), null);
+    const failure = new Error('isolated audit failure'),
+      payload = generatedPayload();
+    let created = false;
+    const provider = async (_url, options) => {
+      if (options.method === 'GET') return providerResponse(payload);
+      if (created) return providerResponse({}, 409);
+      created = true;
+      return providerResponse(payload);
+    };
+    const query = (tx, sql, values) => {
+      if (sql.startsWith('INSERT INTO club_forms.audit')) throw failure;
+      return tx.query(sql, values);
+    };
+    const db = {
+      query: (sql, values) => query(f.db, sql, values),
+      transaction: (run) =>
+        f.db.transaction((tx) =>
+          run({ query: (sql, values) => query(tx, sql, values) }),
+        ),
+    };
+    await assert.rejects(generate(provider, db), (error) => error === failure);
+    assert.equal(await storedShare(), null);
+    assert.deepEqual(await shareAudit(), []);
+    assert.equal((await generate(provider)).short_link, payload.secureShortURL);
+    assert.equal((await shareAudit()).length, 1);
+  });
+});
+
+test('Short.io generation endpoint sends only the saved link and sanitizes provider errors without logging secrets', async () => {
+  await shortIO(async () => {
+    let failProvider = false,
+      result;
+    const handler = customSurveysHandler({
+      authorize: f.authorize,
+      getDatabase: () => f.db,
+      generateShareLink: (db, actor, body) =>
+        generateSurveyShareLink(db, actor, body, async () => {
+          if (failProvider)
+            throw new Error(
+              'isolated-shortio-key ' + generatedPayload().originalURL,
+            );
+          return providerResponse();
+        }),
+    });
+    const req = {
+        method: 'POST',
+        url: '/api/custom-surveys?action=generate-share-link',
+        headers: {
+          cookie: 'test-officer=yes',
+          origin: process.env.AUTH_BASE_URL,
+          'content-type': 'application/json',
+        },
+        body: { id: f.id },
+      },
+      res = {
+        setHeader() {},
+        end(value) {
+          result = JSON.parse(value);
+        },
+      };
+    await handler(req, res);
+    assert.equal(res.statusCode, 200);
+    assert.deepEqual(result, {
+      id: f.id,
+      short_link: generatedPayload().secureShortURL,
+    });
+    await f.db.query(
+      'UPDATE club_forms.custom_surveys SET short_link=NULL WHERE id=$1',
+      [f.id],
+    );
+    failProvider = true;
+    const original = console.error,
+      logged = [];
+    console.error = (...args) => logged.push(args);
+    try {
+      await handler(req, res);
+    } finally {
+      console.error = original;
+    }
+    assert.equal(res.statusCode, 503);
+    assert.deepEqual(logged, []);
+    assert.ok(!JSON.stringify(result).includes('isolated-shortio-key'));
+    assert.ok(!JSON.stringify(result).includes('#invite='));
+  });
+});
+
+test('short-link generation falls back to TinyURL for unavailable Short.io without changing a conflicting destination', async () => {
+  await shortIO(async () => {
+    process.env.TINYURL_API_TOKEN = 'isolated-tinyurl-token';
+    for (const failure of ['configuration', 'http', 'collision', 'transport']) {
+      process.env.SHORT_IO_API_KEY = 'isolated-shortio-key';
+      if (failure === 'configuration') delete process.env.SHORT_IO_API_KEY;
+      const calls = [],
+        expected = backupPayload();
+      const provider = async (url, options) => {
+        calls.push({ url, options });
+        if (url.startsWith('https://api.short.io/')) {
+          if (failure === 'transport') throw new Error('isolated-shortio-key');
+          if (failure === 'collision')
+            return options.method === 'POST'
+              ? providerResponse({}, 409)
+              : providerResponse({
+                  ...generatedPayload(),
+                  originalURL: 'https://outside.example.com',
+                });
+          return providerResponse({}, 503);
+        }
+        assert.equal(url, 'https://api.tinyurl.com/create');
+        assert.equal(
+          options.headers.Authorization,
+          'Bearer isolated-tinyurl-token',
+        );
+        assert.equal(options.redirect, 'error');
+        assert.deepEqual(JSON.parse(options.body), {
+          url: expected.data.url,
+          domain: 'tinyurl.com',
+          alias: expected.data.alias,
+        });
+        return providerResponse(expected);
+      };
+      assert.equal(
+        (await generate(provider)).short_link,
+        expected.data.tiny_url,
+        failure,
+      );
+      assert.equal(
+        calls.filter(({ url }) => url.startsWith('https://api.tinyurl.com/'))
+          .length,
+        1,
+      );
+      assert.ok(
+        calls.every(({ options }) => ['GET', 'POST'].includes(options.method)),
+      );
+      assert.equal((await shareAudit()).length, 1);
+      assert.deepEqual(
+        await generate(() =>
+          assert.fail('Saved fallback must bypass both providers.'),
+        ),
+        { id: f.id, short_link: expected.data.tiny_url },
+      );
+      await f.db.query(
+        'UPDATE club_forms.custom_surveys SET short_link=NULL WHERE id=$1',
+        [f.id],
+      );
+      await f.db.query('DELETE FROM club_forms.audit WHERE action=$1', [
+        'custom-survey-share-link:' + f.id,
+      ]);
+    }
+  });
+});
+
+test('short-link generation retries lost Short.io acknowledgements with native path idempotency', async () => {
+  await shortIO(async () => {
+    process.env.TINYURL_API_TOKEN = 'isolated-tinyurl-token';
+    let created = false;
+    const bodies = [],
+      payload = generatedPayload();
+    const provider = async (url, options) => {
+      if (url.startsWith('https://api.tinyurl.com/'))
+        return providerResponse({}, 503);
+      assert.equal(url, 'https://api.short.io/links');
+      bodies.push(options.body);
+      if (!created) {
+        created = true;
+        throw new Error('lost Short.io acknowledgement');
+      }
+      return providerResponse({ ...payload, duplicate: true });
+    };
+    await assert.rejects(generate(provider), (error) => error.status === 503);
+    assert.equal(await storedShare(), null);
+    assert.deepEqual(await shareAudit(), []);
+    assert.equal((await generate(provider)).short_link, payload.secureShortURL);
+    assert.equal(bodies.length, 2);
+    assert.equal(bodies[0], bodies[1]);
+    assert.equal((await shareAudit()).length, 1);
+  });
+});
+
+test('short-link generation retries lost TinyURL acknowledgements using the same verified backup alias', async () => {
+  await shortIO(async () => {
+    delete process.env.SHORT_IO_API_KEY;
+    process.env.TINYURL_API_TOKEN = 'isolated-tinyurl-token';
+    const payload = backupPayload(),
+      calls = [];
+    let created = false;
+    const provider = async (url, options) => {
+      calls.push({ url, options });
+      if (options.method === 'GET') return providerResponse(payload);
+      if (created) return providerResponse({}, 422);
+      created = true;
+      throw new Error('lost TinyURL acknowledgement');
+    };
+    await assert.rejects(generate(provider), (error) => error.status === 503);
+    assert.equal(await storedShare(), null);
+    assert.equal((await generate(provider)).short_link, payload.data.tiny_url);
+    assert.deepEqual(
+      calls.map(({ url, options }) => [url, options.method]),
+      [
+        ['https://api.tinyurl.com/create', 'POST'],
+        ['https://api.tinyurl.com/create', 'POST'],
+        [
+          'https://api.tinyurl.com/alias/tinyurl.com/' + payload.data.alias,
+          'GET',
+        ],
+      ],
+    );
+    assert.equal(calls[0].options.body, calls[1].options.body);
+    assert.equal(calls[1].options.signal, calls[2].options.signal);
+    assert.equal((await shareAudit()).length, 1);
+  });
+});
+
+test('short-link generation leaves data intact when both providers fail or TinyURL returns the wrong destination', async () => {
+  await shortIO(async () => {
+    process.env.TINYURL_API_TOKEN = 'isolated-tinyurl-token';
+    for (const invalid of [false, true]) {
+      const payload = backupPayload();
+      payload.data.url = 'https://outside.example.com';
+      const provider = async (url) =>
+        url.startsWith('https://api.short.io/')
+          ? providerResponse({}, 503)
+          : providerResponse(payload, invalid ? 200 : 503);
+      await assert.rejects(
+        generate(provider),
+        (error) =>
+          error.status === 503 &&
+          !error.message.includes('isolated-tinyurl-token') &&
+          !error.message.includes('#invite='),
+      );
+      assert.equal(await storedShare(), null);
+      assert.deepEqual(await shareAudit(), []);
+    }
+  });
+});
+
+test('short-link generation bounds both provider attempts to one eight-second deadline', async () => {
+  await shortIO(async () => {
+    process.env.TINYURL_API_TOKEN = 'isolated-tinyurl-token';
+    const started = Date.now(),
+      calls = [];
+    await assert.rejects(
+      generate(
+        (url, { signal }) =>
+          new Promise((_resolve, reject) => {
+            calls.push(url);
+            const timer = setTimeout(
+              () => reject(new Error('Deadline missing')),
+              9500,
+            );
+            const abort = () => {
+              clearTimeout(timer);
+              reject(signal.reason);
+            };
+            if (signal.aborted) abort();
+            else signal.addEventListener('abort', abort, { once: true });
+          }),
+      ),
+      (error) => error.status === 503,
+    );
+    assert.deepEqual(calls, [
+      'https://api.short.io/links',
+      'https://api.tinyurl.com/create',
+    ]);
+    assert.ok(Date.now() - started < 9000);
+    assert.equal(await storedShare(), null);
+    assert.deepEqual(await shareAudit(), []);
+  });
+});
+
+test('TinyURL backup validates its exact destination, alias, availability and result before saving', async () => {
+  await shortIO(async () => {
+    delete process.env.SHORT_IO_API_KEY;
+    process.env.TINYURL_API_TOKEN = 'isolated-tinyurl-token';
+    for (const change of [
+      { url: 'https://outside.example.com' },
+      { domain: 'outside.example.com' },
+      { alias: 'different' },
+      { tiny_url: 'https://tinyurl.com/different' },
+      { deleted: true },
+      { archived: true },
+      { expires_at: '2000-01-01T00:00:00Z' },
+      { expires_at: 'invalid-date' },
+      { expires_at: undefined },
+    ]) {
+      const payload = backupPayload();
+      Object.assign(payload.data, change);
+      await assert.rejects(
+        generate(async () => providerResponse(payload)),
+        (error) => error.status === 503,
+        JSON.stringify(change),
+      );
+      assert.equal(await storedShare(), null);
+    }
+    for (const payload of [
+      { ...backupPayload(), code: 7 },
+      { ...backupPayload(), errors: ['private failure'] },
+      { ...backupPayload(), errors: '' },
+    ])
+      await assert.rejects(
+        generate(async () => providerResponse(payload)),
+        (error) => error.status === 503,
+      );
+    for (const status of [401, 405, 429, 503, 302])
+      await assert.rejects(
+        generate(async () => providerResponse(backupPayload(), status)),
+        (error) => error.status === 503,
+      );
+    assert.deepEqual(await shareAudit(), []);
+  });
 });
 
 test('private preview exposes questions only; answers and admin results still require authentication', async () => {

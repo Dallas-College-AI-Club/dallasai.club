@@ -1,6 +1,7 @@
 import { node } from './ui.js';
 import { questionFields } from '../surveys/form-ui.js';
 import { isPaused } from './session.js';
+import { availabilityValues } from '../surveys/availability-values.js';
 export function surveyTrial(definition) {
   const root = node('details');
   root.className = 'survey-trial';
@@ -40,15 +41,23 @@ export function surveyTrial(definition) {
       const v = values[q.id];
       let answer = 'Not answered';
       if (v !== undefined && v !== '' && (!Array.isArray(v) || v.length))
-        answer = ['text', 'date', 'number'].includes(q.type)
-          ? v
-          : q.type === 'scale'
-            ? v + ' / 5'
-            : (q.type === 'single' ? [v] : v)
-                .map((i) => q.options[i])
-                .join('\n');
+        answer =
+          q.type === 'availability'
+            ? availabilityValues(v).join('\n')
+            : ['text', 'short', 'email', 'date', 'time', 'number'].includes(
+                  q.type,
+                )
+              ? v
+              : q.type === 'scale'
+                ? v + ' / 5'
+                : (q.type === 'single' ? [v] : v)
+                    .map((i) => q.options[i])
+                    .join('\n');
       const card = node('section');
-      card.append(node('h4', q.title), node('p', answer));
+      card.append(
+        node('h4', (q.choiceDate ? q.choiceDate + ' · ' : '') + q.title),
+        node('p', answer),
+      );
       dialog.append(card);
     }
     root.append(dialog);

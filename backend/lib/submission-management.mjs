@@ -211,7 +211,7 @@ export async function changeSubmission(
           );
           await tx.query(
             'UPDATE club_forms.survey_responses SET answers=$2 WHERE entry_id=$1',
-            [entry.id, JSON.stringify(validated.answers)],
+            [entry.id, JSON.stringify(validated?.answers || [])],
           );
         } else if (body.answers !== null && body.answers !== undefined)
           throw new RequestError(

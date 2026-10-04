@@ -176,7 +176,8 @@ export function validateSurvey(body, event) {
   return { version, questions, answers };
 }
 export async function saveSurveyResponse(tx, entry, response) {
-  if (!response) return;
+  if (entry.kind !== 'rsvp') return;
+  response ||= { version: '', questions: [], answers: [] };
   await tx.query(
     `INSERT INTO club_forms.survey_responses(entry_id,event_id,event_title,event_date,potential,survey_version,questions,answers)
      VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,
@@ -195,7 +196,7 @@ export async function saveSurveyResponse(tx, entry, response) {
 export async function surveyResults(db, filter = {}) {
   const { where, values, offset } = responseFilter(filter);
   const result = await db.query(
-    `${responseSelect} ${where} ORDER BY s.created_at DESC,s.entry_id LIMIT 51 OFFSET $6`,
+    `${responseSelect} ${where} ORDER BY s.created_at DESC,s.entry_id LIMIT 51 OFFSET $8`,
     [...values, offset],
   );
   const total = (

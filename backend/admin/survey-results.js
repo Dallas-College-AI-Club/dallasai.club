@@ -10,6 +10,7 @@ import {
 import { dateTime, day, plural } from './format.js';
 import { submissionEditor } from './submission-editor.js';
 import { isPaused } from './session.js';
+import { mountFeedbackGroups } from './custom-surveys.js';
 // onReset runs when the filters replace a single-response view, so the
 // address can drop the response. openContacts(email) shows the Contacts tab.
 export function mountSurveyResults(
@@ -17,23 +18,35 @@ export function mountSurveyResults(
   onContactPurge = () => {},
   onReset = () => {},
   openContacts = () => {},
+  options = {},
 ) {
+  const q = (selector) =>
+    options.host
+      ? options.host.querySelector(
+          selector.replace(/#([\w-]+)/g, '[data-survey-ref="$1"]'),
+        )
+      : document.querySelector(selector);
+  const prefix = options.host ? 'inline-' + crypto.randomUUID() + '-' : '';
+  const openResponses = new Set(),
+    expandedEvents = new Set();
+  const feedbackMounts = [];
   const editor = submissionEditor(api, async (result) => {
     await load();
     // The cards were rebuilt under the closed dialog: focus this response.
     if (document.activeElement === document.body)
       (
         q('[data-entry-id="' + CSS.escape(result.entryId) + '"] summary') ||
-        q('#event-surveys-root [data-focus-fallback]')
-      ).focus();
+        (options.host
+          ? q('#survey-results > details > summary') || q('#survey-next')
+          : q('#event-surveys-root [data-focus-fallback]'))
+      )?.focus();
     onContactPurge(result);
-    document.querySelector('#survey-status').textContent = result.removed
+    q('#survey-status').textContent = result.removed
       ? result.filesCleaned === false
         ? 'Response deleted. Attachment removal is queued for retry.'
         : 'Response permanently deleted.'
       : 'Response updated.';
   });
-  const q = (s) => document.querySelector(s);
   let offset = 0,
     entryId = '',
     generation = 0,
@@ -52,9 +65,9 @@ export function mountSurveyResults(
   search.type = 'search';
   search.maxLength = 200;
   search.placeholder = 'Search saved responses';
-  search.id = 'survey-search';
+  search.id = prefix + 'survey-search';
   searchLabel.append(search);
-  view.id = 'survey-view';
+  view.id = prefix + 'survey-view';
   view.append(
     new Option('Active', 'active'),
     new Option('Archived', 'archived'),
@@ -62,7 +75,7 @@ export function mountSurveyResults(
   );
   viewLabel.append(view);
   star.type = 'checkbox';
-  star.id = 'survey-starred';
+  star.id = prefix + 'survey-starred';
   starLabel.append(star, document.createTextNode('Starred only'));
   tools.append(
     searchLabel,
@@ -70,7 +83,44 @@ export function mountSurveyResults(
     starLabel,
     button('Contacts & follow-up', () => openContacts()),
   );
+  const typeLabel = node('label', 'Response type'),
+    type = node('select');
+  type.append(
+    new Option('RSVP & feedback', 'all'),
+    new Option('RSVP', 'rsvp'),
+    new Option('Event feedback', 'feedback'),
+  );
+  typeLabel.append(type);
+  tools.prepend(typeLabel);
+  const followup = node('div', undefined, 'survey-tools survey-followup'),
+    attendanceLabel = node('label', 'Attendance'),
+    attendance = node('select'),
+    feedbackLabel = node('label', 'Feedback status'),
+    feedback = node('select');
+  attendance.append(
+    new Option('All attendance', 'all'),
+    new Option('Attended', 'attended'),
+    new Option('Did not attend', 'did_not_attend'),
+    new Option('Not recorded', 'not_recorded'),
+  );
+  feedback.append(
+    new Option('Any feedback status', 'all'),
+    new Option('Missing feedback', 'missing'),
+    new Option('Feedback submitted', 'submitted'),
+  );
+  attendanceLabel.append(attendance);
+  feedbackLabel.append(feedback);
+  followup.append(
+    node('strong', 'RSVP follow-up'),
+    attendanceLabel,
+    feedbackLabel,
+  );
   q('#survey-status').before(tools);
+  tools.after(followup);
+  if (options.host) {
+    tools.hidden = true;
+    followup.hidden = true;
+  }
   q('#inbox-pane .heading')?.append(
     button('Contacts & follow-up', () => openContacts()),
   );
@@ -82,7 +132,7 @@ export function mountSurveyResults(
     reportStatus = node('p', '', 'survey-report-status'),
     reportExport = button('Export CSV', () => {}),
     reportClose = button('Close', () => closeReport());
-  reportHeading.id = 'survey-report-heading';
+  reportHeading.id = prefix + 'survey-report-heading';
   reportHeading.tabIndex = -1;
   reportDialog.setAttribute('aria-labelledby', reportHeading.id);
   reportStatus.setAttribute('role', 'status');
@@ -132,6 +182,7 @@ export function mountSurveyResults(
     button('Export matching CSV', () => download()),
   );
   q('#survey-status').after(reportTools);
+  if (options.host) reportTools.hidden = true;
   const filters = (eventId = q('#survey-event').value) =>
     new URLSearchParams({
       eventId,
@@ -139,6 +190,12 @@ export function mountSurveyResults(
       search: search.value.trim(),
       view: view.value,
       starred: String(star.checked),
+      attendance: attendance.value,
+      feedback: feedback.value,
+      type: type.value,
+      ...(options.surveys?.length === 1
+        ? { surveyId: options.surveys[0].id }
+        : {}),
     });
   async function download(
     eventId,
@@ -205,7 +262,7 @@ export function mountSurveyResults(
         node('h3', plural(data.total, 'matching response') + ' · all pages'),
         node(
           'p',
-          'Uses the current search, archive and star filters. Changed question versions are shown separately.',
+          'Includes all matching responses. Surveys and changed question versions are shown separately.',
           'hint',
         ),
       );
@@ -215,11 +272,15 @@ export function mountSurveyResults(
         section.append(
           node(
             'summary',
-            group.title +
-              ' · ' +
-              plural(group.count, 'response') +
-              ' · version ' +
-              group.version.slice(0, 8),
+            [
+              group.title,
+              group.responseType === 'feedback'
+                ? 'Event feedback' +
+                  (group.surveyTitle ? ': ' + group.surveyTitle : '')
+                : 'RSVP',
+              plural(group.count, 'response'),
+              'version ' + group.version.slice(0, 8),
+            ].join(' · '),
           ),
         );
         for (const question of group.questions) {
@@ -289,13 +350,30 @@ export function mountSurveyResults(
     }
   }
   const cardVersion = (response) =>
-    response.starred + ':' + (response.archived_at || '');
+    [
+      response.starred,
+      response.archived_at,
+      response.attendance,
+      response.feedback_status,
+      response.feedback_submitted_count,
+      response.feedback_survey_count,
+    ].join(':');
   // Star and Archive patch this card from the POST result instead of
   // reloading, so scroll, open cards and focus stay where they were.
   function card(response) {
     const el = node('details', undefined, 'entry survey-response');
     el.dataset.entryId = response.entry_id;
-    el.open = Boolean(entryId);
+    el.open =
+      Boolean(entryId) ||
+      openResponses.has(response.entry_id) ||
+      expandedEvents.has(response.event_id);
+    el.addEventListener('toggle', () => {
+      el.open
+        ? openResponses.add(response.entry_id)
+        : openResponses.delete(response.entry_id);
+      if (!el.open) expandedEvents.delete(response.event_id);
+      shown.get(response.event_id)?.updateExpand?.();
+    });
     const name = h('strong'),
       when = h('small');
     el.append(
@@ -309,6 +387,42 @@ export function mountSurveyResults(
     );
     const actions = node('div', undefined, 'survey-response-actions'),
       status = node('p');
+    const participation = node('span', undefined, 'survey-participation'),
+      attendanceControl = node('label', 'Attendance'),
+      attendanceValue = node('select');
+    attendanceValue.setAttribute(
+      'aria-label',
+      'Attendance for ' + (response.name || response.email),
+    );
+    attendanceValue.append(
+      new Option('Not recorded', 'not_recorded'),
+      new Option('Attended', 'attended'),
+      new Option('Did not attend', 'did_not_attend'),
+    );
+    attendanceControl.append(attendanceValue);
+    el.querySelector('summary').append(participation);
+    attendanceValue.onchange = async () => {
+      const current = generation;
+      attendanceValue.disabled = true;
+      status.textContent = 'Saving attendance…';
+      try {
+        await api('/api/surveys', {
+          action: 'attendance',
+          entryId: response.entry_id,
+          value: attendanceValue.value,
+        });
+        if (current !== generation) return;
+        await load();
+        q('#survey-status').textContent = 'Attendance saved.';
+        q('#survey-results [data-focus]')?.focus();
+      } catch (error) {
+        if (current === generation) {
+          status.textContent = error.message;
+          attendanceValue.value = response.attendance || 'not_recorded';
+          attendanceValue.disabled = false;
+        }
+      }
+    };
     status.setAttribute('role', 'status');
     async function manage(action, value) {
       const current = generation,
@@ -372,11 +486,30 @@ export function mountSurveyResults(
       mark.setAttribute('aria-pressed', String(response.starred));
       archive.textContent = response.archived_at ? 'Restore' : 'Archive';
       remove.hidden = !response.archived_at;
+      attendanceValue.value = response.attendance || 'not_recorded';
+      const attendanceText = {
+        not_recorded: 'Not recorded',
+        attended: 'Attended',
+        did_not_attend: 'Did not attend',
+      }[attendanceValue.value];
+      const feedbackText =
+        response.feedback_survey_count > 1
+          ? `${response.feedback_submitted_count} of ${response.feedback_survey_count} submitted`
+          : response.feedback_status === 'no_survey'
+            ? 'No survey'
+            : response.feedback_status === 'submitted'
+              ? 'Submitted'
+              : 'Not submitted';
+      participation.replaceChildren(
+        node('span', 'Attendance: ' + attendanceText, 'participation-tag'),
+        node('span', 'Feedback: ' + feedbackText, 'participation-tag'),
+      );
     };
     el.patch(response);
     el.append(
       actions,
       status,
+      attendanceControl,
       node(
         'p',
         response.event_date
@@ -411,8 +544,10 @@ export function mountSurveyResults(
       create: card,
       update: (el, response) => el.patch(response),
     });
-    group.summary.textContent =
-      group.rows[0]?.event_title + ' · ' + group.rows.length + ' on this page';
+    group.summary.textContent = group.title;
+    group.rsvpHeading.textContent =
+      'RSVP · ' + plural(group.rows.length, 'response') + ' on this page';
+    group.updateExpand?.();
   }
   // A card that no longer matches the filters leaves; focus moves to the
   // next card rather than to <body>.
@@ -427,15 +562,12 @@ export function mountSurveyResults(
       .filter(matches);
     if (el?.contains(document.activeElement) && !matches(response))
       focusFallback(el, q('#survey-results'));
-    if (group.rows.length) render(group);
-    else {
-      group.list.closest('.survey-event-group').remove();
-      shown.delete(response.event_id);
-    }
+    render(group);
   }
   async function load() {
     const version = ++generation,
-      eventId = q('#survey-event').value;
+      eventId = options.eventId || q('#survey-event').value;
+    for (const mounted of feedbackMounts.splice(0)) mounted.dispose();
     clearTimeout(timer);
     timer = null;
     closeReport();
@@ -445,29 +577,81 @@ export function mountSurveyResults(
     try {
       const params = filters();
       params.set('offset', String(offset));
-      const data = await api('/api/surveys?' + params);
+      const [data, catalog, eventData] = await Promise.all([
+        api('/api/surveys?' + params),
+        options.surveys
+          ? Promise.resolve({ surveys: options.surveys })
+          : api('/api/custom-surveys?action=catalog'),
+        options.event
+          ? Promise.resolve({ events: [options.event] })
+          : api('/api/events?admin=1'),
+      ]);
       if (version !== generation) return;
-      if (!data.responses.length && offset > 0) {
+      const priorRows = [];
+      if (options.host && offset > 0) {
+        const earlier = await Promise.all(
+          Array.from({ length: offset / 50 }, (_, page) => {
+            const previous = new URLSearchParams(params);
+            previous.set('offset', String(page * 50));
+            return api('/api/surveys?' + previous);
+          }),
+        );
+        if (version !== generation) return;
+        priorRows.push(...earlier.flatMap((page) => page.responses));
+      }
+      if (!data.responses.length && offset > 0 && !options.host) {
         offset = Math.max(0, offset - 50);
         return load();
       }
+      const eventChoices = new Map(
+        data.events.map((event) => [event.id, event]),
+      );
+      for (const survey of catalog.surveys) {
+        const id = survey.definition?.eventId,
+          event = eventData.events.find((e) => e.id === id);
+        if (id && !eventChoices.has(id))
+          eventChoices.set(id, {
+            id,
+            title: event?.draft?.title || event?.title || id,
+            date: event?.draft?.date || event?.date,
+          });
+      }
       q('#survey-event').replaceChildren(
         new Option('All events, including past events', ''),
-        ...data.events.map(
+        ...[...eventChoices.values()].map(
           (e) => new Option(e.title + ' · ' + day(e.date), e.id),
         ),
       );
       q('#survey-event').value = eventId;
       shown.clear();
-      for (const response of data.responses) {
+      for (const response of type.value === 'feedback'
+        ? []
+        : [...priorRows, ...data.responses]) {
         if (!shown.has(response.event_id))
           shown.set(response.event_id, {
+            title: response.event_title,
             rows: [],
             list: node('div'),
             summary: node('summary'),
+            rsvpHeading: node('summary'),
           });
-        shown.get(response.event_id).rows.push(response);
+        const group = shown.get(response.event_id);
+        if (!group.rows.some((row) => row.entry_id === response.entry_id))
+          group.rows.push(response);
       }
+      if (type.value !== 'rsvp' && !star.checked)
+        for (const survey of catalog.surveys) {
+          const id = survey.definition?.eventId;
+          if (!id || (eventId && id !== eventId)) continue;
+          if (!shown.has(id))
+            shown.set(id, {
+              title: eventChoices.get(id)?.title || id,
+              rows: [],
+              list: node('div'),
+              summary: node('summary'),
+              rsvpHeading: node('summary'),
+            });
+        }
       for (const [id, group] of shown) {
         const box = node('details', undefined, 'survey-event-group');
         box.open = true;
@@ -476,16 +660,75 @@ export function mountSurveyResults(
           button('Compile event summary', () => summary(id)),
           button('Export event CSV', () => download(id)),
         );
-        box.append(group.summary, actions, group.list);
+        const rsvps = node('details', undefined, 'survey-response-kind'),
+          feedbackSection = node('details', undefined, 'survey-response-kind');
+        rsvps.open = true;
+        feedbackSection.open = true;
+        rsvps.append(group.rsvpHeading, group.list);
+        rsvps.hidden = type.value === 'feedback';
+        feedbackSection.hidden = type.value === 'rsvp' || star.checked;
+        feedbackSection.append(node('summary', 'Event feedback'));
+        const feedbackRoot = node('div');
+        feedbackSection.append(feedbackRoot);
+        const linked = catalog.surveys.filter(
+          (s) => s.definition?.eventId === id,
+        );
+        if (!feedbackSection.hidden) {
+          const mounted = mountFeedbackGroups(feedbackRoot, api, {
+            surveys: linked,
+            isCurrent: () => version === generation,
+            onChange: () => load(),
+            search: search.value.trim(),
+            view: view.value,
+          });
+          feedbackMounts.push(mounted);
+          group.feedback = mounted;
+          if (expandedEvents.has(id)) mounted.setExpanded(true);
+        }
+        const expand = button('Expand all answers', () => {
+          const open = !expandedEvents.has(id);
+          open ? expandedEvents.add(id) : expandedEvents.delete(id);
+          for (const response of group.rows)
+            open
+              ? openResponses.add(response.entry_id)
+              : openResponses.delete(response.entry_id);
+          group.list.querySelectorAll('.survey-response').forEach((card) => {
+            card.open = open;
+          });
+          group.feedback?.setExpanded(open);
+          if (open) {
+            rsvps.open = true;
+            feedbackSection.open = true;
+          }
+          group.updateExpand();
+        });
+        group.updateExpand = () => {
+          expand.textContent = expandedEvents.has(id)
+            ? 'Collapse all answers'
+            : 'Expand all answers';
+        };
+        actions.append(expand);
+        if (options.host && options.onFollowup)
+          group.rsvpHeading.after(
+            button('Filter RSVPs for follow-up →', () =>
+              options.onFollowup(id),
+            ),
+          );
+        box.append(group.summary, actions, rsvps, feedbackSection);
         render(group);
         q('#survey-results').append(box);
       }
       q('#survey-status').textContent =
-        plural(data.total, 'matching saved response') +
-        '. Expand a person to read answers or manage their response.';
+        type.value === 'feedback'
+          ? 'Event feedback by event.'
+          : plural(data.total, 'matching RSVP response') +
+            (type.value === 'all'
+              ? '. Feedback appears separately within each event.'
+              : '.');
       q('#survey-previous').disabled = offset === 0;
       q('#survey-next').disabled = !data.hasMore;
       q('#survey-page').textContent = 'Page ' + (offset / 50 + 1);
+      q('#survey-page').parentElement.hidden = type.value === 'feedback';
       q('#survey-all').hidden = !entryId;
     } catch (error) {
       if (version === generation)
@@ -505,6 +748,19 @@ export function mountSurveyResults(
     timer = setTimeout(reset, 250);
   };
   view.onchange = star.onchange = q('#survey-event').onchange = reset;
+  type.onchange = () => {
+    if (type.value !== 'rsvp') {
+      attendance.value = 'all';
+      feedback.value = 'all';
+    }
+    followup.hidden = Boolean(options.host) || type.value === 'feedback';
+    reset();
+  };
+  attendance.onchange = feedback.onchange = () => {
+    if (attendance.value !== 'all' || feedback.value !== 'all')
+      type.value = 'rsvp';
+    reset();
+  };
   q('#survey-reload').onclick = load;
   q('#survey-previous').onclick = () => {
     offset = Math.max(0, offset - 50);
@@ -520,6 +776,7 @@ export function mountSurveyResults(
     // Ten minutes paused: drop the shown responses and history.
     reset() {
       generation++;
+      for (const mounted of feedbackMounts.splice(0)) mounted.dispose();
       clearTimeout(timer);
       timer = null;
       shown.clear();
@@ -528,17 +785,39 @@ export function mountSurveyResults(
       clearReport();
       reportStatus.textContent = 'Close this and compile the summary again.';
     },
-    show(id = '') {
+    show(id = '', eventId = options.eventId || '', followupOnly = false) {
       entryId = id;
       offset = 0;
       search.value = '';
       view.value = id ? 'all' : 'active';
       star.checked = false;
-      q('#survey-event').value = '';
+      attendance.value = 'all';
+      feedback.value = 'all';
+      type.value = followupOnly ? 'rsvp' : 'all';
+      followup.hidden = Boolean(options.host);
+      if (
+        eventId &&
+        !Array.from(q('#survey-event').options).some(
+          (option) => option.value === eventId,
+        )
+      )
+        q('#survey-event').append(
+          new Option(options.event?.draft?.title || eventId, eventId),
+        );
+      q('#survey-event').value = eventId;
       load();
+    },
+    dispose() {
+      generation++;
+      clearTimeout(timer);
+      for (const mounted of feedbackMounts.splice(0)) mounted.dispose();
+      editor.dispose();
+      closeReport();
+      reportDialog.remove();
     },
     clear() {
       generation++;
+      for (const mounted of feedbackMounts.splice(0)) mounted.dispose();
       clearTimeout(timer);
       entryId = '';
       offset = 0;
@@ -554,6 +833,55 @@ export function mountSurveyResults(
       search.value = '';
       view.value = 'active';
       star.checked = false;
+      attendance.value = 'all';
+      feedback.value = 'all';
+      type.value = 'all';
+      openResponses.clear();
+      expandedEvents.clear();
     },
   };
+}
+
+export function mountEventSurveyGroup(target, api, event, options = {}) {
+  const host = node('section', undefined, 'inline-event-surveys');
+  const ref = (tag, id, text) => {
+    const el = node(tag, text);
+    el.dataset.surveyRef = id;
+    return el;
+  };
+  const select = ref('select', 'survey-event');
+  select.append(new Option(event.title || event.id, event.id));
+  select.hidden = true;
+  const heading = node('h3', event.title || event.id);
+  heading.tabIndex = -1;
+  heading.dataset.focusFallback = '';
+  heading.hidden = true;
+  const refresh = ref('button', 'survey-reload', 'Refresh'),
+    all = ref('button', 'survey-all', 'Show all responses');
+  refresh.hidden = true;
+  all.hidden = true;
+  const status = ref('p', 'survey-status');
+  status.setAttribute('role', 'status');
+  const results = ref('div', 'survey-results'),
+    paging = node('nav', undefined, 'pagination');
+  paging.setAttribute('aria-label', 'RSVP response pages');
+  const previous = ref('button', 'survey-previous', 'Previous');
+  previous.hidden = true;
+  paging.append(
+    previous,
+    ref('span', 'survey-page'),
+    ref('button', 'survey-next', 'Load more responses'),
+  );
+  host.dataset.surveyRef = 'event-surveys-root';
+  host.append(heading, select, refresh, all, status, results, paging);
+  target.append(host);
+  const controller = mountSurveyResults(
+    api,
+    options.onChange,
+    () => {},
+    options.openContacts,
+    { ...options, host, eventId: event.id, event },
+  );
+  controller.show();
+  return controller;
 }

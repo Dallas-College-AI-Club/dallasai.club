@@ -249,9 +249,7 @@ export function mountAdvisor(
         )
         .join('');
     $('progress').innerHTML =
-      state.step < 0
-        ? ''
-        : `<div class="progress"><div style="width:${((state.step + 1) / 5) * 100}%"></div></div><span class="micro">${state.step < 4 ? `Page ${state.step + 1} of 5` : 'Review your answers'}</span>`;
+      `<div class="progress"><div style="width:${((state.step + 1) / 5) * 100}%"></div></div><span class="micro">${state.step < 4 ? `Page ${state.step + 1} of 5` : 'Review your answers'}</span>`;
     if (state.step < 0) {
       welcome();
       assignFocusIDs();

@@ -1,5 +1,5 @@
 import { database } from '../lib/db.mjs';
-import { requireAdmin, adminOrigin } from '../lib/auth.mjs';
+import { requireAdmin, adminOrigin, sameOriginRead } from '../lib/auth.mjs';
 import { send, fail, jsonBody } from '../lib/http.mjs';
 import { RequestError } from '../lib/errors.mjs';
 import { changeSubmission } from '../lib/submission-management.mjs';
@@ -80,10 +80,21 @@ export function surveysHandler({
         search: params.get('search') || '',
         view: params.get('view') || 'active',
         starred: params.get('starred') === 'true',
+        attendance: params.get('attendance') || 'all',
+        feedback: params.get('feedback') || 'all',
+        type: params.get('type') || 'rsvp',
+        surveyId: params.get('surveyId') || '',
         offset,
       };
       if (params.has('summary') || params.has('export')) {
+        if (params.has('export') && filter.type !== 'rsvp') sameOriginRead(req);
         const rows = await reportRows(db, filter);
+        const csv = params.has('export') ? responsesCSV(rows) : null;
+        if (csv && filter.type !== 'rsvp' && Buffer.byteLength(csv) > 4000000)
+          throw new RequestError(
+            413,
+            'These responses make a CSV larger than 4 MB. Narrow the event or response filters first.',
+          );
         // Like the Inbox export, record who read the full response set.
         await db.query(
           'INSERT INTO club_forms.audit(actor,action) VALUES($1,$2)',
@@ -101,7 +112,7 @@ export function surveysHandler({
           );
           res.setHeader('Cache-Control', 'private, no-store');
           res.setHeader('X-Content-Type-Options', 'nosniff');
-          return res.end(responsesCSV(rows));
+          return res.end(csv);
         }
         return send(res, 200, summarizeResponses(rows));
       }

@@ -78,7 +78,7 @@ export function renderHome(root, data, actions) {
       ),
       link(
         'Show all',
-        build('inbox', { type: 'rsvp-all', event: group.id }),
+        build('inbox', { type: 'rsvp-all', event: group.id, status: 'active' }),
         'button-link',
       ),
     );
@@ -165,7 +165,7 @@ export function renderHome(root, data, actions) {
       ? data.unpublished.map((event) => draftCard(event, openEvent))
       : [node('p', 'Everything is published.', 'hint')]),
   );
-  // Totals per kind, like the Inbox counts; kinds with new ones stand out.
+  // Active submissions only; past and upcoming RSVPs share one category.
   const totals = tile('Inbox totals'),
     grid = node('div', undefined, 'tile-totals');
   for (const kind of KINDS) {
@@ -177,7 +177,7 @@ export function renderHome(root, data, actions) {
         .reduce(
           (sum, row) => ({
             new: sum.new + row.new,
-            total: sum.total + row.total,
+            total: sum.total + row.new + row.reviewed,
           }),
           { new: 0, total: 0 },
         ),
@@ -185,7 +185,7 @@ export function renderHome(root, data, actions) {
         '',
         build('inbox', {
           type: kind === 'rsvp' ? 'rsvp-all' : kind,
-          status: 'all',
+          status: 'active',
         }),
         'total',
       );
@@ -200,16 +200,12 @@ export function renderHome(root, data, actions) {
     );
     grid.append(cell);
   }
-  const retained = data.counts.reduce((sum, row) => sum + row.total, 0),
-    archived = data.counts.reduce((sum, row) => sum + row.closed, 0),
-    deleted = data.deletedSubmissions || 0;
+  const active = data.counts.reduce(
+    (sum, row) => sum + row.new + row.reviewed,
+    0,
+  );
   totals.append(
-    number(retained + deleted, 'submissions in all'),
-    node(
-      'p',
-      `${retained} saved (including ${archived} archived) · ${deleted} permanently deleted`,
-      'hint',
-    ),
+    number(active, active === 1 ? 'active submission' : 'active submissions'),
     grid,
   );
   // Officers' own actions; never a member's name, email or text.

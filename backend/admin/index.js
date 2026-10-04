@@ -10,7 +10,7 @@ import {
   time,
   toast,
 } from './ui.js';
-import { mountSurveyResults } from './survey-results.js';
+import { mountSurveyResults, mountEventSurveyGroup } from './survey-results.js';
 import { mountCustomSurveys } from './custom-surveys.js';
 import { mountSurveyArchive } from './survey-archive.js';
 import { mountEventEditor } from './event-editor.js';
@@ -47,7 +47,7 @@ let offset = 0,
   sessionGeneration = 0;
 // The Inbox list shown: API status, kind and event, or one submission (id).
 // It comes from the route; loadedKey is the request it shows.
-let view = { status: 'new', kind: '', eventId: '', id: '' },
+let view = { status: 'active', kind: '', eventId: '', id: '' },
   loadedKey = null,
   listRequest = null,
   homeRequest = null;
@@ -271,7 +271,23 @@ async function review(card, entry, value) {
     if (note) drafts.delete(key);
     if (version !== sessionGeneration) return;
     // A card dropped while the session was paused just reports the result.
-    if (card.isConnected) removeEntry(card);
+    if (card.isConnected) {
+      const retained =
+        view.id ||
+        !view.status ||
+        view.status === value ||
+        (view.status === 'active' && ['new', 'reviewed'].includes(value));
+      if (retained) {
+        entry.review_status = value;
+        const fresh = renderEntry(entry),
+          open = [card, ...card.querySelectorAll('details')].map((d) => d.open);
+        [fresh, ...fresh.querySelectorAll('details')].forEach((d, index) => {
+          d.open = open[index];
+        });
+        card.replaceWith(fresh);
+        fresh.querySelector('summary').focus();
+      } else removeEntry(card);
+    }
     say(
       (value === 'closed'
         ? 'Submission moved to Archived. Comments and history are kept.'
@@ -385,15 +401,23 @@ function updateCounts(data) {
     );
   q('#counts').replaceChildren(
     ...KINDS.map((kind) => {
-      const count = data.counts.find((x) => x.kind === kind) || {
-          new: 0,
-          total: 0,
-        },
+      const count = data.counts
+          .filter(
+            (x) =>
+              x.kind === kind || (kind === 'rsvp' && x.kind === 'rsvp-past'),
+          )
+          .reduce(
+            (sum, row) => ({
+              new: sum.new + row.new,
+              active: sum.active + row.new + row.reviewed,
+            }),
+            { new: 0, active: 0 },
+          ),
         box = node('div', undefined, count.new ? 'count has-new' : 'count');
       box.append(
         node('span', kindLabel(kind, 'plural')),
-        node('strong', count.new.toLocaleString('en-US')),
-        node('small', `new · ${count.total.toLocaleString('en-US')} total`),
+        node('strong', count.active.toLocaleString('en-US')),
+        node('small', `active · ${count.new.toLocaleString('en-US')} new`),
       );
       return box;
     }),
@@ -862,11 +886,29 @@ async function homeReview(entry, row) {
     if (error.code === 'stale-status') loadHome();
   }
 }
-const customSurveys = mountCustomSurveys(q('#custom-surveys-root'), api);
+const customSurveys = mountCustomSurveys(q('#custom-surveys-root'), api, {
+  renderEvent: (target, event, options) =>
+    mountEventSurveyGroup(target, api, event, {
+      ...options,
+      openContacts,
+      onFollowup: (id) =>
+        router.go(router.build('surveys/events', { event: id, followup: '1' })),
+    }),
+});
 const loadSurveyLibrary = () =>
-  customSurveys.library(q('#survey-library'), q('#survey-collection').value);
+  customSurveys.library(
+    q('#survey-library'),
+    q('#survey-collection').value,
+    q('#survey-title-search').value,
+  );
 q('#survey-collection').onchange = loadSurveyLibrary;
 q('#survey-library-refresh').onclick = loadSurveyLibrary;
+q('#survey-title-search').oninput = loadSurveyLibrary;
+q('#survey-title-clear').onclick = () => {
+  q('#survey-title-search').value = '';
+  loadSurveyLibrary();
+  q('#survey-title-search').focus();
+};
 const surveyArchive = mountSurveyArchive(q('#archived-survey-questions'), api);
 // Surveys: the sub-section and what each one shows.
 let surveysSub = 'events',
@@ -921,7 +963,7 @@ const sections = {
       const hub = route.name === 'surveys',
         creating = route.name === 'surveys/new';
       q('#survey-hub').hidden = !hub;
-      q('#survey-groups').hidden = hub;
+      q('#survey-groups').hidden = false;
       q('#create-survey').hidden = creating;
       const custom = creating || route.name.startsWith('surveys/custom');
       surveysSub = custom ? 'custom' : 'events';
@@ -936,27 +978,33 @@ const sections = {
           link.setAttribute('aria-current', 'page');
         else link.removeAttribute('aria-current');
       if (hub) {
+        shownEntry = null;
         customShown = null;
         return loadSurveyLibrary();
       }
       if (creating) {
+        shownEntry = null;
         customShown = null;
         return customSurveys.create(route.query.event, route.query.copy);
       }
       if (custom) {
+        shownEntry = null;
         const id = route.params.id || '';
         const key = id + ':' + (route.query.event || '');
         if (customShown === key && q('#custom-surveys-root').childNodes.length)
           return;
         customShown = key;
         if (id) customSurveys.show(id);
-        else customSurveys.load(route.query.event || '');
+        else if (route.query.event) customSurveys.load(route.query.event);
+        else customSurveys.library(q('#custom-surveys-root'), 'custom');
         return;
       }
-      const entry = route.params.entryId || '';
-      if (shownEntry === entry) return;
-      shownEntry = entry;
-      surveys.show(entry);
+      const entry = route.params.entryId || '',
+        event = route.query.event || route.params.eventId || '',
+        key = entry + ':' + event + ':' + (route.query.followup || '');
+      if (shownEntry === key) return;
+      shownEntry = key;
+      surveys.show(entry, event, route.query.followup === '1');
     },
     // Leaving a custom survey asks its unsaved builder first.
     leave: () => customSurveys.leave(),
@@ -990,8 +1038,8 @@ const titles = {
   events: 'Events',
   surveys: 'Surveys',
   'surveys/new': 'Create survey',
-  'surveys/events': 'RSVP answers · Surveys',
-  'surveys/events/:eventId/r/:entryId': 'Response · RSVP answers',
+  'surveys/events': 'Event surveys · Surveys',
+  'surveys/events/:eventId/r/:entryId': 'Response · Event surveys',
   'surveys/custom': 'Custom surveys · Surveys',
   'surveys/custom/:id': 'Custom survey · Surveys',
   contacts: 'Contacts',

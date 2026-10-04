@@ -219,7 +219,15 @@ for (const label of [
   actions[label] = label;
 // Codes such as survey-export-csv:<event> carry details after the colon.
 export const actionLabel = (code = '') =>
-  actions[code] || actions[code.split(':')[0]] || 'Updated';
+  (code.startsWith('attendance:') &&
+    {
+      attended: 'Marked attended',
+      did_not_attend: 'Marked did not attend',
+      not_recorded: 'Cleared attendance',
+    }[code.split(':')[2]]) ||
+  actions[code] ||
+  actions[code.split(':')[0]] ||
+  'Updated';
 // Kind names mid-sentence: 'question', while 'RSVP' and 'The AI Review'
 // keep their capitals.
 const midSentence = (word) =>

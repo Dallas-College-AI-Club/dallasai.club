@@ -6,7 +6,12 @@ export async function surveyResultPage(
   db,
   surveyId,
   offset = '0',
-  { activeOnly = false, exclude = null } = {},
+  {
+    activeOnly = false,
+    exclude = null,
+    view = activeOnly ? 'active' : 'all',
+    search = '',
+  } = {},
 ) {
   const start = Number(offset || 0);
   if (!Number.isSafeInteger(start) || start < 0 || start > 100000)
@@ -32,10 +37,12 @@ export async function surveyResultPage(
       JOIN club_forms.custom_survey_responses r USING(survey_id,advisor_id)
       WHERE m.survey_id=$1 AND jsonb_array_length(r.responses)>0
         AND (NOT $2::boolean OR m.active)
+        AND ($5='all' OR m.active=($5='active'))
+        AND strpos(lower(m.display_name || ' ' || m.email),lower($6))>0
     ) shown
     WHERE $3::text IS NULL OR advisor_id<>$3
     ORDER BY active DESC,advisor_id DESC LIMIT 11 OFFSET $4`,
-    [surveyId, activeOnly, exclude, start],
+    [surveyId, activeOnly, exclude, start, view, search.trim()],
   );
   return {
     results: rows
@@ -47,14 +54,19 @@ export async function surveyResultPage(
 // The CSV export holds what Submitted responses lists: every active
 // respondent's saved answers, across every page. Like the Inbox export, it
 // refuses a set too large to send instead of cutting it short.
-export async function surveyExportRows(db, surveyId) {
+export async function surveyExportRows(
+  db,
+  surveyId,
+  { view = 'active', search = '' } = {},
+) {
   const { rows } = await db.query(
     `SELECT m.display_name,m.email,m.active,r.responses,r.submitted_at
     FROM club_forms.custom_survey_members m
     JOIN club_forms.custom_survey_responses r USING(survey_id,advisor_id)
-    WHERE m.survey_id=$1 AND m.active AND jsonb_array_length(r.responses)>0
+    WHERE m.survey_id=$1 AND ($2='all' OR m.active=($2='active')) AND jsonb_array_length(r.responses)>0
+      AND strpos(lower(m.display_name || ' ' || m.email),lower($3))>0
     ORDER BY r.submitted_at DESC,m.advisor_id LIMIT 10001`,
-    [surveyId],
+    [surveyId, view, search.trim()],
   );
   if (rows.length > 10000)
     throw new RequestError(

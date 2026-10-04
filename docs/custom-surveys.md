@@ -10,15 +10,17 @@ sample entry requires the existing officer sign-in; the shareable question
 preview remains read-only. The welcome design and survey themes are shared with
 the respondent survey.
 
-Open **Club office → Surveys** and choose a survey from the list. Use **Collection**
-to show all surveys, event feedback, or standalone custom surveys. Officers can read the latest
-submitted summaries grouped by respondent and chapter, refresh results, open the survey, and copy the
-private or question-preview link. These controls do not edit advisor answers.
-Registration questions remain in the separate **RSVP answers** group.
+Open **Club office → Surveys → All surveys**. Search by survey title and use
+**Collection** to show all surveys, event feedback, or standalone custom surveys.
+Drafts appear first. Expand a survey to read its saved responses in place; linked
+event surveys show separate RSVP and feedback sections. **Event surveys** also
+groups registrations and linked feedback by event, including past events.
+Officers can expand or collapse answers, compile summaries, export matching CSV,
+open the survey, manage respondents, and copy its private or question-preview link.
 
 ## Event feedback and creation
 
-The survey list offers **RSVP answers** and **Create survey**. From a saved event,
+The survey list offers **Event surveys** and **Create survey**. From a saved event,
 **Create event feedback survey** starts a three-question
 feedback template linked to that event. It defaults to anyone with a verified email,
 with results visible only to admins; officers can restrict access before publishing.
@@ -44,6 +46,29 @@ event timestamps and submission timestamps use the existing Central Time rules.
 RSVP answers retain a snapshot of the questions at submission. Custom survey
 questions and permissions are fixed when published.
 
+## Attendance and feedback follow-up
+
+Each RSVP shows **Attendance** and **Feedback** separately. An officer records
+**Attended**, **Did not attend**, or **Not recorded**; registration and feedback
+submission never mark attendance automatically. Attendance belongs to the event
+and normalized email address, so duplicate registrations share it. Events without
+registration questions also appear.
+
+Feedback is **Submitted** when the same email has saved answers in every published
+survey linked to that event. With multiple surveys, the row shows how many were
+submitted. **Missing feedback** includes partial completion; **No survey** means
+the event has no published linked survey. Drafts do not count. Saved answers from
+archived respondents and closed, archived, or expired surveys still count;
+withdrawn empty responses and permanently deleted answers do not.
+
+Use **Filter RSVPs for follow-up** to filter attendance and feedback completion.
+Choosing either filter selects RSVP responses. Name/email search, active/archive
+view, and starred-only filtering combine with those choices. Counts, summaries,
+and CSV use every matching page. Event reports keep RSVP question versions and
+each feedback survey separate. A report opened from one named survey in All
+surveys includes that survey's feedback and its event's RSVPs; the Event surveys
+view includes all linked feedback surveys.
+
 ## Duplicate a survey
 
 Open a builder survey and choose **Duplicate survey**. The new draft copies its
@@ -58,6 +83,8 @@ separately. Expired rounds are labeled expired; closed and expired links are not
 offered as working invitations. Long result lists load ten responses at a time with
 **Load more responses**. Respondents with shared-result access use **Load more saved
 results**; their own saved answers are always available on the first load.
+Choose **Active**, **Archived**, or **All saved** to inspect custom responses;
+consolidated answers and CSV use the same response view and name/email filter.
 The archived response view also loads ten responses per page. Invalid or closed
 invitations show a neutral unavailable screen with the club contact address.
 
@@ -69,15 +96,15 @@ request bodies or private link headers to logs or analytics.
 
 ## Downloads
 
-**Export CSV** under Submitted responses downloads every active response across
-all pages, like the event survey export: one row per respondent with name (or
+**Export CSV** under Submitted responses downloads every matching response across
+all pages (active responses by default), like the event survey export: one row per respondent with name (or
 email when there is no name), email, submitted time (Central) and status, then
 one column per question in survey order. Rankings read `1. … 2. …`, chosen
 options are joined with semicolons, dials read `65 of 100 — <wording>`, and
 wording a respondent rewrote for sharing starts `[Shared wording only]`. Builder
 surveys have a column for every question; Advisor Studio has a column for each
-answer respondents shared. Archived responses stay in Inbox → Archived →
-Questions. Formula values are escaped. The file is
+answer respondents shared. Archived responses are also available in Inbox →
+Archived → Questions. Formula values are escaped. The file is
 `<survey>-responses-<YYYY-MM-DD>.csv`. More than 10,000 responses, or a file over
 4 MB, is refused with a message instead of a partial file. The export runs only
 from Club Office or a typed address, never from another site's link.

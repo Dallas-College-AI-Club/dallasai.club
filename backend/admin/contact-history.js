@@ -272,15 +272,17 @@ export function contactHistory(api, onChange = () => {}) {
   function management(contact, version) {
     const panel = node('section', undefined, 'contact-management'),
       actions = node('div', undefined, 'survey-response-actions'),
+      // Filled red marks the one action that cannot be undone; Delete
+      // contact can be restored, so it stays neutral.
       test = node(
         'button',
         contact.is_test ? 'Unmark as test' : 'Mark as test',
-        'secondary',
+        contact.is_test ? 'secondary' : 'danger filled',
       ),
       remove = node(
         'button',
         contact.is_test ? 'Permanently delete test contact' : 'Delete contact',
-        'secondary danger',
+        contact.is_test ? 'danger filled' : 'secondary',
       ),
       restore = node('button', 'Restore contact', 'secondary'),
       merge = node('button', 'Merge with another contact', 'secondary'),
@@ -359,30 +361,38 @@ export function contactHistory(api, onChange = () => {}) {
       heading.tabIndex = -1;
       details.replaceChildren(heading, node('p', description));
       let input;
+      // The typed email matches whatever its letter case.
+      const typed = () => input.value.trim().toLowerCase(),
+        matches = () => typed() === contact.email.toLowerCase();
       const accept = button(
         label,
         () => {
-          if (requireEmail && input.value.trim() !== contact.email) return;
+          if (requireEmail && !matches()) return;
           save(
-            {
-              ...body,
-              ...(requireEmail ? { confirmEmail: input.value.trim() } : {}),
-            },
+            { ...body, ...(requireEmail ? { confirmEmail: typed() } : {}) },
             message,
           );
         },
-        'danger',
+        requireEmail ? 'danger filled' : 'danger',
       );
       if (requireEmail) {
-        const label = node('label', 'Type the primary email to confirm');
+        const field = node('label', 'Type the primary email to confirm'),
+          hint = node('p', undefined, 'hint contact-note-text');
         input = node('input');
         input.type = 'email';
         input.autocomplete = 'off';
-        label.append(input);
-        details.append(label);
-        accept.disabled = true;
-        input.oninput = () =>
-          (accept.disabled = input.value.trim() !== contact.email);
+        hint.id = 'contact-confirm-hint';
+        input.setAttribute('aria-describedby', hint.id);
+        field.append(input);
+        details.append(field, hint);
+        const sync = () => {
+          accept.disabled = !matches();
+          hint.textContent = matches()
+            ? ''
+            : 'Type ' + contact.email + ' to turn on “' + label + '”.';
+        };
+        input.oninput = sync;
+        sync();
       }
       row.append(
         accept,
@@ -394,39 +404,44 @@ export function contactHistory(api, onChange = () => {}) {
       details.append(row);
       heading.focus();
     }
-    test.onclick = () =>
-      confirm(
-        contact.is_test
-          ? 'Remove test flag?'
-          : 'Mark this person as a test contact?',
-        contact.is_test
-          ? 'Deleting this contact will keep their submissions and allow restoration.'
-          : 'This applies to every linked email. Deleting a test contact permanently erases its submissions, survey answers, comments, attachments and follow-up notes. Marking it does not delete anything yet.',
-        contact.is_test ? 'Confirm unmark as test' : 'Confirm mark as test',
-        { action: 'contact-test', value: !contact.is_test },
-        contact.is_test
-          ? 'Test flag removed.'
-          : 'Contact marked as test. No records were deleted.',
-      );
-    restore.onclick = () =>
-      save({ action: 'contact-restore' }, 'Contact restored to Active.');
-    remove.onclick = () =>
+    // Mark as test deletes the contact and everything linked to it in one
+    // step, after the officer types the primary email. The counts go back
+    // to the server, which refuses if anything changed since. Contacts
+    // marked as test earlier keep Unmark and the same permanent delete.
+    const n = contact.counts;
+    const purge = () =>
       confirm(
         contact.is_test
           ? 'Permanently delete this test contact?'
-          : 'Delete this contact from the directory?',
-        contact.is_test
-          ? `${contact.name || contact.email}: ${plural(contact.emails.length, 'linked email address', 'linked email addresses')}, ${plural(contact.submissions, 'submission')}, ${plural(contact.notes, 'follow-up note')} and ${plural(contact.attachments, 'attachment')}. Their survey answers and comments will also be deleted. This cannot be undone.`
-          : 'Their submissions, survey answers and notes will stay saved. Find this person under Deleted to restore them.',
-        contact.is_test
-          ? 'Delete test contact permanently'
-          : 'Confirm delete contact',
-        { action: contact.is_test ? 'contact-purge' : 'contact-delete' },
-        contact.is_test
-          ? 'Test contact and all linked records permanently deleted.'
-          : 'Contact deleted from the directory. Submissions and notes are preserved.',
-        contact.is_test,
+          : 'Mark as test and delete permanently?',
+        `This permanently deletes ${contact.name || contact.email} and everything linked to them: ${plural(n.submissions, 'submission')}, ${plural(n.survey_responses, 'event survey response')}, ${plural(n.comments, 'officer comment')}, ${plural(n.website_notes, 'website note')}, ${plural(n.notes, 'follow-up note')}, ${plural(n.attachments, 'attachment')} and ${plural(n.addresses, 'linked email address', 'linked email addresses')}. This cannot be undone.`,
+        'Delete test contact permanently',
+        { action: 'contact-purge', counts: n },
+        'Test contact and all linked records permanently deleted.',
+        true,
       );
+    test.onclick = contact.is_test
+      ? () =>
+          confirm(
+            'Remove test flag?',
+            'Deleting this contact will keep their submissions and allow restoration.',
+            'Confirm unmark as test',
+            { action: 'contact-test', value: false },
+            'Test flag removed.',
+          )
+      : purge;
+    restore.onclick = () =>
+      save({ action: 'contact-restore' }, 'Contact restored to Active.');
+    remove.onclick = contact.is_test
+      ? purge
+      : () =>
+          confirm(
+            'Delete this contact from the directory?',
+            'Their submissions, survey answers and notes will stay saved. Find this person under Deleted to restore them.',
+            'Confirm delete contact',
+            { action: 'contact-delete' },
+            'Contact deleted from the directory. Submissions and notes are preserved.',
+          );
     merge.onclick = () => {
       const form = node('form', undefined, 'contact-merge-search'),
         label = node('label', 'Find the contact to keep'),

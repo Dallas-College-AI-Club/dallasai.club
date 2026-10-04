@@ -118,14 +118,18 @@ standalone-survey drafts and unsubmitted answers are not included.
 **Delete contact** removes a regular contact from the Active directory only.
 Select **Deleted** and **Restore contact** to bring it back; saved submissions and
 notes remain available. New submissions do not silently restore a deleted contact.
-**Mark as test** applies to every email linked to that contact and does not delete
-anything by itself. For a marked test contact, **Permanently delete test contact**
-shows the affected counts and requires typing its primary email. Confirmation
-erases its linked website entries, event survey answers, comments, notes, contact
-history, aliases and attachments. This cannot be restored. The audit log keeps a
-receipt with the acting admin and the counts removed, without the address. Regular and test
-contacts cannot be merged unless their test settings are first reviewed to match.
-Concurrent changes invalidate a management confirmation and require a refresh.
+**Mark as test**, the filled red button, deletes the contact completely in one step.
+Its warning lists the submissions, event survey responses, officer comments, website
+notes, follow-up notes, attachments and linked email addresses that will be removed,
+and requires typing the primary email in any letter case. Confirmation erases all of
+them, with the contact history and aliases. If any of those counts changed after the
+warning opened, nothing is deleted and the officer is asked to review the contact
+again. This cannot be restored. The audit log keeps a receipt with the acting admin and the
+counts removed, without the address. Contacts marked as test before this change keep
+**Unmark as test** and **Permanently delete test contact**, which uses the same
+warning; regular and test contacts cannot be merged unless their test settings are
+first reviewed to match. Concurrent changes invalidate a management confirmation and
+require a refresh.
 
 Apply `backend/015_contact_identity_management.sql` after migration 014 before
 deploying contact management. It backfills aliases without merging or deleting

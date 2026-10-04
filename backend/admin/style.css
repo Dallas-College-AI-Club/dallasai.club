@@ -103,7 +103,8 @@ textarea {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
-.visually-hidden {
+.visually-hidden,
+.sr-only {
   position: absolute;
   width: 1px;
   height: 1px;
@@ -1487,6 +1488,10 @@ input::file-selector-button {
   height: 20px;
   margin: 0;
 }
+.survey-trial .form-option.is-blocked {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 .survey-trial-results {
   max-width: 700px;
   width: calc(100% - 40px);
@@ -1510,7 +1515,7 @@ input::file-selector-button {
 .survey-choice-row.drag-over {
   border-color: var(--accent, #8b75d1);
 }
-.survey-choice-row input {
+.survey-choice-row input:not([type='checkbox']) {
   flex: 1;
   min-width: 130px;
   width: auto !important;
@@ -1518,6 +1523,9 @@ input::file-selector-button {
 }
 .survey-choice-row button {
   padding: 8px 12px;
+}
+.survey-choice-row .builder-check {
+  margin: 0;
 }
 .survey-choice-row [draggable='true'] {
   cursor: grab;

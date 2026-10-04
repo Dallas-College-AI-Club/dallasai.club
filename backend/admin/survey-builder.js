@@ -341,6 +341,7 @@ export function mountSurveyBuilder(root, api, onDone, id) {
             ],
             (v) => {
               q.type = v;
+              if (v !== 'multiple') delete q.exclusiveOption;
               q.options = ['single', 'multiple'].includes(v)
                 ? q.options.length
                   ? q.options
@@ -434,7 +435,11 @@ export function mountSurveyBuilder(root, api, onDone, id) {
         );
         if (q.options.length) {
           const list = node('ul');
-          q.options.forEach((o) => list.append(node('li', o)));
+          q.options.forEach((o, i) =>
+            list.append(
+              node('li', o + (i === q.exclusiveOption ? ' · exclusive' : '')),
+            ),
+          );
           card.append(list);
         }
         panel.append(card);

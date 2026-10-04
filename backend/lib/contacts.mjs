@@ -71,6 +71,25 @@ export async function contactList(
   ).rows;
   return { contacts: rows.slice(0, 50), hasMore: rows.length > 50 };
 }
+// Everything deleting a contact removes, as the Mark as test warning lists
+// it. Notes the website added to a resubmitted entry are counted apart from
+// officer comments.
+async function contactCounts(db, email) {
+  return (
+    await db.query(
+      `WITH aliases AS (SELECT email FROM club_forms.contact_emails WHERE contact_email=$1),
+      linked AS (SELECT id FROM club_forms.entries WHERE email IN (SELECT email FROM aliases))
+      SELECT (SELECT count(*)::int FROM aliases) AS addresses,
+      (SELECT count(*)::int FROM linked) AS submissions,
+      (SELECT count(*)::int FROM club_forms.survey_responses WHERE entry_id IN (SELECT id FROM linked)) AS survey_responses,
+      (SELECT count(*)::int FROM club_forms.entry_comments WHERE entry_id IN (SELECT id FROM linked) AND author_email<>'website') AS comments,
+      (SELECT count(*)::int FROM club_forms.entry_comments WHERE entry_id IN (SELECT id FROM linked) AND author_email='website') AS website_notes,
+      (SELECT count(*)::int FROM club_forms.contact_notes WHERE email IN (SELECT email FROM aliases)) AS notes,
+      (SELECT count(*)::int FROM club_forms.attachments WHERE entry_id IN (SELECT id FROM linked)) AS attachments`,
+      [email],
+    )
+  ).rows[0];
+}
 export async function contactHistory(db, { email, offset = 0 }) {
   email = emailKey(email);
   pageOffset(offset);
@@ -78,15 +97,14 @@ export async function contactHistory(db, { email, offset = 0 }) {
     await db.query(
       `SELECT c.*,
       ARRAY(SELECT email FROM club_forms.contact_emails WHERE contact_email=c.email ORDER BY email) AS emails,
-      ARRAY(SELECT DISTINCT name FROM club_forms.entries e JOIN club_forms.contact_emails a ON a.email=e.email WHERE a.contact_email=c.email AND name<>'' ORDER BY name) AS names,
-      (SELECT count(*)::int FROM club_forms.entries e JOIN club_forms.contact_emails a ON a.email=e.email WHERE a.contact_email=c.email) AS submissions,
-      (SELECT count(*)::int FROM club_forms.contact_notes n JOIN club_forms.contact_emails a ON a.email=n.email WHERE a.contact_email=c.email) AS notes,
-      (SELECT count(*)::int FROM club_forms.attachments f JOIN club_forms.entries e ON e.id=f.entry_id JOIN club_forms.contact_emails a ON a.email=e.email WHERE a.contact_email=c.email) AS attachments
+      ARRAY(SELECT DISTINCT name FROM club_forms.entries e JOIN club_forms.contact_emails a ON a.email=e.email WHERE a.contact_email=c.email AND name<>'' ORDER BY name) AS names
       FROM club_forms.contacts c JOIN club_forms.contact_emails lookup ON lookup.contact_email=c.email WHERE lookup.email=$1`,
       [email],
     )
   ).rows[0];
   if (!contact) throw new RequestError(404, 'Contact not found.');
+  contact.counts = await contactCounts(db, contact.email);
+  contact.submissions = contact.counts.submissions;
   contact.aliases = await contactAliases(db, contact.email);
   const rows = (
     await db.query(
@@ -280,11 +298,28 @@ export async function manageContact(db, body, actor, storage = { del }) {
       }
       return { email, is_test: body.value };
     }
+    // Mark as test: the contact and everything linked to it are deleted in
+    // this one step, once the officer types the primary email.
     if (body.action === 'contact-purge') {
-      if (!contact.is_test || body.confirmEmail !== email)
+      if (
+        typeof body.confirmEmail !== 'string' ||
+        body.confirmEmail.trim().toLowerCase() !== email
+      )
         throw new RequestError(
           400,
-          'Only a marked test contact can be permanently deleted. Confirm its primary email.',
+          'Type the primary email to confirm deleting this test contact.',
+        );
+      // Lock the entries so no comment can join them unseen, then refuse if
+      // anything differs from the counts the warning showed.
+      await tx.query(
+        'SELECT id FROM club_forms.entries WHERE email IN (SELECT email FROM club_forms.contact_emails WHERE contact_email=$1) FOR UPDATE',
+        [email],
+      );
+      const counts = await contactCounts(tx, email);
+      if (Object.keys(counts).some((key) => body.counts?.[key] !== counts[key]))
+        throw new RequestError(
+          409,
+          'This contact changed. Refresh its history and review the action again.',
         );
       const aliases = (
         await tx.query(

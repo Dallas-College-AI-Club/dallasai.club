@@ -324,10 +324,16 @@ try {
         id: 'choice-preview',
         surveyQuestions: [question],
       };
+      // This source-only case must not depend on a previous local Hugo build.
+      await page.route('**/app/**', (route) => route.abort());
+      await page.route('**/content/**', (route) => route.abort());
       for (const [url, source] of [
         ['/app/rsvp-dialog.js', '../../static/app/rsvp-dialog.js'],
         ['/app/form-client.js', '../../static/app/form-client.js'],
         ['/app/event-format.js', '../lib/event-format.mjs'],
+        ['/app/availability-ui.js', '../surveys/availability-ui.js'],
+        ['/app/availability-values.js', '../surveys/availability-values.js'],
+        ['/app/event-sharing.js', '../../static/app/event-sharing.js'],
       ])
         await page.route('**' + url, (route) =>
           route.fulfill({
@@ -339,6 +345,12 @@ try {
         route.fulfill({
           contentType: 'text/javascript',
           body: 'export const PUBLISHED={club:{FORMS_API_URL:""}};',
+        }),
+      );
+      await page.route('**/content/events.js', (route) =>
+        route.fulfill({
+          contentType: 'text/javascript',
+          body: 'export const EVENTS_API_URL="/api/events";',
         }),
       );
       await page.route('**/rsvp-choice-test', (route) =>

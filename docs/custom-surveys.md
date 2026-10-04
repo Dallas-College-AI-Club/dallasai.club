@@ -8,13 +8,16 @@ sample** restores the fictional starting answers. Sample submissions stay in
 the tab and never call the survey save endpoint or create Neon records. The
 sample entry requires the existing officer sign-in; the shareable question
 preview remains read-only. The welcome design and survey themes are shared with
-the respondent survey.
+the respondent survey, including when a signed-in respondent returns to Welcome.
+Returning to Welcome preserves the current draft and shows zero progress.
 
 The invitation opens advisor email verification. Returning from the question
 preview with Back or **Sign in to answer** restores that real sign-in form;
 the admin sample remains a separate mode. **Skip to survey** moves keyboard
 focus without replacing the invitation in the address bar, so refresh preserves
 the current mode.
+Invalid or expired email codes show a specific explanation and retain the resend
+controls. Other sign-in provider errors retain their message.
 
 Open **Club office → Surveys → All surveys**. Search by survey title and use
 **Collection** to show all surveys, event feedback, or standalone custom surveys.

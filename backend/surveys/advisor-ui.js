@@ -278,16 +278,7 @@ export function mountAdvisor(
     if (active && $(active)) $(active).focus({ preventScroll: true });
   }
   function welcome() {
-    if (welcomeHTML) {
-      $('main').innerHTML = welcomeHTML;
-      return;
-    }
-    $('main').innerHTML =
-      '<section class="welcome"><h1 id="title" tabindex="-1">What makes advising worth your time?</h1><p>Shape an advising role you look forward to.</p><p>Signed in as ' +
-      esc(advisorName()) +
-      '.</p>' +
-      runtimeNotice() +
-      '<button id="begin" class="primary">Continue my playbook →</button></section>';
+    $('main').innerHTML = welcomeHTML;
   }
   function addCustomHTML(q) {
     return `<div class="addown"><input id="custom-${q.id}" maxlength="160" placeholder="Add your own ${q.type === 'rank' ? 'priority' : q.type === 'resources' ? 'resource or connection' : 'answer'}…" aria-label="Add your own answer for ${esc(q.title)}"><button data-add="${q.id}">+ Add my own</button></div><div class="error-inline" id="error-${q.id}" role="status"></div>`;

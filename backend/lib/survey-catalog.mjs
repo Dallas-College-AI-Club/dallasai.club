@@ -1,5 +1,27 @@
 import { builderLinks } from './survey-builder.mjs';
 
+export async function eventFeedbackLinks(db, eventIds) {
+  const links = new Map();
+  if (!eventIds.length) return links;
+  const { rows } = await db.query(
+    `SELECT id,status,expires_at,link_digest,short_link,definition->>'eventId' AS event_id
+    FROM club_forms.custom_surveys
+    WHERE status='open' AND expires_at>now()
+      AND definition->>'eventId'=ANY($1::text[])
+      AND definition->>'template'='feedback'
+      AND definition->>'audience'='public'
+      AND definition->'permissions'->>'answer'='verified'
+    ORDER BY published_at DESC NULLS LAST,id DESC`,
+    [eventIds],
+  );
+  for (const survey of rows) {
+    const { privateLink } = builderLinks(survey);
+    if (privateLink && !links.has(survey.event_id))
+      links.set(survey.event_id, survey.short_link || privateLink);
+  }
+  return links;
+}
+
 export async function surveyCatalog(db) {
   const { rows } = await db.query(`
     SELECT s.id,s.title,s.status,s.published_at,s.expires_at,s.content_version,s.link_digest,s.preview_digest,s.short_link,

@@ -716,7 +716,8 @@ test('Short.io generation validates provider destination, alias, availability an
         };
         await assert.rejects(
           generate(provider),
-          (error) => error.status === 503,
+          (error) =>
+            error.status === (recovery && change.originalURL ? 409 : 503),
           JSON.stringify(change),
         );
         assert.equal(await storedShare(), null);
@@ -1106,6 +1107,58 @@ test('short-link generation leaves data intact when both providers fail or TinyU
       assert.equal(await storedShare(), null);
       assert.deepEqual(await shareAudit(), []);
     }
+  });
+});
+
+test('alias conflicts remain ambiguous when another configured provider loses its acknowledgement', async () => {
+  await shortIO(async () => {
+    process.env.TINYURL_API_TOKEN = 'isolated-tinyurl-token';
+    for (const uncertain of ['shortio', 'tinyurl', 'neither']) {
+      await assert.rejects(
+        generate(async (url, options) => {
+          const shortio = url.startsWith('https://api.short.io/');
+          if (uncertain === (shortio ? 'shortio' : 'tinyurl'))
+            throw Error('Lost acknowledgement');
+          if (options.method === 'POST')
+            return providerResponse({}, shortio ? 409 : 422);
+          const payload = shortio ? generatedPayload() : backupPayload();
+          if (shortio) payload.originalURL = 'https://outside.example.com';
+          else payload.data.url = 'https://outside.example.com';
+          return providerResponse(payload);
+        }),
+        { status: uncertain === 'neither' ? 409 : 503 },
+      );
+      assert.equal(await storedShare(), null);
+      assert.deepEqual(await shareAudit(), []);
+    }
+  });
+});
+
+test('TinyURL reports an occupied path only after verifying the exact alias destination', async () => {
+  await shortIO(async () => {
+    delete process.env.SHORT_IO_API_KEY;
+    process.env.TINYURL_API_TOKEN = 'isolated-tinyurl-token';
+    const payload = backupPayload();
+    payload.data.url = 'https://outside.example.com';
+    const calls = [];
+    await assert.rejects(
+      generate(async (url, options) => {
+        calls.push([url, options.method]);
+        return options.method === 'POST'
+          ? providerResponse({}, 422)
+          : providerResponse(payload);
+      }),
+      { status: 409 },
+    );
+    assert.deepEqual(calls, [
+      ['https://api.tinyurl.com/create', 'POST'],
+      [
+        'https://api.tinyurl.com/alias/tinyurl.com/' + payload.data.alias,
+        'GET',
+      ],
+    ]);
+    assert.equal(await storedShare(), null);
+    assert.deepEqual(await shareAudit(), []);
   });
 });
 

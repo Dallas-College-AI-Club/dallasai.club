@@ -102,10 +102,24 @@ event page, RSVP form and officer overview. This is the requested reply date;
 has its public event QR, **Share event**, and **Download QR**. Phones use native
 sharing when supported; otherwise Share copies the event link. The existing QR
 library generates SVG through the event API without reading respondent data.
+Turning off **Accept RSVPs** hides that sharing section. Once the event ends,
+the response button becomes **Event feedback** only when an open, unexpired
+public feedback survey is linked to the event. It opens the most recently
+published eligible survey; closing that survey removes its button. Restricted
+and unrelated surveys are never listed on the public event page.
 
 First publication creates a stable short link using the same provider as custom
 surveys. The public address, Share action and QR all use that saved link. Editing,
 archiving or restoring keeps it; duplicating an event creates a different link.
+New links use a concise event name and year, such as `dai-game-night-2026`;
+an occupied name gets a short suffix. For older links with a generated hexadecimal
+path, **Use readable short link** saves a descriptive replacement. The old link
+continues working; already readable links stay unchanged.
+In the published overview, **Custom short-link name (optional)** edits the last
+part of the address. Use 5–30 letters, numbers, hyphens or underscores; leave it
+blank to use the generated event name. Saving checks availability with Short.io
+or TinyURL. An occupied custom name leaves the current link unchanged. Previous
+links continue working after a replacement.
 **Open the new short link and QR in tabs to check them after publishing** is on
 by default. Clear it to opt out; the setting is saved with the event. Draft saves
 do not create links or open tabs. If the browser blocks a tab, the saved overview

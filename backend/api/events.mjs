@@ -12,7 +12,7 @@ import {
 import { RequestError } from '../lib/errors.mjs';
 import { createEventShareLink, eventURL } from '../lib/event-share-link.mjs';
 import { createShortLink as shortenLink } from '../lib/survey-share-link.mjs';
-import { createHash } from 'node:crypto';
+import { eventFeedbackLinks } from '../lib/survey-catalog.mjs';
 import {
   liveEvents,
   editorEvents,
@@ -30,11 +30,7 @@ export function eventHandler({
   authorize = requireAdmin,
   originals,
   storage,
-  createShortLink = (target) =>
-    shortenLink(
-      target,
-      'dai-' + createHash('sha256').update(target).digest('hex').slice(0, 24),
-    ),
+  createShortLink = shortenLink,
   rateLimit = (db, req) => limit(db, req, 'event-images', 30, 3600),
 } = {}) {
   return async (req, res) => {
@@ -83,8 +79,18 @@ export function eventHandler({
         !url.searchParams.has('history')
       ) {
         res.setHeader('Access-Control-Allow-Origin', '*');
+        const events = await liveEvents(getDatabase(), originals);
+        const feedback = await eventFeedbackLinks(
+          getDatabase(),
+          events.map((event) => event.id),
+        );
         return send(res, 200, {
-          events: await liveEvents(getDatabase(), originals),
+          events: events.map((event) => ({
+            ...event,
+            ...(feedback.has(event.id)
+              ? { feedbackUrl: feedback.get(event.id) }
+              : {}),
+          })),
         });
       }
       if (!['GET', 'POST'].includes(req.method))
@@ -133,6 +139,8 @@ export function eventHandler({
             body.id,
             user.email,
             createShortLink,
+            body.replaceLegacy === true,
+            body.alias,
           ),
         });
       if (!['unpublish', 'archive', 'restore'].includes(body.action))

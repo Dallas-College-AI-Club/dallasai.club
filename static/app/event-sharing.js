@@ -14,12 +14,9 @@ export function eventSharing(event) {
   image.alt = 'QR code for ' + event.title;
   image.width = image.height = 128;
   const controls = document.createElement('div');
+  controls.className = 'event-share-controls';
   const title = document.createElement('strong');
   title.textContent = 'Scan or share this event';
-  const address = document.createElement('a');
-  address.href = url;
-  address.textContent = event.shortLink || 'Open event link';
-  address.className = 'event-share-address';
   const actions = document.createElement('div');
   actions.className = 'event-share-actions';
   const share = document.createElement('button');
@@ -46,7 +43,7 @@ export function eventSharing(event) {
   download.href = qrURL + '&download=1';
   download.download = event.id + '-qr.svg';
   actions.append(share, download);
-  controls.append(title, address, actions, status);
+  controls.append(title, actions, status);
   root.append(image, controls);
   if (event.rsvpDeadline) {
     const deadline = document.createElement('p');

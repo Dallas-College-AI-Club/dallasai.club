@@ -80,6 +80,17 @@ export async function homeSummary(db, published, upcoming) {
         GROUP BY s.id ORDER BY s.created_at DESC,s.id LIMIT 1`,
       )
     ).rows[0] || null;
+  // Event surveys archives individual feedback by membership, independently
+  // of the survey's publication/expiry state. Count the same active answers.
+  const eventFeedback = (
+    await db.query(
+      `SELECT count(*)::int AS total FROM club_forms.custom_surveys s
+      JOIN club_forms.custom_survey_members m ON m.survey_id=s.id
+      JOIN club_forms.custom_survey_responses r USING(survey_id,advisor_id)
+      WHERE s.definition->>'eventId' IS NOT NULL AND s.status<>'draft'
+        AND m.active AND jsonb_array_length(r.responses)>0`,
+    )
+  ).rows[0].total;
   // Officer actions only. Submission actions name the kind, never the person.
   const activity = (
     await db.query(
@@ -104,6 +115,7 @@ export async function homeSummary(db, published, upcoming) {
     potential,
     unpublished,
     survey,
+    eventFeedback,
     activity,
   };
 }

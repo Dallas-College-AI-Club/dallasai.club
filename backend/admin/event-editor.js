@@ -284,11 +284,42 @@ export function mountEventEditor(api) {
           }
         }),
       );
-      if (row.published && !row.published.shortLink) {
-        const createLink = node('button', 'Create short link');
+      const legacyShortLink = /^https:\/\/[^/]+\/dai-[a-f0-9]{24}$/.test(
+        row.published?.shortLink || '',
+      );
+      if (row.published && !row.archived_at) {
+        const label = node('label', 'Custom short-link name (optional)');
+        const alias = node('input');
+        alias.id = 'event-short-alias';
+        alias.type = 'text';
+        alias.maxLength = 30;
+        alias.value =
+          row.published.shortLink && !legacyShortLink
+            ? new URL(row.published.shortLink).pathname.slice(1)
+            : '';
+        alias.placeholder = 'Leave blank to generate an event name';
+        label.htmlFor = alias.id;
+        const createLink = node(
+          'button',
+          legacyShortLink
+            ? 'Use readable short link'
+            : row.published.shortLink
+              ? 'Save short link'
+              : 'Create short link',
+        );
         createLink.type = 'button';
-        createLink.onclick = () => retrySharing(row);
-        overview.append(createLink);
+        createLink.onclick = () =>
+          retrySharing(row, legacyShortLink, alias.value);
+        overview.append(
+          label,
+          alias,
+          node(
+            'p',
+            'Edit the last part of the address. Leave blank to use the generated name. Availability is checked when you save.',
+            'hint',
+          ),
+          createLink,
+        );
       }
       overview.append(updatedNote, activityPanel);
       const surveys = node('section', undefined, 'event-overview-section');
@@ -461,7 +492,7 @@ export function mountEventEditor(api) {
       ),
     );
   }
-  async function retrySharing(row) {
+  async function retrySharing(row, replaceLegacy = false, alias) {
     if (busy || current !== row) return;
     busy = true;
     const version = generation;
@@ -471,6 +502,8 @@ export function mountEventEditor(api) {
       const data = await api('/api/events', {
         action: 'share-link',
         id: row.id,
+        ...(replaceLegacy ? { replaceLegacy: true } : {}),
+        ...(alias !== undefined ? { alias } : {}),
       });
       if (version !== generation) {
         tabs.forEach((tab) => tab?.close());

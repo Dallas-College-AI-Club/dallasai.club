@@ -92,6 +92,7 @@ export function plural(n, word, pluralWord = word + 's') {
 
 const kinds = {
   question: ['Question', 'Questions'],
+  'questions-requests': ['Question or request', 'Questions & requests'],
   join: ['Signup', 'Signups'],
   subscribe: ['The AI Review subscription', 'The AI Review'],
   rsvp: ['RSVP', 'RSVPs'],

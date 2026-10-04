@@ -108,6 +108,35 @@ test('Home preserves shared status counts and does not report permanent deletion
   assert.equal(home.deletedSubmissions, undefined);
 });
 
+test('Home feedback total matches event surveys active responses independently of survey expiry', async () => {
+  for (const [status, eventId, active, answered] of [
+    ['open', 'past', true, true],
+    ['closed', 'next', true, true],
+    ['open', 'next', false, true],
+    ['open', 'next', true, false],
+    ['draft', 'next', true, true],
+    ['open', null, true, true],
+  ]) {
+    const id = randomUUID();
+    await db.query(
+      `INSERT INTO club_forms.custom_surveys(id,slug,title,content_version,status,link_digest,expires_at,definition)
+       VALUES($1::uuid,$1::text,'Feedback','1',$2,$1::text,now()-interval '1 day',$3)`,
+      [id, status, JSON.stringify({ eventId })],
+    );
+    await db.query(
+      `INSERT INTO club_forms.custom_survey_members(survey_id,advisor_id,display_name,email,active)
+       VALUES($1,'member','Member','member@example.edu',$2)`,
+      [id, active],
+    );
+    await db.query(
+      `INSERT INTO club_forms.custom_survey_responses(survey_id,advisor_id,revision,responses)
+       VALUES($1,'member',1,$2)`,
+      [id, answered ? '[{"id":"q1","text":"Good event"}]' : '[]'],
+    );
+  }
+  assert.equal((await get('?home=1')).eventFeedback, 2);
+});
+
 test('Home groups active RSVPs by event, archived and cancelled ones left out', async () => {
   await rsvp('next');
   await rsvp('next');

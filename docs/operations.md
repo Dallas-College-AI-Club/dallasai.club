@@ -218,7 +218,7 @@ reply after the save commits, or reject one oversized CSV download. Use it to
 verify retries, consent, pagination, and error recovery without real respondents.
 Never submit synthetic test data or send test email through production.
 
-Typed-answer verification (2026-10-04): all 251 backend tests and all 67 Office
+Typed-answer verification (2026-10-04): all 270 backend tests and all 67 Office
 browser scenarios passed. The RSVP browser lifecycle and all nine grouped-survey
 browser scenarios passed, including
 zero-valued numbers, invalid email rejection, dated choices, empty RSVP-enabled
@@ -226,6 +226,11 @@ events, default dropdowns, saved-response editing, CSV exports and phone layouts
 Fourteen backend mutation probes and four browser probes each made their relevant
 regression fail when a fix was removed. The event visibility and dropdown checks
 also reproduced their failures before the fixes.
+The same event browser workflow checks disabled-RSVP sharing, the transition to
+a linked open feedback survey after an event, custom short-link names, occupied
+names preserving the old link, and restoring the generated name. Focused mutation
+checks cover these paths, provider conflicts, feedback eligibility, and Home tile
+counts and destinations.
 
 An owner-approved, schema-only Neon branch verified real cloud persistence with
 synthetic data: 90 concurrent RSVP attempts saved exactly 30 registrations, and 36

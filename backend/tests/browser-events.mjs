@@ -9,6 +9,7 @@ import { eventHandler } from '../api/events.mjs';
 import { RequestError } from '../lib/errors.mjs';
 import { submit } from '../lib/submissions.mjs';
 import { liveEvents } from '../lib/events.mjs';
+import { privateSurveyToken, digest } from '../lib/custom-surveys.mjs';
 import sharp from 'sharp';
 const backend = fileURLToPath(new URL('../', import.meta.url));
 const site = path.resolve(backend, '../public');
@@ -25,14 +26,19 @@ const authorized = (req) => {
 };
 let shortLinkFailure = true,
   shortLinkCalls = 0;
+const shortAliases = [];
 const events = eventHandler({
   getDatabase: () => db,
   authorize: authorized,
   originals: [],
-  createShortLink: async () => {
+  createShortLink: async (target, alias) => {
     shortLinkCalls++;
+    shortAliases.push(alias);
     if (shortLinkFailure)
       throw new RequestError(503, 'Short link temporarily unavailable.');
+    if (alias === 'dai-taken-name')
+      throw new RequestError(409, 'That short-link path is already in use.');
+    if (alias === 'dai-custom-game') return 'https://go.dallasai.club/' + alias;
     return 'https://go.dallasai.club/test-published-event';
   },
   storage: {
@@ -636,6 +642,21 @@ try {
   if (!(await page.locator('#event-form').isVisible()))
     await page.locator('#edit-selected-event').click();
   await page.locator('[name="registrationOpen"]').uncheck();
+  await page.getByRole('button', { name: 'Preview', exact: true }).click();
+  await page
+    .frameLocator('#site-preview-frame')
+    .locator('#event-detail h2')
+    .waitFor();
+  assert.equal(
+    await page
+      .frameLocator('#site-preview-frame')
+      .locator('.event-sharing, #open-rsvp')
+      .count(),
+    0,
+  );
+  await page
+    .getByRole('button', { name: 'Close preview', exact: true })
+    .click();
   if (!(await page.locator('#event-form').isVisible()))
     await page.locator('#edit-selected-event').click();
   await page
@@ -656,6 +677,116 @@ try {
     .getByText('RSVPs are closed for this event.', { exact: true })
     .waitFor();
   assert.equal(await publicPage.locator('#event-rsvp:visible').count(), 0);
+  assert.equal(
+    await publicPage
+      .locator('#event-detail .event-sharing, #open-rsvp')
+      .count(),
+    0,
+  );
+  // A linked, open public feedback survey replaces RSVP only after the event.
+  process.env.FORM_TOKEN_SECRET = 'event-feedback-browser-' + 'x'.repeat(40);
+  const feedbackId = crypto.randomUUID();
+  const feedbackUrl = 'https://tinyurl.com/test-event-feedback';
+  await db.query(
+    `INSERT INTO club_forms.custom_surveys
+      (id,slug,title,content_version,status,link_digest,expires_at,published_at,definition,short_link)
+      VALUES($1,$2,'Event feedback','custom-form/1','open',$3,now()+interval '1 day',now(),$4,$5)`,
+    [
+      feedbackId,
+      'feedback-' + feedbackId,
+      digest(privateSurveyToken(feedbackId)),
+      JSON.stringify({
+        eventId: id,
+        template: 'feedback',
+        audience: 'public',
+        permissions: { preview: 'link', answer: 'verified', results: 'admins' },
+      }),
+      feedbackUrl,
+    ],
+  );
+  const refreshPublicEvents = () =>
+    publicPage.evaluate(async () => {
+      await (await import('/content/events.js')).refreshEvents();
+    });
+  await refreshPublicEvents();
+  assert.equal(
+    await publicPage
+      .getByRole('link', { name: 'Event feedback', exact: true })
+      .count(),
+    0,
+  );
+  const upcoming = (await liveEvents(db, []))[0];
+  for (const unsafeUrl of [
+    'http://example.test/feedback',
+    'https://owner@example.test/feedback',
+    'https://:password@example.test/feedback',
+  ]) {
+    const malformed = (route) =>
+      route.fulfill({
+        json: { events: [{ ...upcoming, feedbackUrl: unsafeUrl }] },
+      });
+    await publicPage.route(
+      'https://dallasai-leaderboard.vercel.app/api/events',
+      malformed,
+    );
+    await refreshPublicEvents();
+    assert.equal(
+      await publicPage.evaluate(
+        async () => (await import('/content/events.js')).eventsFresh,
+      ),
+      false,
+    );
+    await publicPage.unroute(
+      'https://dallasai-leaderboard.vercel.app/api/events',
+      malformed,
+    );
+  }
+  await refreshPublicEvents();
+  await db.query('UPDATE club_forms.events SET published=$2 WHERE id=$1', [
+    id,
+    JSON.stringify({
+      ...upcoming,
+      date: '2000-10-02T16:00:00-05:00',
+      end: '2000-10-02T20:00:00-05:00',
+    }),
+  ]);
+  await refreshPublicEvents();
+  const feedbackAction = publicPage
+    .locator('.event-registration')
+    .getByRole('link', { name: 'Event feedback', exact: true });
+  await expect(feedbackAction).toHaveAttribute('href', feedbackUrl);
+  assert.equal(
+    await publicPage.locator('#open-rsvp, #event-rsvp-action').count(),
+    0,
+  );
+  await publicPage.route(feedbackUrl, (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: '<h1>Linked event feedback</h1>',
+    }),
+  );
+  await feedbackAction.click();
+  await expect(
+    publicPage.getByRole('heading', { name: 'Linked event feedback' }),
+  ).toBeVisible();
+  await publicPage.goto(origin + '/club.html?mode=events&event=' + id);
+  await publicPage.locator('#event-feedback-action').waitFor();
+  await db.query(
+    "UPDATE club_forms.custom_surveys SET status='closed' WHERE id=$1",
+    [feedbackId],
+  );
+  await refreshPublicEvents();
+  assert.equal(
+    await publicPage
+      .getByRole('link', { name: 'Event feedback', exact: true })
+      .count(),
+    0,
+  );
+  await db.query('UPDATE club_forms.events SET published=$2 WHERE id=$1', [
+    id,
+    JSON.stringify(upcoming),
+  ]);
+  await refreshPublicEvents();
   if (!(await page.locator('#event-form').isVisible()))
     await page.locator('#edit-selected-event').click();
   await page.locator('[name="title"]').fill(workshop.title);
@@ -924,6 +1055,35 @@ try {
   await expect(
     page.getByRole('link', { name: 'Open event QR ↗' }),
   ).toBeVisible();
+  await page
+    .getByLabel('Custom short-link name (optional)')
+    .fill('dai-custom-game');
+  await page
+    .getByRole('button', { name: 'Save short link', exact: true })
+    .click();
+  await expect(
+    page.getByRole('link', { name: 'View published event ↗' }),
+  ).toHaveAttribute('href', 'https://go.dallasai.club/dai-custom-game');
+  await page
+    .getByLabel('Custom short-link name (optional)')
+    .fill('dai-taken-name');
+  await page
+    .getByRole('button', { name: 'Save short link', exact: true })
+    .click();
+  await page
+    .getByText('That short-link path is already in use.', { exact: true })
+    .waitFor();
+  await expect(
+    page.getByRole('link', { name: 'View published event ↗' }),
+  ).toHaveAttribute('href', 'https://go.dallasai.club/dai-custom-game');
+  await page.getByLabel('Custom short-link name (optional)').fill('');
+  await page
+    .getByRole('button', { name: 'Save short link', exact: true })
+    .click();
+  await expect(
+    page.getByRole('link', { name: 'View published event ↗' }),
+  ).toHaveAttribute('href', 'https://go.dallasai.club/test-published-event');
+  assert.equal(shortAliases.at(-1), 'dai-blocked-popup-check');
   assert.deepEqual(errors, []);
   console.log(
     'Passed: four event types, fixed Studio design and office-only logo, workshop entry, private image preview, persistence, publish, public refresh, safe rendering, conflict recovery, archived editing, reload, restore as draft, preserved RSVPs/images, republish, unpublish, sign-out, and mobile layouts.',

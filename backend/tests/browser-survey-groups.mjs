@@ -873,24 +873,46 @@ try {
         )
       ).rows[0].n;
       await expect(totals.locator('.tile-number')).toHaveText(
-        expected + ' active submissions',
+        expected + 2 + ' active submissions',
       );
       await expect(totals).not.toContainText('permanently deleted');
       await expect(totals).not.toContainText('saved (including');
       const question = totals
         .getByRole('link')
-        .filter({ hasText: 'Questions' });
-      await expect(question.locator('strong')).toHaveText('2');
+        .filter({ hasText: 'Questions & requests' });
+      await expect(totals.locator('.total').nth(0)).toContainText('Signups');
+      await expect(totals.locator('.total').nth(1)).toContainText(
+        'Questions & requests',
+      );
+      await expect(question.locator('strong')).toHaveText('3');
       await question.click();
       await expect(
         page.locator('[data-inbox-status="active"]'),
       ).toHaveAttribute('aria-pressed', 'true');
       await expect(page.locator('#entries')).toContainText('Reviewed question');
+      await expect(page.locator('#entries')).toContainText('Office workshop');
+      await expect(page.locator('#filters [name="kind"]')).toHaveValue(
+        'questions-requests',
+      );
       await expect(page.locator('#entries')).not.toContainText(
         'Archived question',
       );
       await page.locator('[data-inbox-status="closed"]').click();
       await expect(page.locator('#entries')).toContainText('Archived question');
+      await page.locator('#home-tab').click();
+      const feedback = totals
+        .getByRole('link')
+        .filter({ hasText: 'Event feedback' });
+      await expect(feedback.locator('strong')).toHaveText('2');
+      await feedback.click();
+      const responses = page.locator('#event-surveys-root');
+      await expect(
+        responses.getByRole('combobox', { name: /^Response type/ }),
+      ).toHaveValue('feedback');
+      await expect(responses).toContainText('Office feedback A');
+      await expect(responses).toContainText('Office feedback B');
+      await expect(responses).not.toContainText('Archived feedback');
+      await expect(responses.locator('.survey-response')).toHaveCount(0);
     },
   );
 

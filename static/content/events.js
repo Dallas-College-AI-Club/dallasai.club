@@ -28,6 +28,13 @@ function cleanEvent(event) {
       throw new Error('Invalid link');
     meetingUrl = link.href;
   }
+  let feedbackUrl = '';
+  if (event.feedbackUrl) {
+    const link = new URL(event.feedbackUrl);
+    if (link.protocol !== 'https:' || link.username || link.password)
+      throw new Error('Invalid feedback link');
+    feedbackUrl = link.href;
+  }
   return {
     id: event.id,
     title: event.title,
@@ -38,6 +45,7 @@ function cleanEvent(event) {
     surveyIntro: String(event.surveyIntro || ''),
     rsvpDeadline: String(event.rsvpDeadline || ''),
     shortLink: String(event.shortLink || ''),
+    feedbackUrl,
     surveyVersion: String(event.surveyVersion || ''),
     surveyQuestions: Array.isArray(event.surveyQuestions)
       ? event.surveyQuestions

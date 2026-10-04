@@ -1,5 +1,4 @@
 import { coladdeMark } from '../app/coladde.js';
-import { JOIN_URL } from '../content/club.js';
 import { GAMES } from './registry.js';
 import { readArcade } from '../storage/games.js';
 import { readRun } from '../storage/drive.js';
@@ -72,7 +71,7 @@ export function mountHub(root, { open }) {
           <h2>Want to improve a game or add your own?</h2>
           <p>Bring your ideas, your curiosity, and whatever skills you have.</p>
         </div>
-        <a href="${JOIN_URL}" target="_blank" rel="noreferrer">Join the club ↗</a>
+        <a href="club.html?mode=join" data-game-nav="join">Join the club ↗</a>
       </aside>
       <div class="coladde-maker-stamp">${coladdeMark('arcade')}</div>`;
   root.querySelector('[data-rankings]').onclick = (e) => {
@@ -101,11 +100,13 @@ export function mountHub(root, { open }) {
         open(a.dataset.game);
       }),
   );
-  root.querySelector('[data-game-nav]').onclick = (e) => {
-    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
-    e.preventDefault();
-    open('summary');
-  };
+  root.querySelectorAll('[data-game-nav]').forEach((link) => {
+    link.onclick = (e) => {
+      if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      e.preventDefault();
+      open(link.dataset.gameNav);
+    };
+  });
   return () => {
     disposed = true;
     root.classList.remove('arcade-page');

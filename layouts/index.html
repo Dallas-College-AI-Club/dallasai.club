@@ -15,11 +15,15 @@
   </head>
   <body>
     <main class="entrance">
-      <img
-        class="scene"
-        src="assets/entrance.png"
-        alt="A student with a backpack walks toward the light between two glass gateways"
-      />
+      <picture>
+        <source type="image/webp" srcset="assets/entrance-1024.webp 1024w, assets/entrance-1672.webp 1672w" sizes="(max-width: 600px) max(100vw, 105svh, 724px), max(100vw, 178svh, 1032px)" />
+        <img
+          class="scene"
+          src="assets/entrance.png"
+          fetchpriority="high"
+          alt="A student with a backpack walks toward the light between two glass gateways"
+        />
+      </picture>
       <div class="shade"></div>
       <header class="club-header">
         <a class="brand" href="index.html"

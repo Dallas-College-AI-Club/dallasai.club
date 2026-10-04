@@ -11,6 +11,7 @@ import {
   ADMIN_URL,
   EVENTS_API_URL,
   eventsFresh,
+  eventsStatus,
   refreshEvents,
 } from '../content/events.js';
 import { questionDialog } from '../app/questions.js';
@@ -57,7 +58,12 @@ export function eventsMarkup() {
         Request a workshop ↗
       </button>
     </div>
-    <p id="event-freshness" role="status"></p>
+    <p id="event-freshness" role="status">
+      <span id="event-status-text"></span>
+      <button id="event-retry" class="event-retry" type="button" hidden>
+        Try again
+      </button>
+    </p>
     ${ADMIN_URL ? '<p><a class="outline-link" target="_blank" rel="noopener noreferrer" aria-label="Admin sign in (opens in a new tab)" href="' + escapeHTML(ADMIN_URL) + '">Admin sign in ↗</a></p>' : ''}
     <div class="events-layout">
       <aside class="events-browser" aria-label="Find an event">
@@ -260,10 +266,12 @@ export function mountEvents(root) {
           '</button>',
       );
       q('#open-rsvp').onclick = () => rsvp.open(selected);
-    } else if (!privatePreview && !past) {
+    } else if (!privatePreview) {
       panel.insertAdjacentHTML(
         'beforeend',
-        '<p>RSVPs are closed for this event.</p>',
+        past
+          ? '<p>Registration has closed.</p>'
+          : '<p>RSVPs are closed for this event.</p>',
       );
     }
     if (selected.images?.length) {
@@ -367,7 +375,13 @@ export function mountEvents(root) {
               </button>`,
           )
           .join('')
-      : '<p>No events listed for this month.</p>' +
+      : '<p>' +
+        (eventsStatus === 'loading'
+          ? 'Loading the calendar…'
+          : eventsStatus === 'unavailable' && !EVENTS.length
+            ? 'The calendar is unavailable.'
+            : 'No events listed for this month.') +
+        '</p>' +
         (fallback
           ? '<button id="next-announced">View club events →</button>'
           : '');
@@ -448,16 +462,28 @@ export function mountEvents(root) {
     }
   };
   const freshness = () => {
+    q('#event-retry').hidden = privatePreview || eventsStatus !== 'unavailable';
     if (privatePreview) {
-      q('#event-freshness').textContent =
+      q('#event-status-text').textContent =
         'Private preview · Try RSVP answers and preview the admin result. Nothing will be submitted or saved.';
       return;
     }
-    q('#event-freshness').textContent = eventsFresh
+    q('#event-status-text').textContent = eventsFresh
       ? requested && !EVENTS.some((e) => e.id === requested)
         ? 'That event is no longer listed. Browse the calendar for current events.'
         : ''
-      : 'Checking the current calendar… If it stays unavailable, please try again shortly.';
+      : eventsStatus === 'loading'
+        ? 'Checking the current calendar…'
+        : EVENTS.length
+          ? 'The calendar could not refresh. Showing the last loaded events.'
+          : 'The calendar could not load. Please try again.';
+  };
+  const retry = q('#event-retry');
+  retry.onclick = async () => {
+    retry.disabled = true;
+    q('#event-status-text').textContent = 'Checking the current calendar…';
+    await refreshEvents();
+    retry.disabled = false;
   };
   const updated = () => {
     if (privatePreview) return;
@@ -479,8 +505,24 @@ export function mountEvents(root) {
     draw();
     freshness();
   };
+  const timeState = () => EVENTS.map((event) => eventIsPast(event)).join(',');
+  let previousTimeState = timeState();
+  const checkTime = () => {
+    const next = timeState();
+    if (next !== previousTimeState) {
+      previousTimeState = next;
+      updated();
+    }
+  };
+  const statusUpdated = () => {
+    freshness();
+    if (!EVENTS.length) draw();
+    checkTime();
+  };
+  const clock = setInterval(checkTime, 1000);
+  window.addEventListener('focus', checkTime);
   document.addEventListener('club:events-updated', updated);
-  document.addEventListener('club:events-status', freshness);
+  document.addEventListener('club:events-status', statusUpdated);
   draw();
   freshness();
   refreshEvents();
@@ -537,7 +579,9 @@ export function mountEvents(root) {
   }
   return () => {
     document.removeEventListener('club:events-updated', updated);
-    document.removeEventListener('club:events-status', freshness);
+    document.removeEventListener('club:events-status', statusUpdated);
+    window.removeEventListener('focus', checkTime);
+    clearInterval(clock);
     stopWorkshop();
     rsvp.destroy();
     imageViewer.destroy();

@@ -1,4 +1,12 @@
 /* Events components and their responsive states. */
+.event-retry {
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 8px 0;
+  font: inherit;
+  text-decoration: underline;
+}
 .events-intro {
   display: flex;
   justify-content: space-between;

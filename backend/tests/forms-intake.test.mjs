@@ -92,7 +92,7 @@ test('signups, RSVPs and requests are each saved once and confirmed', async () =
   const rsvp = form('rsvp', { eventId: 'meetup' });
   assert.equal((await (await post(rsvp)).json()).message, confirmations.rsvp);
   const again = await post({ ...rsvp, requestId: randomUUID() });
-  assert.match((await again.json()).message, /already have an RSVP/);
+  assert.equal((await again.json()).message, confirmations.rsvp);
   assert.deepEqual((await rows()).map((row) => row.kind).sort(), [
     'contribution',
     'join',
@@ -100,6 +100,34 @@ test('signups, RSVPs and requests are each saved once and confirmed', async () =
     'subscribe',
     'workshop',
   ]);
+});
+
+test('RSVP replies do not reveal registration history when a potential event becomes confirmed', async () => {
+  const event = events[0];
+  event.potential = true;
+  try {
+    const request = form('rsvp', { eventId: event.id });
+    const first = await (await post(request)).json();
+    const repeat = await (
+      await post({ ...request, requestId: randomUUID() })
+    ).json();
+    assert.deepEqual(repeat, first);
+    event.potential = false;
+    const existing = await (
+      await post({ ...request, requestId: randomUUID() })
+    ).json();
+    const fresh = await (
+      await post({
+        ...request,
+        email: 'new@example.edu',
+        requestId: randomUUID(),
+      })
+    ).json();
+    assert.deepEqual(existing, fresh);
+    assert.equal(existing.message, confirmations.rsvp);
+  } finally {
+    delete event.potential;
+  }
 });
 
 test('rejected submissions save nothing', async () => {

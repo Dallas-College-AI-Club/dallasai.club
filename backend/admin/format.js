@@ -201,6 +201,11 @@ const actions = {
   respondent_restored: 'Restored',
   respondent_removed: 'Archived',
   respondent_registered: 'Registered',
+  'help-created': 'Added a Help topic',
+  'help-edited': 'Edited a Help topic',
+  'help-archived': 'Archived a Help topic',
+  'help-restored': 'Restored a Help topic',
+  'help-deleted': 'Deleted a Help topic',
 };
 for (const label of [
   'Merged contact',
@@ -215,3 +220,28 @@ for (const label of [
 // Codes such as survey-export-csv:<event> carry details after the colon.
 export const actionLabel = (code = '') =>
   actions[code] || actions[code.split(':')[0]] || 'Updated';
+// Kind names mid-sentence: 'question', while 'RSVP' and 'The AI Review'
+// keep their capitals.
+const midSentence = (word) =>
+  /^([A-Z]{2}|The AI Review)/.test(word)
+    ? word
+    : word[0].toLowerCase() + word.slice(1);
+// newSummary([[2, 'rsvp'], [1, 'question']]) → '3 new: 2 RSVPs, 1 question';
+// none when nothing is new.
+export function newSummary(parts, none) {
+  const shown = parts.filter(([n]) => n > 0),
+    total = shown.reduce((sum, [n]) => sum + n, 0);
+  return total
+    ? total.toLocaleString('en-US') +
+        ' new: ' +
+        shown
+          .map(([n, kind]) =>
+            plural(
+              n,
+              midSentence(kindLabel(kind)),
+              midSentence(kindLabel(kind, 'plural')),
+            ),
+          )
+          .join(', ')
+    : none;
+}

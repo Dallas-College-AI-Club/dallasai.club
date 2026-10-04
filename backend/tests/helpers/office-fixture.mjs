@@ -159,7 +159,7 @@ export async function officeFixture() {
         'Set-Cookie',
         'test-officer=yes; Path=/; HttpOnly; SameSite=Strict',
       );
-      res.writeHead(302, { Location: '/admin/' });
+      res.writeHead(302, { Location: '/admin/#/inbox' });
       return res.end();
     }
     if (!signedIn && url.pathname.startsWith('/api/')) {

@@ -17,6 +17,9 @@ import { mountEventEditor } from './event-editor.js';
 import { mountBrowserAlerts } from './browser-alerts.js';
 import { submissionActivity } from './submission-activity.js';
 import { submissionEditor } from './submission-editor.js';
+import { contactHistory } from './contact-history.js';
+import { renderHome } from './home.js';
+import { mountHelpEntries } from './help-entries.js';
 import {
   KINDS,
   clock,
@@ -24,6 +27,7 @@ import {
   day,
   fieldLabel,
   kindLabel,
+  newSummary,
   plural,
   statusLabel,
 } from './format.js';
@@ -46,7 +50,9 @@ let offset = 0,
 let view = { status: 'new', kind: '', eventId: '', id: '' },
   loadedKey = null,
   listRequest = null,
+  homeRequest = null,
   inboxList = '#/inbox';
+const rsvpKinds = ['rsvp', 'rsvp-past', 'rsvp-all'];
 // The counts poll: arrivals are submissions created after `since` (the
 // newest one the list has shown); alerts fire when the newest submission
 // time moves on, so status changes never count as arrivals.
@@ -119,8 +125,12 @@ function clearOffice() {
   setNewCount(0);
   q('#arrivals').hidden = true;
   q('#inbox-updated').replaceChildren();
+  q('#home-updated').replaceChildren();
   q('#entries').replaceChildren();
-  shownEntry = customShown = null;
+  q('#home-tiles').replaceChildren();
+  shownEntry = customShown = contactTarget = null;
+  contacts.clear();
+  helpEntries.clear();
   editor.clear();
   surveys.clear();
   customSurveys.clear();
@@ -298,13 +308,24 @@ function removeEntry(card) {
   card.remove();
   const left = group?.querySelectorAll('.entry').length;
   if (group && !left) group.remove();
-  else if (group)
-    group.querySelector(':scope > summary').textContent =
-      group.dataset.label + ' · ' + left + ' on this page';
+  else if (group) {
+    // An event group counts every matching RSVP, not just this page.
+    if (group.dataset.total) group.dataset.total--;
+    group.querySelector(':scope > summary').textContent = groupLabel(
+      group,
+      left,
+    );
+  }
   if (!q('#entries').children.length)
     q('#entries').append(node('p', 'No submissions match these filters.'));
 }
-function groupedEntries(entries) {
+const groupLabel = (group, onPage) =>
+  group.dataset.label +
+  ' · ' +
+  (group.dataset.total
+    ? plural(Number(group.dataset.total), 'RSVP')
+    : onPage + ' on this page');
+function groupedEntries(entries, eventCounts = {}) {
   const groups = new Map();
   for (const entry of entries) {
     const key = entry.data.eventId
@@ -318,14 +339,36 @@ function groupedEntries(entries) {
     group.dataset.group = key;
     group.dataset.label =
       rows[0].data.eventTitle || kindLabel(rows[0].kind, 'plural');
+    const eventId = key.startsWith('event:') ? rows[0].data.eventId : '';
+    if (eventId && eventCounts[eventId])
+      group.dataset.total = eventCounts[eventId];
     group.open = true;
-    group.append(
-      node(
-        'summary',
-        group.dataset.label + ' · ' + rows.length + ' on this page',
-      ),
-      ...rows.map(renderEntry),
-    );
+    group.append(node('summary', groupLabel(group, rows.length)));
+    // Show all: this event's RSVPs, upcoming or past, in this status.
+    if (eventId && view.eventId !== eventId)
+      group.append(
+        h(
+          'p',
+          { className: 'group-tools' },
+          h(
+            'a',
+            {
+              href: router.build('inbox', {
+                status: router.routeStatus(view.status),
+                type: 'rsvp-all',
+                event: eventId,
+              }),
+            },
+            'Show all',
+            node(
+              'span',
+              ' RSVPs for ' + group.dataset.label,
+              'visually-hidden',
+            ),
+          ),
+        ),
+      );
+    group.append(...rows.map(renderEntry));
     return group;
   });
 }
@@ -333,6 +376,13 @@ function groupedEntries(entries) {
 // list and the counts poll call this; it never touches the list itself.
 function updateCounts(data) {
   setNewCount(data.counts.reduce((sum, row) => sum + row.new, 0));
+  // The folded count cards say what is new without opening them.
+  q('#counts-summary').textContent =
+    'Counts · ' +
+    newSummary(
+      data.counts.map((row) => [row.new, row.kind]),
+      'nothing new',
+    );
   q('#counts').replaceChildren(
     ...KINDS.map((kind) => {
       const count = data.counts.find((x) => x.kind === kind) || {
@@ -376,11 +426,73 @@ function setTitle() {
     (signedIn ? routeTitle + ' · ' : '') +
     'Club Office';
 }
+const today = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/Chicago',
+  weekday: 'long',
+  month: 'long',
+  day: 'numeric',
+});
 function updated(error) {
   q('#inbox-updated').replaceChildren(
     ...(error
       ? ['Couldn’t update · ', button('Retry', poll, 'btn-quiet')]
       : ['Updated ' + clock(new Date())]),
+  );
+  q('#home-updated').replaceChildren(
+    today.format(new Date()) + ' · ',
+    ...(error
+      ? ['couldn’t update · ', button('Retry', poll, 'btn-quiet')]
+      : ['updated ' + clock(new Date())]),
+  );
+}
+// Every list and Home response: the first one opens the office; each one
+// refreshes the counts, the badge and the poll's markers. False when another
+// tab signed in as someone else, whose data must never show here.
+function snapshot(data) {
+  if (signedIn && accountChanged(data.user)) return false;
+  if (!signedIn) {
+    signedIn = true;
+    ready(data.user);
+  }
+  lastPoll = Date.now();
+  since = latestOf(data.counts) || since;
+  lastLatest ??= Date.parse(since) || 0;
+  lastCounts ??= data.counts;
+  updateCounts(data);
+  updated();
+  return true;
+}
+// The Event filter for RSVP types: a select (phones, long lists) and, for a
+// short list, chips with 'All events' above the list.
+function eventFilter(events) {
+  const all = view.kind === 'rsvp-all',
+    past = view.kind === 'rsvp-past',
+    shown = events.filter((e) => all || Boolean(e.past) === past),
+    select = q('#filters [name="eventId"]'),
+    chips = q('#event-chips');
+  select.replaceChildren(
+    new Option(
+      all ? 'All events' : past ? 'All past events' : 'All upcoming events',
+      '',
+    ),
+    ...shown.map((e) => new Option(e.title + ' · ' + day(e.date), e.id)),
+  );
+  select.value = view.eventId;
+  chips.hidden = !rsvpKinds.includes(view.kind) || shown.length > 8;
+  q('#filters').classList.toggle('has-chips', !chips.hidden);
+  chips.replaceChildren(
+    ...[{ id: '', title: 'All events' }, ...shown].map((e) =>
+      h(
+        'button',
+        {
+          type: 'button',
+          className: 'chip-button',
+          'aria-pressed': String(e.id === view.eventId),
+          onclick: () => showList({ event: e.id }),
+        },
+        e.title,
+      ),
+    ),
   );
 }
 // Loads the Inbox list for the current filters. A second call for the same
@@ -413,28 +525,11 @@ async function fetchList(key) {
       offset = Math.max(0, offset - 50);
       return load();
     }
-    if (!signedIn) {
-      signedIn = true;
-      ready(data.user);
-    }
+    if (!snapshot(data)) return;
     loadedKey = key;
-    lastPoll = Date.now();
-    since = latestOf(data.counts) || since;
-    lastLatest ??= Date.parse(since) || 0;
-    lastCounts ??= data.counts;
     q('#arrivals').hidden = true;
     toast.resolve('inbox-load');
-    updateCounts(data);
-    updated();
-    const eventSelect = q('#filters [name="eventId"]'),
-      past = view.kind === 'rsvp-past';
-    eventSelect.replaceChildren(
-      new Option(past ? 'All past events' : 'All upcoming events', ''),
-      ...(data.events || [])
-        .filter((e) => Boolean(e.past) === past)
-        .map((e) => new Option(e.title + ' · ' + day(e.date), e.id)),
-    );
-    eventSelect.value = view.eventId;
+    eventFilter(data.events || []);
     const expanded = new Map(
       [...q('#entries').querySelectorAll('[id^="entry-"]')].map((card) => [
         card.id,
@@ -452,7 +547,7 @@ async function fetchList(key) {
     );
     q('#entries').replaceChildren(
       ...(data.entries.length
-        ? groupedEntries(data.entries)
+        ? groupedEntries(data.entries, data.eventCounts)
         : [
             node(
               'p',
@@ -524,6 +619,12 @@ async function poll() {
     lastPoll = Date.now();
     since ??= data.asOf;
     updateCounts(data);
+    // Home redraws only while shown, and only when a count moved.
+    if (
+      router.route()?.section === 'home' &&
+      JSON.stringify(data.counts) !== JSON.stringify(lastCounts)
+    )
+      loadHome();
     const latest = Date.parse(data.latest) || 0;
     if (lastLatest !== null && latest > lastLatest)
       alerts.notify(arrivals(data.counts));
@@ -545,25 +646,15 @@ async function poll() {
 }
 // '3 new: 2 questions, 1 signup', from the counts since the last poll.
 function arrivals(counts) {
-  const lower = (word) => (/^[A-Z]{2}/.test(word) ? word : word.toLowerCase());
-  const parts = counts
-    .map((row) => [
+  return newSummary(
+    counts.map((row) => [
       row.total -
         (lastCounts?.find((before) => before.kind === row.kind)?.total ??
           row.total),
       row.kind,
-    ])
-    .filter(([n]) => n > 0);
-  const total = parts.reduce((sum, [n]) => sum + n, 0);
-  return total
-    ? total.toLocaleString('en-US') +
-        ' new: ' +
-        parts
-          .map(([n, kind]) =>
-            plural(n, lower(kindLabel(kind)), lower(kindLabel(kind, 'plural'))),
-          )
-          .join(', ')
-    : 'New submissions are waiting in the Inbox.';
+    ]),
+    'New submissions are waiting in the Inbox.',
+  );
 }
 q('#arrivals').onclick = () => {
   q('#inbox-pane [data-focus-fallback]').focus();
@@ -660,7 +751,116 @@ const surveys = mountSurveyResults(
     if (router.route().name.startsWith('surveys/events/'))
       router.go('#/surveys/events', { replace: true });
   },
+  (address) => openContacts(address),
 );
+// The Contacts tab. A change reloads the survey responses; a purged contact
+// also changes the inbox.
+const contacts = contactHistory(
+  api,
+  (result) => {
+    surveys.reload();
+    if (!result.purged) return;
+    offset = 0;
+    load();
+  },
+  q('#contacts-pane'),
+);
+// 'Contacts & follow-up' and 'Contact history' open the tab; a person's
+// history opens straight to them (emails never go in the address).
+let contactTarget = null,
+  eventTarget = '';
+function openContacts(address = '') {
+  if (router.route()?.section === 'contacts') return contacts.open(address);
+  contactTarget = address;
+  router.go('#/contacts');
+  if (router.route()?.section !== 'contacts') contactTarget = null;
+}
+const helpEntries = mountHelpEntries(api);
+// Home: one request for every tile. Like the list, it opens the office on
+// first load, and a response read before the officer's own save is fetched
+// again.
+function loadHome() {
+  homeRequest ??= fetchHome().finally(() => {
+    homeRequest = null;
+  });
+  return homeRequest;
+}
+async function fetchHome() {
+  const generation = sessionGeneration,
+    savesBefore = saves;
+  q('#home-tiles').setAttribute('aria-busy', 'true');
+  try {
+    const data = await api('/api/admin?home=1');
+    if (generation !== sessionGeneration) return;
+    if (saves !== savesBefore) return fetchHome();
+    if (!snapshot(data)) return;
+    toast.resolve('home-load');
+    renderHome(q('#home-tiles'), data, {
+      me: data.user,
+      review: homeReview,
+      openEvent(id) {
+        eventTarget = id;
+        router.go('#/events');
+      },
+      async newEvent() {
+        await router.go('#/events');
+        if (router.route().section === 'events') q('#new-event').click();
+      },
+      newSurvey: () => router.go('#/surveys/custom'),
+      async findContact() {
+        await router.go('#/contacts');
+        q('#contacts-pane input[type="search"]')?.focus();
+      },
+    });
+  } catch (error) {
+    if (generation !== sessionGeneration) return;
+    if (!signedIn) loadFailed(error);
+    else
+      toast({
+        type: 'error',
+        key: 'home-load',
+        text: error.message,
+        action: { label: 'Retry', run: loadHome },
+      });
+  } finally {
+    if (generation === sessionGeneration)
+      q('#home-tiles').setAttribute('aria-busy', 'false');
+  }
+}
+// Mark reviewed from Home: the Inbox's request, with a typed note saved too.
+async function homeReview(entry, row) {
+  const key = 'note:' + entry.id,
+    note = drafts.get(key),
+    version = sessionGeneration,
+    release = busy(row);
+  try {
+    await api('/api/admin', {
+      action: 'review',
+      id: entry.id,
+      status: 'reviewed',
+      from: 'new',
+      ...(note ? { comment: { id: note.id, body: note.text.trim() } } : {}),
+    });
+    saves++;
+    if (note) drafts.delete(key);
+    if (version !== sessionGeneration) return;
+    loadedKey = null;
+    if (row.isConnected) {
+      focusFallback(row, q('#home-tiles'));
+      row.remove();
+    }
+    say(
+      'Submission moved to Reviewed.' +
+        (note ? ' Your note was saved with it.' : ''),
+    );
+    poll();
+  } catch (error) {
+    if (version !== sessionGeneration) return;
+    release();
+    say(error.message, 'error');
+    if (error.code === 'stale-status') loadHome();
+  }
+}
 const customSurveys = mountCustomSurveys(q('#custom-surveys-root'), api);
 const surveyArchive = mountSurveyArchive(q('#archived-survey-questions'), api);
 // Surveys: the sub-section and what each one shows.
@@ -669,6 +869,11 @@ let surveysSub = 'events',
   customShown = null;
 // Each section: its pane, enter(route) and leave(next) → false to stay.
 const sections = {
+  home: {
+    pane: q('#home-pane'),
+    // Home is a summary: entering it always reads it again.
+    enter: () => loadHome(),
+  },
   inbox: {
     pane: q('#inbox-pane'),
     enter(route) {
@@ -684,9 +889,11 @@ const sections = {
       selectInboxStatus(view.status);
       q('#filters [name="kind"]').value = view.kind;
       q('#filters [name="eventId"]').value = view.eventId;
-      q('#event-filter-label').hidden = !['rsvp', 'rsvp-past'].includes(
-        view.kind,
-      );
+      q('#event-filter-label').hidden = !rsvpKinds.includes(view.kind);
+      if (!rsvpKinds.includes(view.kind)) {
+        q('#event-chips').hidden = true;
+        q('#filters').classList.remove('has-chips');
+      }
       if (filters().toString() !== loadedKey) {
         q('#arrivals').hidden = true;
         load();
@@ -696,7 +903,12 @@ const sections = {
   events: {
     pane: q('#events-pane'),
     // Entering Events always refreshes the list; the editor keeps its form.
-    enter: () => editor.show(),
+    // From Home, it also opens the chosen event.
+    enter() {
+      const id = eventTarget;
+      eventTarget = '';
+      return editor.show(id);
+    },
     leave: (next) => next.section === 'events' || editor.leave(),
   },
   surveys: {
@@ -733,9 +945,18 @@ const sections = {
       !router.route().name.startsWith('surveys/custom') ||
       customSurveys.leave(),
   },
+  contacts: {
+    pane: q('#contacts-pane'),
+    enter() {
+      if (contactTarget === null) return contacts.show();
+      contacts.open(contactTarget);
+      contactTarget = null;
+    },
+  },
   help: {
     pane: q('#help-pane'),
     enter(route) {
+      helpEntries.load();
       if (route.query.topic)
         q('#help-' + route.query.topic)?.scrollIntoView({ block: 'start' });
     },
@@ -748,6 +969,7 @@ const sections = {
   },
 };
 const titles = {
+  home: 'Home',
   inbox: 'Inbox',
   'inbox/:id': 'Submission · Inbox',
   events: 'Events',
@@ -756,6 +978,7 @@ const titles = {
   'surveys/events/:eventId/r/:entryId': 'Response · Event surveys',
   'surveys/custom': 'Custom surveys · Surveys',
   'surveys/custom/:id': 'Custom survey · Surveys',
+  contacts: 'Contacts',
   help: 'Help',
   'not-found': 'Page not found',
 };
@@ -767,11 +990,13 @@ function onRender(route, from) {
   routeTitle = titles[route.name];
   setTitle();
   const roots = {
+    home: '#/home',
     inbox: route.name === 'inbox' ? router.lastRoute('inbox') : inboxList,
     events: '#/events',
     surveys:
       '#/surveys/' +
       (route.name.startsWith('surveys/custom') ? 'custom' : 'events'),
+    contacts: '#/contacts',
     help: '#/help',
   };
   for (const [name, root] of Object.entries(roots)) {
@@ -785,8 +1010,8 @@ function onRender(route, from) {
     );
   }
 }
-// Opens the office: the first load, a retry, or after signing in. The list
-// load decides whether the office opens.
+// Opens the office: the first load, a retry, or after signing in. Home's
+// read, or elsewhere the list load, decides whether the office opens.
 let started = false;
 function open() {
   if (started) router.refresh();
@@ -794,7 +1019,7 @@ function open() {
     started = true;
     router.start({ sections, onRender });
   }
-  return load();
+  return router.route()?.section === 'home' ? loadHome() : load();
 }
 startSession({
   load: open,
@@ -805,7 +1030,10 @@ startSession({
     if (!dropped) return;
     load();
     const route = router.route();
-    if (route.section === 'events') editor.show();
+    if (route.section === 'home') loadHome();
+    else if (route.section === 'contacts') contacts.show();
+    else if (route.section === 'help') helpEntries.load();
+    else if (route.section === 'events') editor.show();
     else if (route.section !== 'surveys') return;
     else if (surveysSub === 'events') surveys.reload();
     else customSurveys.refresh();
@@ -813,6 +1041,9 @@ startSession({
   // Ten minutes paused: drop member records, keep editors and drafts.
   reset() {
     q('#entries').replaceChildren();
+    q('#home-tiles').replaceChildren();
+    contacts.reset();
+    helpEntries.reset();
     loadedKey = null;
     editor.reset();
     surveys.reset();

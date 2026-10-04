@@ -952,6 +952,24 @@ test('officers record a cancelled RSVP or a withdrawn newsletter request, and ca
   assert.equal(legacy.body.current.state, 'pending');
   assert.equal((await row(rsvp)).state, 'pending');
   assert.equal((await audit()).length, 3);
+  // The newsletter keeps its name: never 'an AI Review subscription'.
+  assert.equal(
+    (await post({ action: 'state', id: question, state: 'cancelled' })).body
+      .error,
+    'Only an RSVP can be cancelled, and only The AI Review subscription withdrawn.',
+  );
+  await db.query("UPDATE club_forms.entries SET state='pending' WHERE id=$1", [
+    subscribe,
+  ]);
+  assert.equal(
+    (await post({ action: 'state', id: subscribe, state: 'active' })).body
+      .error,
+    "The AI Review subscription's state can't be changed here.",
+  );
+  await db.query(
+    "UPDATE club_forms.entries SET state='unsubscribed' WHERE id=$1",
+    [subscribe],
+  );
   assert.equal(
     (await post({ action: 'state', id: rsvp, state: 'active' }, 'no')).status,
     401,

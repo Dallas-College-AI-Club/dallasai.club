@@ -80,11 +80,12 @@ async function signInAgain(page, email) {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 }
 async function openContact(page) {
+  await page.locator('#inbox-tab').click();
   await page
     .locator('#inbox-pane')
     .getByRole('button', { name: 'Contacts & follow-up', exact: true })
     .click();
-  const dialog = page.locator('.contact-dialog:not(.submission-dialog)');
+  const dialog = page.locator('#contacts-pane');
   await dialog.getByRole('button', { name: /rsvp@example.edu/ }).click();
   return dialog;
 }
@@ -198,8 +199,9 @@ try {
       await expect(
         dialog.getByLabel('Record a follow-up note', { exact: true }),
       ).toHaveValue('Unsaved note kept through sign-in');
-      // The reopened dialog still returns focus to the button that opened it.
-      await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+      // Back to the Inbox still returns focus to the button that opened
+      // Contacts.
+      await page.goBack();
       await expect
         .poll(() => page.evaluate(() => document.activeElement.textContent))
         .toBe('Contacts & follow-up');
@@ -525,7 +527,7 @@ try {
     await page.evaluate(() => {
       location.hash = '';
     });
-    await expect(page.locator('#inbox-pane')).toBeVisible();
+    await expect(page.locator('#home-pane')).toBeVisible();
   });
   await check(
     'Cancelled browser navigation retains custom draft and address',
@@ -550,70 +552,66 @@ try {
       assert.equal(dialogs.length, 1);
     },
   );
-  await check('Contact notes survive closing and reopening', async (page) => {
-    await page
-      .locator('#inbox-pane')
-      .getByRole('button', { name: 'Contacts & follow-up', exact: true })
-      .click();
-    const dialog = page.locator('.contact-dialog:not(.submission-dialog)');
-    await dialog.getByRole('button', { name: /rsvp@example.edu/ }).click();
-    await dialog
-      .getByLabel('Record a follow-up note', { exact: true })
-      .fill('Unsaved follow-up that should not disappear');
-    await dialog.getByRole('button', { name: 'Close', exact: true }).click();
-    await page
-      .locator('#inbox-pane')
-      .getByRole('button', { name: 'Contacts & follow-up', exact: true })
-      .click();
-    await dialog.getByRole('button', { name: /rsvp@example.edu/ }).click();
-    await expect(
-      dialog.getByLabel('Record a follow-up note', { exact: true }),
-    ).toHaveValue('Unsaved follow-up that should not disappear');
-    await page.setViewportSize({ width: 390, height: 550 });
-    await dialog.evaluate((el) => {
-      el.scrollTop = el.scrollHeight;
-    });
-    const close = dialog.getByRole('button', {
-      name: 'Close',
-      exact: true,
-    });
-    const rect = await close.boundingBox();
-    assert.ok(
-      rect.y >= 0 && rect.y + rect.height <= 550,
-      'Close remains onscreen while contact history scrolls',
-    );
-    await page.screenshot({
-      path: path.join(screens, 'contact-scroll-mobile.png'),
-    });
-    let count = 0;
-    await page.route('**/api/surveys', async (route) => {
-      if (route.request().postDataJSON()?.action !== 'contact-note')
-        return route.continue();
-      if (++count === 1) {
-        await route.fetch();
-        await route.abort('failed');
-      } else await route.continue();
-    });
-    const save = dialog.getByRole('button', {
-      name: 'Save note',
-      exact: true,
-    });
-    await save.click();
-    await expect(dialog).toContainText('Could not connect to Club Office');
-    await save.click();
-    await expect(
-      dialog.getByLabel('Record a follow-up note', { exact: true }),
-    ).toHaveValue('');
-    assert.equal(
-      (
-        await fixture.db.query(
-          'SELECT count(*)::int n FROM club_forms.contact_notes WHERE email=$1',
-          ['rsvp@example.edu'],
-        )
-      ).rows[0].n,
-      1,
-    );
-  });
+  await check(
+    'Contact notes survive leaving the tab and coming back',
+    async (page) => {
+      await page
+        .locator('#inbox-pane')
+        .getByRole('button', { name: 'Contacts & follow-up', exact: true })
+        .click();
+      const dialog = page.locator('#contacts-pane');
+      await dialog.getByRole('button', { name: /rsvp@example.edu/ }).click();
+      await dialog
+        .getByLabel('Record a follow-up note', { exact: true })
+        .fill('Unsaved follow-up that should not disappear');
+      await page.locator('#inbox-tab').click();
+      await page
+        .locator('#inbox-pane')
+        .getByRole('button', { name: 'Contacts & follow-up', exact: true })
+        .click();
+      await dialog.getByRole('button', { name: /rsvp@example.edu/ }).click();
+      await expect(
+        dialog.getByLabel('Record a follow-up note', { exact: true }),
+      ).toHaveValue('Unsaved follow-up that should not disappear');
+      await page.setViewportSize({ width: 390, height: 550 });
+      // On a phone every tab, Contacts included, stays in view.
+      for (const tab of await page.locator('#app-nav a').all()) {
+        const rect = await tab.boundingBox();
+        assert.ok(rect.x >= 0 && rect.x + rect.width <= 390);
+      }
+      await page.screenshot({
+        path: path.join(screens, 'contact-scroll-mobile.png'),
+      });
+      let count = 0;
+      await page.route('**/api/surveys', async (route) => {
+        if (route.request().postDataJSON()?.action !== 'contact-note')
+          return route.continue();
+        if (++count === 1) {
+          await route.fetch();
+          await route.abort('failed');
+        } else await route.continue();
+      });
+      const save = dialog.getByRole('button', {
+        name: 'Save note',
+        exact: true,
+      });
+      await save.click();
+      await expect(dialog).toContainText('Could not connect to Club Office');
+      await save.click();
+      await expect(
+        dialog.getByLabel('Record a follow-up note', { exact: true }),
+      ).toHaveValue('');
+      assert.equal(
+        (
+          await fixture.db.query(
+            'SELECT count(*)::int n FROM club_forms.contact_notes WHERE email=$1',
+            ['rsvp@example.edu'],
+          )
+        ).rows[0].n,
+        1,
+      );
+    },
+  );
   await check(
     'Survey answers survive a lost acknowledgement without duplicate receipts',
     async (page) => {
@@ -1060,7 +1058,7 @@ try {
         .locator('#inbox-pane')
         .getByRole('button', { name: 'Contacts & follow-up', exact: true })
         .click();
-      const dialog = page.locator('.contact-dialog:not(.submission-dialog)');
+      const dialog = page.locator('#contacts-pane');
       await dialog.getByRole('button', { name: /join@example.edu/ }).click();
       await dialog
         .getByLabel('Record a follow-up note', { exact: true })
@@ -1092,7 +1090,7 @@ try {
       await dialog
         .getByLabel('Contact name', { exact: true })
         .fill('Unsaved profile name');
-      await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+      await page.locator('#inbox-tab').click();
       await page
         .locator('#inbox-pane')
         .getByRole('button', { name: 'Contacts & follow-up', exact: true })
@@ -1688,7 +1686,7 @@ try {
   await check(
     'A contact edit draft survives a change to the contact',
     async (page) => {
-      const dialog = page.locator('.contact-dialog:not(.submission-dialog)'),
+      const dialog = page.locator('#contacts-pane'),
         open = async () => {
           await page
             .locator('#inbox-pane')
@@ -1705,7 +1703,7 @@ try {
       await dialog
         .getByLabel('Contact name', { exact: true })
         .fill('Draft contact name');
-      await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+      await page.locator('#inbox-tab').click();
       const bumped = await fixture.db.query(
         "UPDATE club_forms.contacts SET revision=revision+1 WHERE email='workshop@example.edu'",
       );
@@ -1754,7 +1752,7 @@ try {
         page,
         'Written before the other tab signed in',
       );
-      await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+      await page.locator('#inbox-tab').click();
       await fetch(fixture.origin + '/api/auth/sign-in/email-otp', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -2188,46 +2186,43 @@ try {
       assert.equal(await page.evaluate(() => window.samePage), true);
     },
   );
-  await check(
-    'The editor actions stay clear of the tab bar and of toasts',
-    async (page) => {
-      // A failed refresh leaves an error toast, which stays across sections.
-      await page.route('**/api/admin?**', (route) =>
-        route.fulfill({
-          status: 503,
-          contentType: 'application/json',
-          body: JSON.stringify({ error: 'Club Office is busy.' }),
-        }),
-      );
-      await page.locator('#refresh').click();
-      await page.locator('#toasts .toast-error').waitFor();
-      await page.unroute('**/api/admin?**');
-      await page.locator('#events-tab').click();
-      await page.locator('#new-event').click();
-      for (const width of [390, 768, 1440]) {
-        await page.setViewportSize({ width, height: 700 });
-        await page
-          .locator('#event-form [name="summary"]')
-          .evaluate((el) => el.scrollIntoView({ block: 'center' }));
-        await page.mouse.move(width - 2, 2);
-        const covered = await page
-          .locator('.primary-actions button')
-          .evaluateAll((buttons) =>
-            buttons
-              .filter((button) => {
-                const box = button.getBoundingClientRect(),
-                  hit = document.elementFromPoint(
-                    box.left + box.width / 2,
-                    box.top + box.height / 2,
-                  );
-                return !button.contains(hit);
-              })
-              .map((button) => button.textContent.trim()),
-          );
-        assert.deepEqual(covered, [], `covered at ${width}px`);
-      }
-    },
-  );
+  await check('The editor actions stay clear of toasts', async (page) => {
+    // A failed refresh leaves an error toast, which stays across sections.
+    await page.route('**/api/admin?**', (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Club Office is busy.' }),
+      }),
+    );
+    await page.locator('#refresh').click();
+    await page.locator('#toasts .toast-error').waitFor();
+    await page.unroute('**/api/admin?**');
+    await page.locator('#events-tab').click();
+    await page.locator('#new-event').click();
+    for (const width of [390, 768, 1440]) {
+      await page.setViewportSize({ width, height: 700 });
+      await page
+        .locator('#event-form [name="summary"]')
+        .evaluate((el) => el.scrollIntoView({ block: 'center' }));
+      await page.mouse.move(width - 2, 2);
+      const covered = await page
+        .locator('.primary-actions button')
+        .evaluateAll((buttons) =>
+          buttons
+            .filter((button) => {
+              const box = button.getBoundingClientRect(),
+                hit = document.elementFromPoint(
+                  box.left + box.width / 2,
+                  box.top + box.height / 2,
+                );
+              return !button.contains(hit);
+            })
+            .map((button) => button.textContent.trim()),
+        );
+      assert.deepEqual(covered, [], `covered at ${width}px`);
+    }
+  });
   await check('The account menu works from the keyboard', async (page) => {
     const menu = page.locator('#account-menu'),
       button = page.locator('#account-button');
@@ -2238,10 +2233,10 @@ try {
     await page.locator('#signout').focus();
     await page.keyboard.press('Tab');
     await expect(menu).toBeHidden();
-    await expect(page.locator('#inbox-tab')).toBeFocused();
+    await expect(page.locator('#home-tab')).toBeFocused();
     await button.click();
     // A click on plain content closes it and returns focus to the button.
-    await page.locator('#counts .count').last().click();
+    await page.locator('#inbox-updated').click();
     await expect(menu).toBeHidden();
     await expect(button).toBeFocused();
     // On a phone the sheet covers any toast.
@@ -2346,7 +2341,7 @@ try {
       ).toHaveCount(0);
       for (const width of [320, 375, 768, 1024, 1440]) {
         await page.setViewportSize({ width, height: 700 });
-        for (const pane of ['inbox', 'events', 'surveys']) {
+        for (const pane of ['home', 'inbox', 'events', 'surveys', 'contacts']) {
           await page.locator('#' + pane + '-tab').click();
           await expect(page.locator('#' + pane + '-pane')).toBeVisible();
           assert.equal(
@@ -2357,7 +2352,15 @@ try {
             `${pane} overflows at ${width}px`,
           );
         }
-        // The section tabs sit across the top at every width, Help included.
+        // The section tabs sit across the top at every width, and every one
+        // is in view (they wrap on narrow screens), Help included.
+        for (const tab of await page.locator('#app-nav a').all()) {
+          const box = await tab.boundingBox();
+          assert.ok(
+            box.x >= 0 && box.x + box.width <= width,
+            `a tab is cut off at ${width}px`,
+          );
+        }
         await page.locator('#help-tab').click();
         await expect(page.locator('#help-pane')).toBeVisible();
         await page.locator('#inbox-tab').click();
@@ -2691,6 +2694,323 @@ try {
           { exact: true },
         ),
       ).toBeVisible();
+    },
+  );
+  // --- Release B: Home, fold, RSVP groups, Contacts tab, Help topics. ---
+  const homeQuestion = randomUUID();
+  await fixture.db.query(
+    `INSERT INTO club_forms.entries(id,kind,email,name,dedupe_key,data) VALUES($1::uuid,'question','home-check@example.edu','Home Check Person',$1::text,'{"subject":"Home check subject","message":"Hello"}')`,
+    [homeQuestion],
+  );
+  for (const n of [1, 2])
+    await fixture.db.query(
+      `INSERT INTO club_forms.entries(id,kind,email,name,dedupe_key,data) VALUES($1::uuid,'rsvp',$2,'Home RSVP',$1::text,$3)`,
+      [
+        randomUUID(),
+        'home-rsvp-' + n + '@example.edu',
+        JSON.stringify({
+          eventId: 'home-check-event',
+          eventTitle: 'Home check event',
+          eventDate: '2020-02-02',
+        }),
+      ],
+    );
+  await fixture.db.query(
+    `INSERT INTO club_forms.events(id,draft,revision,updated_by) VALUES('home-draft','{"title":"Home draft event","date":"2031-01-05","category":"Workshop","description":"Draft"}',1,'officer@example.com')`,
+  );
+  await check(
+    'Home is the landing page and its tiles show what needs review',
+    async (page) => {
+      await page.goto(fixture.origin + '/admin/');
+      await expect(page.locator('#home-pane')).toBeVisible();
+      await expect(page.locator('#home-tab')).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
+      await expect(page).toHaveTitle(/^\(\d+\) Home · Club Office$/);
+      // The black-square logo in light mode too, at the original size.
+      const logo = page.locator('.brand .office-logo');
+      await expect(logo).toHaveAttribute('src', /club-office-logo-dark\.png$/);
+      assert.equal(await logo.evaluate((img) => img.naturalWidth), 500);
+      const needs = page.locator('#home-tiles > .tile').first();
+      await expect(needs).toHaveClass(/has-new/);
+      await expect(needs.locator('.tile-label')).toHaveText('Needs review');
+      const group = needs.locator('.rsvp-group', {
+        hasText: 'Home check event',
+      });
+      await expect(group).toContainText('Past event · 2 new RSVPs');
+      const row = needs.locator('.tile-row', { hasText: 'Home Check Person' });
+      await expect(row).toContainText('Question · Home check subject');
+      await row
+        .getByRole('button', { name: 'Mark reviewed', exact: true })
+        .click();
+      await expect(row).toHaveCount(0);
+      await expect(page.locator('#status')).toHaveText(
+        'Submission moved to Reviewed.',
+      );
+      assert.equal(
+        (
+          await fixture.db.query(
+            'SELECT review_status FROM club_forms.entries WHERE id=$1',
+            [homeQuestion],
+          )
+        ).rows[0].review_status,
+        'reviewed',
+      );
+      // Drafts keep the event list's yellow badge and open in Events.
+      const draft = page
+        .locator('#home-tiles .event-choice')
+        .filter({ hasText: 'Home draft event' });
+      await expect(draft.locator('.draft-badge')).toHaveText(
+        'DRAFT · Not published',
+      );
+      for (const label of [
+        'Next event',
+        'Custom survey',
+        'Inbox totals',
+        'Recent activity',
+        'Quick actions',
+      ])
+        await expect(
+          page.locator('#home-tiles .tile-label', { hasText: label }),
+        ).toHaveCount(1);
+      await expect(page.locator('#home-tiles')).toContainText(
+        'Marked reviewed · Question · You',
+      );
+      await draft.click();
+      await expect(page.locator('#events-pane')).toBeVisible();
+      await expect(
+        page.locator('#event-list [aria-pressed="true"]'),
+      ).toContainText('Home draft event');
+      await page.locator('#home-tab').click();
+      await page
+        .getByRole('button', { name: 'Find a contact', exact: true })
+        .click();
+      await expect(page.locator('#contacts-pane')).toBeVisible();
+      await expect(
+        page.locator('#contacts-pane input[type="search"]'),
+      ).toBeFocused();
+      await page.locator('#home-tab').click();
+      await page
+        .getByRole('button', { name: 'New event', exact: true })
+        .click();
+      await expect(page.locator('#event-form')).toBeVisible();
+      await expect(page.locator('#event-heading')).toHaveText('New event');
+      // Show all opens that event's RSVPs, past or upcoming, in the Inbox.
+      await page.locator('#home-tab').click();
+      await page
+        .locator('.rsvp-group', { hasText: 'Home check event' })
+        .getByRole('link', { name: 'Show all' })
+        .click();
+      await expect(page).toHaveURL(
+        /#\/inbox\?type=rsvp-all&event=home-check-event$/,
+      );
+      await expect(page.locator('#filters [name="kind"]')).toHaveValue(
+        'rsvp-all',
+      );
+      await expect(page.locator('.inbox-group > summary')).toHaveText(
+        'Home check event · 2 RSVPs',
+      );
+    },
+  );
+  await check(
+    'Inbox counts fold away, and RSVPs group by event with true counts and chips',
+    async (page) => {
+      const fold = page.locator('#counts-fold');
+      await expect(fold).not.toHaveAttribute('open', '');
+      await expect(page.locator('#counts .count').first()).toBeHidden();
+      await expect(page.locator('#counts-summary')).toHaveText(
+        /^Counts · \d+ new: .*RSVPs/,
+      );
+      await page.locator('#counts-summary').click();
+      await expect(page.locator('#counts .count').first()).toBeVisible();
+      await page.locator('#filters [name="kind"]').selectOption('rsvp-all');
+      const chips = page.locator('#event-chips');
+      await expect(chips).toBeVisible();
+      await expect(
+        chips.getByRole('button', { name: 'All events', exact: true }),
+      ).toHaveAttribute('aria-pressed', 'true');
+      // The select stays for phones; chips replace it on wide screens.
+      await expect(page.locator('#event-filter-label')).toBeHidden();
+      const group = page.locator('.inbox-group', {
+        hasText: 'Home check event',
+      });
+      await expect(group.locator('> summary')).toHaveText(
+        'Home check event · 2 RSVPs',
+      );
+      await chips
+        .getByRole('button', { name: 'Home check event', exact: true })
+        .click();
+      await expect(page).toHaveURL(/type=rsvp-all&event=home-check-event/);
+      await expect(
+        chips.getByRole('button', { name: 'Home check event', exact: true }),
+      ).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.locator('#export')).toHaveAttribute(
+        'href',
+        /kind=rsvp-all&eventId=home-check-event/,
+      );
+      await page.setViewportSize({ width: 390, height: 800 });
+      await expect(chips).toBeHidden();
+      await expect(page.locator('#event-filter-label')).toBeVisible();
+    },
+  );
+  await check(
+    'Contacts is a tab that keeps its place and opens a person directly',
+    async (page) => {
+      await page.locator('#contacts-tab').click();
+      const pane = page.locator('#contacts-pane');
+      await expect(pane).toBeVisible();
+      await expect(page).toHaveTitle(/Contacts · Club Office$/);
+      await expect(page).toHaveURL(/#\/contacts$/);
+      await pane
+        .getByRole('button', { name: /home-check@example.edu/ })
+        .click();
+      await expect(page.locator('#contacts-heading')).toHaveText(
+        'Home Check Person',
+      );
+      await page.locator('#events-tab').click();
+      await page.locator('#contacts-tab').click();
+      await expect(page.locator('#contacts-heading')).toHaveText(
+        'Home Check Person',
+      );
+      await expect(page.locator('#contacts-heading')).toBeFocused();
+      // The Inbox button still opens the directory, now on the tab.
+      await page.locator('#inbox-tab').click();
+      await page
+        .locator('#inbox-pane')
+        .getByRole('button', { name: 'Contacts & follow-up', exact: true })
+        .click();
+      await expect(page.locator('#contacts-heading')).toHaveText('Contacts');
+      await expect(page).toHaveURL(/#\/contacts$/);
+      assert.ok(!page.url().includes('@'));
+    },
+  );
+  await check(
+    'Officers add, edit, archive, restore and delete Help topics as plain text',
+    async (page) => {
+      await page.locator('#help-tab').click();
+      const form = page.locator('#help-form'),
+        topics = page.locator('#help-officer');
+      await expect(page.locator('#help-officer-status')).toHaveText(
+        'No officer topics yet.',
+      );
+      await page
+        .getByRole('button', { name: 'Add a topic', exact: true })
+        .click();
+      await form
+        .getByLabel('Title', { exact: true })
+        .fill('<img src=x onerror="window.pwned=1">Room keys');
+      await form
+        .getByLabel('Text', { exact: true })
+        .fill('Ask <b>facilities</b>.\n\n<script>window.pwned=2</script>');
+      await form
+        .getByRole('button', { name: 'Save topic', exact: true })
+        .click();
+      const entry = page.locator('#help-officer-list .help-entry');
+      await expect(entry.locator('h3')).toHaveText(
+        '<img src=x onerror="window.pwned=1">Room keys',
+      );
+      await expect(entry.locator('.help-entry-text')).toHaveText([
+        'Ask <b>facilities</b>.',
+        '<script>window.pwned=2</script>',
+      ]);
+      assert.equal(await topics.locator('img, b, script').count(), 0);
+      assert.equal(await page.evaluate(() => window.pwned), undefined);
+      await entry.getByRole('button', { name: 'Edit', exact: true }).click();
+      await form.getByLabel('Title', { exact: true }).fill('Room keys');
+      await form
+        .getByLabel('Text', { exact: true })
+        .fill('Ask the front desk.');
+      await form
+        .getByRole('button', { name: 'Save topic', exact: true })
+        .click();
+      await expect(entry.locator('h3')).toHaveText('Room keys');
+      await expect(entry).toContainText('Updated by You');
+      await entry.getByRole('button', { name: 'Archive', exact: true }).click();
+      await expect(page.locator('#help-officer-list .help-entry')).toHaveCount(
+        0,
+      );
+      await page.locator('#help-archived summary').click();
+      const archived = page.locator('#help-archived-list .help-entry');
+      await expect(page.locator('#help-archived summary')).toHaveText(
+        'Archived topics (1)',
+      );
+      await archived
+        .getByRole('button', { name: 'Restore', exact: true })
+        .click();
+      await expect(entry).toHaveCount(1);
+      await expect(page.locator('#help-archived')).toBeHidden();
+      await entry.getByRole('button', { name: 'Delete', exact: true }).click();
+      await expect(page.locator('#confirm-title')).toHaveText(
+        'Delete “Room keys” permanently?',
+      );
+      await page.locator('#confirm-dialog [data-confirm]').click();
+      await expect(entry).toHaveCount(0);
+      assert.equal(
+        (
+          await fixture.db.query(
+            'SELECT count(*)::int AS n FROM club_forms.help_entries',
+          )
+        ).rows[0].n,
+        0,
+      );
+      // The built-in topics and their deep links are unchanged.
+      await page.evaluate(() => {
+        location.hash = '#/help?topic=exports';
+      });
+      await expect(page.locator('#help-exports')).toBeInViewport();
+    },
+  );
+  await check(
+    'A Help topic typed when the session ends is saved after signing in',
+    async (page) => {
+      await page.locator('#help-tab').click();
+      await page
+        .getByRole('button', { name: 'Add a topic', exact: true })
+        .click();
+      const form = page.locator('#help-form');
+      await form.getByLabel('Title', { exact: true }).fill('Parking');
+      await form.getByLabel('Text', { exact: true }).fill('Lot C after 5 PM.');
+      await expireRoute(page, '**/api/admin', 'POST');
+      await form
+        .getByRole('button', { name: 'Save topic', exact: true })
+        .click();
+      await expectPaused(page);
+      await page.unroute('**/api/admin');
+      await signInAgain(page);
+      await expect(
+        page.locator('#help-officer-list .help-entry h3'),
+      ).toHaveText('Parking');
+      await fixture.db.query('DELETE FROM club_forms.help_entries');
+    },
+  );
+  await check(
+    'Tabs keep a full focus ring, the menu stays with its button, highlights survive forced colors',
+    async (page) => {
+      await page.locator('#home-tab').focus();
+      await page.keyboard.press('Tab');
+      const ring = await page
+        .locator('#inbox-tab')
+        .evaluate((tab) => getComputedStyle(tab).outlineOffset);
+      assert.equal(ring, '-2px');
+      await page.setViewportSize({ width: 1024, height: 500 });
+      await page.locator('#account-button').click();
+      await page.mouse.wheel(0, 300);
+      await page.waitForFunction(() => scrollY > 0);
+      const button = await page.locator('#account-button').boundingBox(),
+        menu = await page.locator('#account-menu').boundingBox();
+      assert.ok(
+        Math.abs(menu.y - (button.y + button.height)) < 20,
+        'menu detached from its button',
+      );
+      await page.keyboard.press('Escape');
+      await page.emulateMedia({ forcedColors: 'active' });
+      await page.locator('#counts-summary').click();
+      const outline = await page
+        .locator('#counts .count.has-new')
+        .first()
+        .evaluate((card) => getComputedStyle(card).outlineStyle);
+      assert.equal(outline, 'solid');
     },
   );
 } finally {

@@ -4,11 +4,31 @@ Hugo serves the public website on GitHub Pages. The Vercel backend stores club s
 
 ## How officers learn about a signup
 
-Open the protected backend `/admin/` page. New submissions appear with review status **New**. Counts update every minute while the office is open. New arrivals show a **N new · Show** button instead of reshuffling the list, and Refresh reloads it immediately. Officers can filter by submission type and review status, review or close submissions, download private attachments, and export up to 10,000 matching records. Name/email search is not shown. The Event RSVPs view, counts and CSV exports include only currently published upcoming events (including potential events with TBD dates); an Event dropdown selects one. Past RSVP records remain stored. Administrative updates, downloads, and exports are logged.
+Open the protected backend `/admin/` page. It opens on **Home**, a page of tiles showing what needs officers this week (see below); **Inbox** holds the full list. New submissions appear with review status **New**. Counts update every minute while the office is open. New arrivals show a **N new · Show** button instead of reshuffling the list, and Refresh reloads it immediately. Officers can filter by submission type and review status, review or close submissions, download private attachments, and export up to 10,000 matching records. Name/email search is not shown. The Event RSVPs view, counts and CSV exports include only currently published upcoming events (including potential events with TBD dates); an Event dropdown selects one. Past RSVP records remain stored. Administrative updates, downloads, and exports are logged.
 
 The **Browser alerts** switch in the account menu requests browser permission and shows an alert, with counts by type, when a newer submission arrives. An officer’s own status changes never raise one. The officer must keep the office tab open; browser throttling can delay background checks. New counts and an on-screen notice also update without notification permission. The on/off preference is remembered in this browser and synchronized across office tabs. Alerts stop at sign-out or when the office is closed; reopening the office resumes a remembered on preference only when browser permission is still granted. Email alerts remain disconnected; the UI states this explicitly. Neon login-code delivery is a separate service and does not send inbox alerts.
 
-The office uses the approved Studio appearance with locally served Geist typography. The header shows the club name, and the sections are tabs across the top at every width: **Inbox**, **Events**, **Surveys** and **Help**. Events uses the Desk layout (event list beside the editor). Count cards with new submissions, the open submission and the open survey response are highlighted with the selected tint and an accent line; everything else keeps plain lines. Appearance controls and alternative themes, fonts, and layouts have been removed; old saved preferences no longer apply. The office follows the browser’s light/dark setting while retaining the Studio design. The supplied black-on-white and white-on-black logos are used only in the office, including its sign-in page and favicon. The public website's branding is unchanged.
+The office uses the approved Studio appearance with locally served Geist typography. The header shows the black-square club logo (white artwork on black, in light and dark mode alike), the club name and the account button, and the sections are tabs across the top at every width: **Home**, **Inbox** (with the New count), **Events**, **Surveys**, **Contacts** and **Help**. On narrow phones the tabs wrap onto a second line so every tab stays in view, and a focused tab shows its whole focus ring. On wider screens the account menu scrolls with its button. Events uses the Desk layout (event list beside the editor). Count cards and Home tiles with new submissions, and the selected event chip, are highlighted with the selected tint and an accent line; the open submission and the open survey response get the accent line; everything else keeps plain lines. Group labels use small capitals, and unpublished events keep the yellow **DRAFT · Not published** badge. Appearance controls and alternative themes, fonts, and layouts have been removed; old saved preferences no longer apply. The office follows the browser’s light/dark setting while retaining the Studio design. The supplied 500×500 black-on-white and white-on-black logos are used only in the office: the header and sign-in page use the black-square logo, and the favicon follows the light/dark setting. The public website's branding is unchanged.
+
+### Home
+
+**Home** is the landing page (`#/home`; the brand link returns to it). One read of `/api/admin?home=1` fills its tiles, and like the Inbox list it signs the officer in, shares the counts poll and is cleared on sign-out or after ten minutes paused:
+
+- **Needs review** counts every New submission. New RSVPs are grouped by event (cancelled RSVPs are not counted), each with **Show all**, which opens that event's RSVPs in the Inbox (`#/inbox?type=rsvp-all&event=<id>`). The newest other New submissions are listed with **Mark reviewed**, which works like the Inbox button (a typed note is saved with it) and refreshes the counts; **Open inbox** opens the list.
+- **Next event** is the first upcoming event with a date: its date, type, RSVP count and **Open event**. Potential events without a date are listed on their own line.
+- **Custom survey** is the open custom survey with its response count and link expiry; **Open responses** opens it in Surveys › Custom surveys, where each response's PDF and the CSV export are.
+- **Drafts & unpublished changes** shows unpublished events as event cards; choosing one opens it in Events.
+- **Inbox totals** are the per-type totals and New counts, each opening the Inbox filtered to that type.
+- **Recent activity** lists officers' own recent actions (reviews, exports, event and custom-survey changes, Help topic changes) with the type or title they concern. It never shows a member's name, email, comment or submitted text.
+- **Quick actions**: **New event**, **Create custom survey** (opens Custom surveys) and **Find a contact** (opens Contacts with the search box focused).
+
+While Home is shown, the minute-by-minute check redraws it only when a count has changed.
+
+### Inbox counts and RSVPs by event
+
+The Inbox count cards are folded by default. The fold's summary still says what is new, for example “Counts · 3 new: 2 RSVPs, 1 question”; open it to see each type's New and total counts. Browser alerts use the same wording and keep **The AI Review** capitalized.
+
+RSVPs in the list are grouped by event. Each event group shows how many RSVPs match the current filters in total, not only those on the page, and has **Show all** for that event. The Type filter also offers **RSVPs for all events** (upcoming and past). For any RSVP type, event chips with **All events** appear above the list on wider screens; on phones, and when there are more than eight events, the Event dropdown is used instead. The chosen event stays in the address, and Export filtered CSV follows it.
 
 ## Submission activity and comments
 
@@ -88,7 +108,10 @@ values are escaped. CSV does not control Excel's column widths or wrap settings.
 Reports refuse more than 10,000 matches explicitly; narrow the event/search rather
 than receiving a silently incomplete export.
 
-**Contacts & follow-up**, available from Inbox and Event surveys, consolidates
+**Contacts** is its own tab (`#/contacts`). **Contacts & follow-up** in Inbox and
+Event surveys opens the tab's directory, and a survey response's **Contact history**
+opens that person directly; email addresses never appear in the address bar. The
+tab keeps its search or open person while officers use other tabs. It consolidates
 website submissions by normalized email. **Merge with another contact** lets an
 officer explicitly link a person's e-number and named school email addresses.
 Search for and select the contact to keep, then review **Confirm merge**. Its

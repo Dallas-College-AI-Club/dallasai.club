@@ -8,15 +8,15 @@ import {
   node,
 } from './ui.js';
 import { dateTime, day, plural } from './format.js';
-import { contactHistory } from './contact-history.js';
 import { submissionEditor } from './submission-editor.js';
 import { isPaused } from './session.js';
 // onReset runs when the filters replace a single-response view, so the
-// address can drop the response.
+// address can drop the response. openContacts(email) shows the Contacts tab.
 export function mountSurveyResults(
   api,
   onContactPurge = () => {},
   onReset = () => {},
+  openContacts = () => {},
 ) {
   const editor = submissionEditor(api, async (result) => {
     await load();
@@ -33,11 +33,7 @@ export function mountSurveyResults(
         : 'Response permanently deleted.'
       : 'Response updated.';
   });
-  const q = (s) => document.querySelector(s),
-    contacts = contactHistory(api, (result) => {
-      load();
-      if (result.purged) onContactPurge();
-    });
+  const q = (s) => document.querySelector(s);
   let offset = 0,
     entryId = '',
     generation = 0,
@@ -72,11 +68,11 @@ export function mountSurveyResults(
     searchLabel,
     viewLabel,
     starLabel,
-    button('Contacts & follow-up', () => contacts.open()),
+    button('Contacts & follow-up', () => openContacts()),
   );
   q('#survey-status').before(tools);
   q('#inbox-pane .heading')?.append(
-    button('Contacts & follow-up', () => contacts.open()),
+    button('Contacts & follow-up', () => openContacts()),
   );
   const reportTools = node('div', undefined, 'survey-tools'),
     report = node('div', undefined, 'survey-report'),
@@ -359,7 +355,7 @@ export function mountSurveyResults(
     actions.append(
       mark,
       archive,
-      button('Contact history', () => contacts.open(response.email)),
+      button('Contact history', () => openContacts(response.email)),
       button('Edit response', () =>
         editor.open(response.entry_id, { surface: 'survey' }),
       ),
@@ -531,7 +527,6 @@ export function mountSurveyResults(
       q('#survey-status').textContent = '';
       clearReport();
       reportStatus.textContent = 'Close this and compile the summary again.';
-      contacts.reset();
     },
     show(id = '') {
       entryId = id;
@@ -547,7 +542,6 @@ export function mountSurveyResults(
       clearTimeout(timer);
       entryId = '';
       offset = 0;
-      contacts.clear();
       editor.clear();
       closeReport();
       shown.clear();

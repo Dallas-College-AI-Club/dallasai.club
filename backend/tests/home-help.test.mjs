@@ -1,0 +1,450 @@
+// Release B: the Home summary, true RSVP counts per event in the Inbox, and
+// officers' own Help topics (migration 019).
+import { testDatabase } from './helpers/db.mjs';
+import test, { before, after, beforeEach } from 'node:test';
+import assert from 'node:assert/strict';
+import http from 'node:http';
+import { randomUUID } from 'node:crypto';
+import { adminHandler } from '../api/admin.mjs';
+import { RequestError } from '../lib/errors.mjs';
+let db, server, origin;
+const events = [
+  { id: 'past', title: 'Past', date: '2020-01-01' },
+  {
+    id: 'next',
+    title: 'Next event',
+    date: '2099-01-02T17:00:00-06:00',
+    category: 'Workshop',
+  },
+  { id: 'later', title: 'Later event', date: '2099-03-01' },
+  { id: 'maybe', title: 'Maybe someday', date: '', potential: true },
+];
+const officer = 'officer@example.com';
+const authorize = (req) => {
+  if (req.headers['x-test-admin'] === 'yes') return { email: officer };
+  throw new RequestError(401, 'Sign in');
+};
+const request = (route, body) =>
+  fetch(origin + route, {
+    method: body ? 'POST' : 'GET',
+    headers: {
+      'x-test-admin': 'yes',
+      ...(body ? { 'Content-Type': 'application/json', Origin: origin } : {}),
+    },
+    ...(body ? { body: JSON.stringify(body) } : {}),
+  });
+const get = async (query) => {
+  const response = await request('/api/admin' + query);
+  assert.equal(response.status, 200, query);
+  return response.json();
+};
+const post = async (body) => {
+  const response = await request('/api/admin', body);
+  return { status: response.status, body: await response.json() };
+};
+let minute = 0;
+const insert = async ({
+  kind = 'question',
+  email = 'member@example.edu',
+  name = 'Member Person',
+  data = {},
+  status = 'new',
+  state = 'active',
+} = {}) => {
+  const id = randomUUID(),
+    created = new Date(Date.UTC(2026, 0, 1, 0, minute++)).toISOString();
+  await db.query(
+    'INSERT INTO club_forms.entries(id,kind,email,name,data,dedupe_key,created_at,updated_at,review_status,state) VALUES($1::uuid,$2,$3,$4,$5,$1::text,$6,$6,$7,$8)',
+    [id, kind, email, name, JSON.stringify(data), created, status, state],
+  );
+  return id;
+};
+const rsvp = (eventId, extra = {}) =>
+  insert({
+    kind: 'rsvp',
+    email: randomUUID() + '@example.edu',
+    data: { eventId, eventTitle: 'Saved ' + eventId, eventDate: '2099-01-02' },
+    ...extra,
+  });
+before(async () => {
+  db = await testDatabase();
+  server = http.createServer(
+    adminHandler({
+      getDatabase: () => db,
+      authorize,
+      getEvents: async () => events,
+      storage: {},
+    }),
+  );
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  origin = 'http://127.0.0.1:' + server.address().port;
+  process.env.AUTH_BASE_URL = origin;
+});
+beforeEach(() =>
+  db.exec(
+    `TRUNCATE club_forms.entries,club_forms.contacts,club_forms.audit,club_forms.events,club_forms.custom_surveys,club_forms.help_entries RESTART IDENTITY CASCADE`,
+  ),
+);
+after(async () => {
+  await new Promise((resolve) => server.close(resolve));
+  await db.close();
+});
+
+test('Home groups new RSVPs by event with true counts, cancelled ones left out', async () => {
+  await rsvp('next');
+  await rsvp('next');
+  await rsvp('next', { status: 'reviewed' });
+  await rsvp('next', { state: 'cancelled' });
+  await rsvp('past');
+  await rsvp('later', { status: 'reviewed' });
+  const home = await get('?home=1');
+  assert.deepEqual(
+    home.rsvpGroups.map(({ id, title, total, new: fresh, past }) => ({
+      id,
+      title,
+      total,
+      new: fresh,
+      past,
+    })),
+    [
+      // Upcoming first; the published title wins over the saved snapshot.
+      { id: 'next', title: 'Next event', total: 3, new: 2, past: false },
+      { id: 'past', title: 'Past', total: 1, new: 1, past: true },
+    ],
+  );
+  // The counts are the poll's: per kind, RSVPs for past events apart.
+  assert.equal(home.counts.find((row) => row.kind === 'rsvp').new, 3);
+  assert.equal(home.counts.find((row) => row.kind === 'rsvp-past').new, 1);
+  assert.equal(home.user, officer);
+});
+
+test('Home: newest New submissions, next dated event, potential events, drafts and the open survey', async () => {
+  await insert({ data: { subject: 'Is the workshop beginner friendly?' } });
+  await insert({
+    kind: 'join',
+    name: 'Second Person',
+    data: { campus: 'Richland' },
+  });
+  await insert({ status: 'reviewed', data: { subject: 'Old' } });
+  await rsvp('next');
+  await rsvp('next', { state: 'cancelled' });
+  for (const [id, published, revision, publishedRevision] of [
+    ['draft-only', null, 1, 0],
+    ['changed', { id: 'changed', title: 'Live' }, 3, 2],
+    ['published', { id: 'published', title: 'Live' }, 2, 2],
+  ])
+    await db.query(
+      `INSERT INTO club_forms.events(id,draft,published,revision,published_revision,updated_by) VALUES($1,$2,$3,$4,$5,$6)`,
+      [
+        id,
+        JSON.stringify({ title: 'Draft ' + id, date: '2099-05-01' }),
+        published && JSON.stringify(published),
+        revision,
+        publishedRevision,
+        officer,
+      ],
+    );
+  const survey = randomUUID();
+  await db.query(
+    `INSERT INTO club_forms.custom_surveys(id,slug,title,content_version,status,link_digest,expires_at) VALUES($1,'advisors','Advisor Studio','1','open','digest',now()+interval '30 days')`,
+    [survey],
+  );
+  for (const [advisor, answered] of [
+    ['a1', true],
+    ['a2', true],
+    ['a3', false],
+  ]) {
+    await db.query(
+      `INSERT INTO club_forms.custom_survey_members(survey_id,advisor_id,display_name,email) VALUES($1,$2,$3,$4)`,
+      [survey, advisor, 'Advisor ' + advisor, advisor + '@example.edu'],
+    );
+    await db.query(
+      `INSERT INTO club_forms.custom_survey_responses(survey_id,advisor_id,revision,responses) VALUES($1,$2,1,$3)`,
+      [survey, advisor, answered ? '[{"id":"q1","value":"yes"}]' : '[]'],
+    );
+  }
+  const home = await get('?home=1');
+  // RSVPs are grouped by event instead; only other kinds are listed.
+  assert.deepEqual(
+    home.newest.map((entry) => [entry.kind, entry.name, entry.preview]),
+    [
+      ['join', 'Second Person', 'Richland'],
+      ['question', 'Member Person', 'Is the workshop beginner friendly?'],
+    ],
+  );
+  assert.equal(home.newest[0].data, undefined);
+  assert.deepEqual(home.nextEvent, {
+    id: 'next',
+    title: 'Next event',
+    date: '2099-01-02T17:00:00-06:00',
+    category: 'Workshop',
+    rsvps: 1,
+  });
+  assert.deepEqual(home.potential, [{ id: 'maybe', title: 'Maybe someday' }]);
+  assert.deepEqual(
+    home.unpublished.map((event) => [event.id, event.title, event.live]).sort(),
+    [
+      ['changed', 'Draft changed', true],
+      ['draft-only', 'Draft draft-only', false],
+    ],
+  );
+  assert.equal(home.survey.title, 'Advisor Studio');
+  assert.equal(home.survey.responses, 2);
+});
+
+test('Home activity lists officer actions with labels, never member data', async () => {
+  const entry = await insert({
+    email: 'private.person@example.edu',
+    name: 'Private Person',
+    data: { subject: 'Private subject' },
+  });
+  assert.equal(
+    (
+      await post({
+        action: 'review',
+        id: entry,
+        status: 'reviewed',
+        from: 'new',
+      })
+    ).status,
+    200,
+  );
+  await db.query(
+    "INSERT INTO club_forms.audit(actor,entry_id,action) VALUES('website',$1,'resubmitted')",
+    [entry],
+  );
+  await post({
+    action: 'comment',
+    entryId: entry,
+    id: randomUUID(),
+    body: 'Private comment body',
+  });
+  await db.query(
+    `INSERT INTO club_forms.events(id,draft,revision,updated_by) VALUES('fall','{"title":"Fall Welcome"}',1,$1)`,
+    [officer],
+  );
+  await db.query(
+    `INSERT INTO club_forms.event_history(event_id,revision,action,actor,content) VALUES('fall',1,'draft',$1,'{"title":"Fall Welcome"}')`,
+    [officer],
+  );
+  const home = await get('?home=1');
+  const text = JSON.stringify(home.activity);
+  for (const secret of [
+    'Private Person',
+    'private.person@example.edu',
+    'Private subject',
+    'Private comment body',
+    'website',
+  ])
+    assert.ok(!text.includes(secret), secret);
+  assert.ok(
+    home.activity.some(
+      (row) => row.action === 'review:reviewed' && row.label === 'question',
+    ),
+  );
+  assert.ok(
+    home.activity.some(
+      (row) => row.source === 'event' && row.label === 'Fall Welcome',
+    ),
+  );
+  assert.ok(home.activity.every((row) => row.actor === officer));
+});
+
+test('the Inbox list gives each event group its true size, beyond the page', async () => {
+  for (let n = 0; n < 53; n++) await rsvp('next');
+  await rsvp('next', { status: 'reviewed' });
+  await rsvp('later');
+  await insert();
+  const page = await get('?kind=rsvp&status=new');
+  assert.equal(page.entries.length, 50);
+  assert.deepEqual(page.eventCounts, { next: 53, later: 1 });
+  // The same filters as the list: status and event narrow the counts too.
+  assert.deepEqual((await get('?kind=rsvp-all&status=reviewed')).eventCounts, {
+    next: 1,
+  });
+  assert.deepEqual((await get('?kind=rsvp&eventId=later')).eventCounts, {
+    later: 1,
+  });
+  assert.deepEqual((await get('?kind=question')).eventCounts, {});
+});
+
+test('Help topics: add, retry, edit, archive, restore and delete, each audited without its text', async () => {
+  const id = randomUUID();
+  const created = await post({
+    action: 'help-save',
+    id,
+    title: '  Room keys  ',
+    body: 'Ask facilities.\r\n\r\nReturn by 5 PM.',
+  });
+  assert.equal(created.status, 200);
+  assert.equal(created.body.entry.title, 'Room keys');
+  assert.equal(created.body.entry.body, 'Ask facilities.\n\nReturn by 5 PM.');
+  assert.equal(created.body.entry.revision, 1);
+  // A retried create with the same text returns the same topic.
+  const retry = await post({
+    action: 'help-save',
+    id,
+    title: 'Room keys',
+    body: 'Ask facilities.\n\nReturn by 5 PM.',
+  });
+  assert.equal(retry.status, 200);
+  assert.equal(retry.body.entry.revision, 1);
+  const edited = await post({
+    action: 'help-save',
+    id,
+    revision: 1,
+    title: 'Room keys',
+    body: 'Ask the front desk.',
+  });
+  assert.equal(edited.body.entry.revision, 2);
+  // An edit from an older revision is refused, not overwritten.
+  const stale = await post({
+    action: 'help-save',
+    id,
+    revision: 1,
+    title: 'Room keys',
+    body: 'Old text',
+  });
+  assert.equal(stale.status, 409);
+  assert.equal(stale.body.code, 'stale-help');
+  const archived = await post({ action: 'help-archive', id, revision: 2 });
+  assert.equal(archived.body.entry.archived, true);
+  let list = await get('?help=1');
+  assert.equal(list.ready, true);
+  assert.deepEqual(
+    list.entries.map((entry) => [entry.title, entry.archived]),
+    [['Room keys', true]],
+  );
+  const restored = await post({ action: 'help-restore', id, revision: 3 });
+  assert.equal(restored.body.entry.archived, false);
+  assert.equal(
+    (await post({ action: 'help-delete', id, revision: 3 })).status,
+    409,
+  );
+  assert.deepEqual(
+    (await post({ action: 'help-delete', id, revision: 4 })).body,
+    {
+      deleted: true,
+      id,
+    },
+  );
+  list = await get('?help=1');
+  assert.deepEqual(list.entries, []);
+  assert.equal(
+    (await post({ action: 'help-archive', id, revision: 4 })).status,
+    404,
+  );
+  const audit = (
+    await db.query(
+      'SELECT actor,entry_id,action FROM club_forms.audit ORDER BY id',
+    )
+  ).rows;
+  assert.deepEqual(
+    audit.map((row) => row.action),
+    [
+      'help-created',
+      'help-edited',
+      'help-archived',
+      'help-restored',
+      'help-deleted',
+    ],
+  );
+  assert.ok(audit.every((row) => row.actor === officer && !row.entry_id));
+});
+
+test('Help topics are validated as plain text', async () => {
+  const save = (fields) =>
+    post({ action: 'help-save', id: randomUUID(), ...fields });
+  for (const [fields, message] of [
+    [{ title: '', body: 'Text' }, 'Add a title and some text.'],
+    [{ title: 'Title', body: ' \n ' }, 'Add a title and some text.'],
+    [
+      { title: 'x'.repeat(121), body: 'Text' },
+      'Keep the title under 120 characters.',
+    ],
+    [
+      { title: 'Title', body: 'x'.repeat(8001) },
+      'Keep the text under 8,000 characters.',
+    ],
+  ]) {
+    const result = await save(fields);
+    assert.equal(result.status, 400);
+    assert.equal(result.body.error, message);
+  }
+  assert.equal(
+    (await post({ action: 'help-save', id: 'nope', title: 'T', body: 'B' }))
+      .status,
+    400,
+  );
+  // Markup is stored as typed and only ever shown as text; control
+  // characters other than line breaks are dropped.
+  const markup = await save({
+    title: '<img src=x onerror=alert(1)>\u0007',
+    body: '<script>alert(1)</script>\n\tIndented',
+  });
+  assert.equal(markup.body.entry.title, '<img src=x onerror=alert(1)>');
+  assert.equal(markup.body.entry.body, '<script>alert(1)</script>\n\tIndented');
+  // The database refuses what the API would never send.
+  await assert.rejects(
+    db.query(
+      `INSERT INTO club_forms.help_entries(id,title,body,created_by,updated_by) VALUES($1,$2,'b','a@example.com','a@example.com')`,
+      [randomUUID(), 'x'.repeat(121)],
+    ),
+  );
+});
+
+test('before migration 019, Help lists nothing and writes say it is not set up', async () => {
+  await db.exec(
+    'ALTER TABLE club_forms.help_entries RENAME TO help_entries_later',
+  );
+  try {
+    assert.deepEqual(await get('?help=1'), {
+      user: officer,
+      entries: [],
+      ready: false,
+    });
+    const result = await post({
+      action: 'help-save',
+      id: randomUUID(),
+      title: 'Title',
+      body: 'Text',
+    });
+    assert.equal(result.status, 503);
+    assert.equal(result.body.code, 'help-not-set-up');
+    assert.match(result.body.error, /migration 019/);
+    assert.equal(
+      (await post({ action: 'help-delete', id: randomUUID(), revision: 1 }))
+        .status,
+      503,
+    );
+  } finally {
+    await db.exec(
+      'ALTER TABLE club_forms.help_entries_later RENAME TO help_entries',
+    );
+  }
+});
+
+test('Help writes need an officer and the office origin', async () => {
+  const anonymous = await fetch(origin + '/api/admin?help=1');
+  assert.equal(anonymous.status, 401);
+  const crossSite = await fetch(origin + '/api/admin', {
+    method: 'POST',
+    headers: {
+      'x-test-admin': 'yes',
+      'Content-Type': 'application/json',
+      Origin: 'https://evil.example.com',
+    },
+    body: JSON.stringify({
+      action: 'help-save',
+      id: randomUUID(),
+      title: 'T',
+      body: 'B',
+    }),
+  });
+  assert.equal(crossSite.status, 403);
+  assert.equal(
+    (await db.query('SELECT count(*)::int AS n FROM club_forms.help_entries'))
+      .rows[0].n,
+    0,
+  );
+});

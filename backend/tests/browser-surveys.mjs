@@ -594,15 +594,16 @@ try {
   await admin
     .getByRole('button', { name: 'Contact history', exact: true })
     .click();
+  // A person's history opens on the Contacts tab; the address names no one.
+  await admin.locator('#contacts-pane').waitFor();
+  assert.match(admin.url(), /#\/contacts$/);
   await admin
     .locator('.contact-note-form textarea')
     .fill('Called to confirm the preferred date.');
   await admin.getByRole('button', { name: 'Save note', exact: true }).click();
   await admin.getByText('Follow-up note saved.', { exact: true }).waitFor();
   assert.match(
-    await admin
-      .locator('.contact-dialog:not(.submission-dialog)')
-      .textContent(),
+    await admin.locator('#contacts-pane').textContent(),
     /Called to confirm/,
   );
   assert.equal(
@@ -615,7 +616,7 @@ try {
   );
   assert.equal(
     await admin
-      .locator('.contact-dialog:not(.submission-dialog)')
+      .locator('#contacts-pane')
       .evaluate((el) => el.scrollWidth <= el.clientWidth),
     true,
   );
@@ -633,7 +634,7 @@ try {
       [id, email, name],
     );
   }
-  const contacts = admin.locator('.contact-dialog:not(.submission-dialog)');
+  const contacts = admin.locator('#contacts-pane');
   await contacts
     .getByRole('button', { name: 'Merge with another contact', exact: true })
     .click();
@@ -812,10 +813,7 @@ try {
   await contacts
     .getByLabel('Show contacts', { exact: true })
     .selectOption('active');
-  await admin
-    .locator('.contact-dialog:not(.submission-dialog)')
-    .getByRole('button', { name: 'Close', exact: true })
-    .click();
+  await admin.locator('#surveys-tab').click();
   await admin.locator('#survey-search').fill('no-such-person');
   await admin
     .getByText(
@@ -834,10 +832,7 @@ try {
     .getByRole('button', { name: 'Search contacts', exact: true })
     .click();
   await admin.locator('.contact-choice').waitFor();
-  await admin
-    .locator('.contact-dialog:not(.submission-dialog)')
-    .getByRole('button', { name: 'Close', exact: true })
-    .click();
+  await admin.locator('#surveys-tab').click();
   const anonymous = await fetch(origin + '/api/surveys');
   assert.equal(anonymous.status, 401);
   await admin.locator('#account-button').click();

@@ -55,6 +55,12 @@ let since = null,
   lastCounts = null,
   lastPoll = 0,
   polling = false,
+  // A poll requested while one is in flight runs again afterwards, so counts
+  // read before an officer's own save are replaced straight away.
+  pollAgain = false,
+  // Counts the officer's own saved status changes; a list response read
+  // before one of them is stale and is fetched again.
+  saves = 0,
   newCount = 0,
   routeTitle = 'Inbox';
 const latestOf = (counts) =>
@@ -251,6 +257,7 @@ async function review(card, entry, value) {
       from: entry.review_status,
       ...(note ? { comment: { id: note.id, body: note.text.trim() } } : {}),
     });
+    saves++;
     if (note) drafts.delete(key);
     if (version !== sessionGeneration) return;
     // A card dropped while the session was paused just reports the result.
@@ -389,13 +396,17 @@ function load() {
   return request.promise;
 }
 async function fetchList(key) {
-  const generation = sessionGeneration;
+  const generation = sessionGeneration,
+    savesBefore = saves;
   q('#entries').setAttribute('aria-busy', 'true');
   q('#refresh').setAttribute('aria-busy', 'true');
   try {
     const data = await api('/api/admin?' + key);
     if (generation !== sessionGeneration || filters().toString() !== key)
       return;
+    // Read before this officer's own status change: its rows and counts are
+    // stale, so read them again rather than undo the change on screen.
+    if (saves !== savesBefore) return fetchList(key);
     // Another tab signed in as someone else: never show their data here.
     if (signedIn && accountChanged(data.user)) return;
     if (!data.entries.length && offset > 0) {
@@ -494,6 +505,7 @@ async function fetchList(key) {
 // list, an open card or an editor, or moves focus. Failures only change
 // the 'Updated' line.
 async function poll() {
+  if (polling) pollAgain = true;
   if (!signedIn || isPaused() || polling) return;
   polling = true;
   const generation = sessionGeneration,
@@ -525,6 +537,10 @@ async function poll() {
     if (generation === sessionGeneration) updated(error);
   } finally {
     polling = false;
+    if (pollAgain) {
+      pollAgain = false;
+      poll();
+    }
   }
 }
 // '3 new: 2 questions, 1 signup', from the counts since the last poll.

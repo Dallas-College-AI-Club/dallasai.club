@@ -1,6 +1,18 @@
 import { responseSections } from './results-ui.js';
 const q = (selector) => document.querySelector(selector);
 const params = new URLSearchParams(location.hash.slice(1));
+// Back/Forward can change only the fragment and retain the preview DOM.
+// Reopen the matching mode whenever the invitation or preview changes.
+window.addEventListener('hashchange', () => {
+  if (location.hash === '#main') return;
+  const next = new URLSearchParams(location.hash.slice(1));
+  if (
+    ['invite', 'preview', 'sample'].some(
+      (key) => next.get(key) !== params.get(key),
+    )
+  )
+    location.reload();
+});
 const previewCapability =
   !params.has('invite') &&
   /^[A-Za-z0-9_-]{43}$/.test(params.get('preview') || '');

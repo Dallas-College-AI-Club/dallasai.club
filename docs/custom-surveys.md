@@ -10,6 +10,10 @@ sample entry requires the existing officer sign-in; the shareable question
 preview remains read-only. The welcome design and survey themes are shared with
 the respondent survey.
 
+The invitation opens advisor email verification. Returning from the question
+preview with Back or **Sign in to answer** restores that real sign-in form;
+the admin sample remains a separate mode.
+
 Open **Club office → Surveys → All surveys**. Search by survey title and use
 **Collection** to show all surveys, event feedback, or standalone custom surveys.
 Drafts appear first. Expand a survey to read its saved responses in place; linked

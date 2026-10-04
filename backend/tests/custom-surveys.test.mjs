@@ -11,6 +11,7 @@ import {
   privateSurveyToken,
 } from '../lib/custom-surveys.mjs';
 import { changeDraft, FORM_VERSION } from '../lib/survey-builder.mjs';
+import { customSurveysHandler } from '../api/custom-surveys.mjs';
 let f, server, origin, cookie;
 const rank = () => ({
   id: 'q-spark',
@@ -96,6 +97,45 @@ after(async () => {
   await new Promise((r) => server.close(r));
   await f.db.close();
 });
+test('admin sample requires officer access and never opens the survey database', async () => {
+  const handler = customSurveysHandler({
+    authorize: f.authorize,
+    getDatabase: () => assert.fail('The sample must not access survey data.'),
+  });
+  for (const [method, cookie, status] of [
+    ['GET', '', 401],
+    ['GET', 'test-neon=pearlman', 401],
+    ['GET', 'test-officer=yes', 200],
+    ['POST', 'test-officer=yes', 405],
+  ]) {
+    let body;
+    const res = {
+      setHeader() {},
+      end(value) {
+        body = JSON.parse(value);
+      },
+    };
+    await handler(
+      {
+        method,
+        url: '/api/custom-surveys?action=sample',
+        headers: { cookie, origin },
+      },
+      res,
+    );
+    assert.equal(res.statusCode, status);
+    if (status === 200) {
+      assert.deepEqual(body.definition.questions, definition.questions);
+      assert.deepEqual(
+        body.definition.respondents.map((p) => p.name),
+        ['Jordan Morgan', 'Alex Rivera'],
+      );
+      assert.equal(body.results, undefined);
+      assert.ok(!JSON.stringify(body).includes('pearlman'));
+    }
+  }
+});
+
 test('private preview exposes questions only; answers and admin results still require authentication', async () => {
   let response = await request('preview', undefined, { cookie: null });
   assert.equal(response.status, 200);

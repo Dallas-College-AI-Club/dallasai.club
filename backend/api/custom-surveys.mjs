@@ -47,6 +47,20 @@ export function customSurveysHandler({
       if (!['GET', 'POST'].includes(req.method))
         throw new RequestError(405, 'Method not allowed.');
       if (req.method === 'POST') adminOrigin(req);
+      if (action === 'sample') {
+        await authorize(req);
+        if (req.method !== 'GET')
+          throw new RequestError(405, 'Sample previews are read-only.');
+        return send(res, 200, {
+          definition: {
+            ...definition,
+            respondents: [
+              { id: 'sample-jordan', name: 'Jordan Morgan' },
+              { id: 'sample-alex', name: 'Alex Rivera' },
+            ],
+          },
+        });
+      }
       if (action === 'archived-responses') {
         await authorize(req);
         if (req.method !== 'GET')

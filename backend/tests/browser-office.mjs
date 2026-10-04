@@ -3368,6 +3368,221 @@ try {
       );
     },
   );
+  await check(
+    'Admin sample is fully interactive without saving survey data',
+    async (page) => {
+      const snapshot = async () => {
+        const rows = [];
+        for (const table of [
+          'custom_survey_responses',
+          'custom_survey_receipts',
+          'custom_survey_devices',
+          'audit',
+        ])
+          rows.push(
+            (
+              await fixture.db.query(
+                `SELECT jsonb_agg(to_jsonb(r) ORDER BY to_jsonb(r)::text) AS data FROM club_forms.${table} r`,
+              )
+            ).rows,
+          );
+        return rows;
+      };
+      await page.goto(fixture.origin + '/admin/#/surveys/custom');
+      await page
+        .getByLabel('Custom survey', { exact: true })
+        .selectOption(fixture.id);
+      const link = page.getByRole('link', {
+        name: 'Preview sample comparison',
+        exact: true,
+      });
+      await expect(link).toBeVisible();
+      const before = await snapshot();
+      const [sample] = await Promise.all([
+        page.waitForEvent('popup'),
+        link.click(),
+      ]);
+      const requests = [],
+        errors = [];
+      sample.on('request', (req) => {
+        if (new URL(req.url()).pathname.startsWith('/api/'))
+          requests.push([
+            req.method(),
+            new URL(req.url()).searchParams.get('action'),
+          ]);
+      });
+      sample.on('pageerror', (error) => errors.push(error.message));
+      await expect(sample.locator('.choice-match')).toHaveCount(3);
+      await sample
+        .getByRole('button', { name: 'Welcome', exact: true })
+        .click();
+      await expect(
+        sample.locator('.sidebar').getByText('Welcome', { exact: true }),
+      ).toHaveCount(1);
+      await expect(sample.locator('#progress')).toBeEmpty();
+      await expect(sample.locator('.heroart')).toBeVisible();
+      await expect(sample.locator('.welcome h1')).toContainText(
+        'worth your time?',
+      );
+      await sample
+        .getByRole('button', { name: 'Jordan Morgan', exact: true })
+        .click();
+      await expect(sample.locator('#title')).toHaveText('Find your sparks');
+      await sample
+        .getByRole('button', {
+          name: 'Prioritize Discover something new alongside students',
+          exact: true,
+        })
+        .click();
+      await sample.locator('#comments-spark > summary').click();
+      await sample.locator('#note-spark').fill('Temporary admin comment.');
+      await sample.locator('#next').click();
+      await sample.locator('#hours-min').fill('4');
+      await expect(sample.locator('#hours-error')).toContainText(
+        'minimum cannot be greater',
+      );
+      await sample.locator('#hours-max').fill('5');
+      await expect(sample.locator('#hours-error')).toBeEmpty();
+      await sample.locator('#next').click();
+      await sample.locator('#dial-new_team').press('ArrowRight');
+      await sample.locator('#next').click();
+      await sample.locator('[data-resource="materials"]').check();
+      await sample.locator('#offer-materials').selectOption('custom');
+      await sample
+        .locator('#offerdetail-materials')
+        .fill('Ask about the material first.');
+      await sample.locator('#choice-meeting_format').selectOption('in_person');
+      await sample.locator('#next').click();
+      await expect(sample.locator('.choice-match')).toHaveCount(2);
+      const ideal = sample.locator('#review-card-q-ideal_responsibilities');
+      const comment = sample.locator('#review-card-note-spark');
+      await expect(
+        comment
+          .locator('.own-response')
+          .getByRole('button', { name: 'Edit comment' }),
+      ).toBeVisible();
+      await ideal.locator('textarea').fill('Only this temporary wording.');
+      await ideal.locator('[data-answerreview]').check();
+      await ideal.locator('[data-answerinclude]').check();
+      for (const flag of ['reviewed', 'included']) {
+        await sample.locator(`[data-bulk-review="${flag}"]`).click();
+        await sample.locator(`[data-bulk-review="${flag}"]`).click();
+      }
+      await expect(sample.locator('[data-answerreview]:checked')).toHaveCount(
+        1,
+      );
+      await expect(sample.locator('[data-answerinclude]:checked')).toHaveCount(
+        1,
+      );
+      await expect(sample.locator('#submitPlaybook')).toBeDisabled();
+      await sample.locator('#approve-playbook').check();
+      await sample
+        .getByRole('button', { name: 'Test submission', exact: true })
+        .click();
+      await expect(sample.locator('#submit-status')).toContainText(
+        'Sample submission complete. Nothing was saved or sent. Revision 1.',
+      );
+      await sample.locator('#approve-playbook').check();
+      await sample.locator('#submitPlaybook').click();
+      await expect(sample.locator('#submit-status')).toContainText(
+        'Revision 2.',
+      );
+      for (const [button, ext] of [
+        ['exportFullMarkdown', 'md'],
+        ['exportFullWord', 'docx'],
+      ]) {
+        const download = sample.waitForEvent('download');
+        await sample.locator('#' + button).click();
+        const file = await download;
+        assert.ok(file.suggestedFilename().endsWith('.' + ext));
+        const bytes = await readFile(await file.path());
+        assert.ok(bytes.length > 100);
+        if (ext === 'md') {
+          assert.ok(bytes.toString().includes('Temporary admin comment.'));
+          assert.ok(bytes.toString().includes('Only this temporary wording.'));
+          assert.ok(!bytes.toString().includes('Alex Rivera'));
+        } else assert.equal(bytes.subarray(0, 2).toString(), 'PK');
+      }
+      for (const width of [390, 320]) {
+        await sample.setViewportSize({ width, height: 844 });
+        assert.ok(
+          await sample.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        );
+        const own = await comment.locator('.own-response').boundingBox();
+        const peer = await comment.locator('.peer-responses').boundingBox();
+        assert.ok(peer.y >= own.y + own.height);
+      }
+      await sample
+        .getByRole('button', { name: 'Reset sample', exact: true })
+        .click();
+      await expect(sample.locator('.welcome')).toBeVisible();
+      await sample.locator('[data-nav="4"]').click();
+      await expect(sample.locator('.choice-match')).toHaveCount(3);
+      await expect(sample.locator('[data-answerreview]:checked')).toHaveCount(
+        0,
+      );
+      await expect(sample.locator('[data-answerinclude]:checked')).toHaveCount(
+        0,
+      );
+      await expect(ideal.locator('textarea')).not.toHaveValue(
+        'Only this temporary wording.',
+      );
+      await sample.locator('[data-nav="-1"]').click();
+      await sample
+        .getByRole('button', { name: 'Alex Rivera', exact: true })
+        .click();
+      await expect(sample.locator('#who')).toHaveText('Alex Rivera');
+      await expect(sample.locator('#title')).toHaveText('Find your sparks');
+      await sample.locator('[data-nav="4"]').click();
+      await expect(ideal.locator('textarea')).toHaveValue(
+        /connect students with industry/,
+      );
+      await expect(ideal.locator('.peer-responses')).toContainText(
+        'Jordan Morgan',
+      );
+      assert.ok(requests.length > 0);
+      assert.ok(
+        requests.every(
+          ([method, action]) => method === 'GET' && action === 'sample',
+        ),
+        JSON.stringify(requests),
+      );
+      assert.deepEqual(await snapshot(), before);
+      assert.deepEqual(errors, []);
+      await sample
+        .getByRole('link', { name: 'Back to survey', exact: true })
+        .click();
+      await expect(sample.locator('#office')).toBeVisible();
+      await sample.close();
+      const anonymous = await browser.newContext();
+      try {
+        const blocked = await anonymous.newPage();
+        await blocked.goto(fixture.origin + '/surveys/#sample=sample-jordan');
+        await expect(
+          blocked.getByRole('heading', { name: 'Survey unavailable' }),
+        ).toBeVisible();
+        await expect(
+          blocked.getByRole('link', { name: 'Open Club Office' }),
+        ).toBeVisible();
+        await expect(blocked.locator('[data-sample-person]')).toHaveCount(0);
+        await blocked.goto(
+          fixture.origin + '/surveys/#invite=' + fixture.token + '&preview=1',
+        );
+        await blocked.reload();
+        await expect(
+          blocked.locator('.sidebar').getByText('Welcome', { exact: true }),
+        ).toHaveCount(1);
+        await blocked.locator('#begin').click();
+        await expect(
+          blocked.locator('[data-rankaction]').first(),
+        ).toBeDisabled();
+      } finally {
+        await anonymous.close();
+      }
+    },
+  );
 } finally {
   await browser.close();
   await fixture.close();

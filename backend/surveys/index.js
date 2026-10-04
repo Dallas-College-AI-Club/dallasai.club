@@ -248,6 +248,20 @@ for (const suffix of ['', 'Mobile'])
     }
   };
 async function start() {
+  if (params.has('sample')) {
+    try {
+      const data = await request('sample');
+      const { renderSample } = await import('./sample.js');
+      renderSample(data);
+    } catch (error) {
+      unavailable(error.message);
+      const signIn = document.createElement('a');
+      signIn.href = '/admin/#/surveys/custom';
+      signIn.textContent = 'Open Club Office';
+      q('#main').append(signIn);
+    }
+    return;
+  }
   if (!/^[A-Za-z0-9_-]{43}$/.test(link)) {
     unavailable('Use the private survey link provided by the club.');
     return;

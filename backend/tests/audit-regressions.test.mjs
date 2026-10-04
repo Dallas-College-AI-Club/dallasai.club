@@ -142,10 +142,7 @@ test('respondent-only SQL reads preserve consent boundaries without loading the 
     await f.db.query(
       "UPDATE club_forms.custom_survey_members SET active=false WHERE advisor_id='bracewell'",
     );
-    assert.equal(
-      (await currentResponses(f.db, f.id, null, { activeOnly: true })).length,
-      1,
-    );
+    assert.equal((await currentResponses(f.db, f.id, 'pearlman')).length, 1);
     assert.equal((await currentResponses(f.db, f.id)).length, 2);
   } finally {
     await f.db.close();

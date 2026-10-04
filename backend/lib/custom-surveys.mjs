@@ -161,7 +161,7 @@ export async function currentResponses(
   db,
   surveyId,
   viewerId = null,
-  { ownOnly = false, activeOnly = false } = {},
+  { ownOnly = false } = {},
 ) {
   return (
     await db.query(
@@ -171,9 +171,8 @@ export async function currentResponses(
        AND ($2::text IS NULL OR r.advisor_id=$2 OR $2=ANY(r.shared_with))
        WHERE m.survey_id=$1 AND ($2::text IS NULL OR m.active)
          AND (NOT $3::boolean OR m.advisor_id=$2)
-         AND (NOT $4::boolean OR m.active)
        ORDER BY m.active DESC,m.advisor_id DESC`,
-      [surveyId, viewerId, ownOnly, activeOnly],
+      [surveyId, viewerId, ownOnly],
     )
   ).rows;
 }

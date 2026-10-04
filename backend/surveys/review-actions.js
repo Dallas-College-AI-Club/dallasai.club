@@ -1,3 +1,23 @@
+export function sameChoice(q, own, peer) {
+  if (
+    !['choice', 'multi_choice'].includes(q?.type) ||
+    own.mode !== 'structured' ||
+    peer?.mode !== 'structured' ||
+    own.stale ||
+    own.empty
+  )
+    return false;
+  const values = (answer) =>
+    q.type === 'choice' ? [answer?.value] : answer?.values || [];
+  const a = values(own.answer),
+    b = values(peer.answer);
+  // Custom option IDs belong to their author; "usual" refers to another answer.
+  return (
+    a.length > 0 &&
+    a.every((id) => id !== 'usual' && q.options.some((o) => o.id === id)) &&
+    JSON.stringify([...a].sort()) === JSON.stringify([...b].sort())
+  );
+}
 export function toggleAllResponses(fields, review, flag, added) {
   if (!['reviewed', 'included'].includes(flag))
     throw Error('Unknown review action.');

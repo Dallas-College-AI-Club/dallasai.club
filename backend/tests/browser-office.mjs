@@ -2694,7 +2694,8 @@ try {
           { exact: true },
         ),
       ).toBeVisible();
-
+    },
+  );
   // --- Release B: Home, fold, RSVP groups, Contacts tab, Help topics. ---
   const homeQuestion = randomUUID();
   await fixture.db.query(

@@ -1,5 +1,9 @@
 import { makeDocx } from './personal-copy.js';
-import { toggleAllResponses, fullResponseFilename } from './review-actions.js';
+import {
+  sameChoice,
+  toggleAllResponses,
+  fullResponseFilename,
+} from './review-actions.js';
 import { answerRank } from './results-ui.js';
 export function mountAdvisor(
   bootstrap,
@@ -1447,6 +1451,7 @@ export function mountAdvisor(
     const card = $('review-card-' + id);
     if (card) {
       card.classList.toggle('is-included', !!f.included);
+      card.querySelector('.choice-match-slot').innerHTML = choiceMatchHTML(f);
       card.querySelector('.response-mode').textContent = fieldHint(f);
       const reset = card.querySelector('[data-resetwording]');
       if (reset)
@@ -1455,11 +1460,8 @@ export function mountAdvisor(
           f.kind === 'comment' ||
           f.id === 'q-ideal_responsibilities';
     }
-    for (const [key, flag] of [
-      ['reviewed', 'reviewed'],
-      ['included', 'included'],
-    ]) {
-      const box = $(key + '-' + id);
+    for (const flag of ['reviewed', 'included']) {
+      const box = $(flag + '-' + id);
       if (box) {
         box.checked = !!f[flag];
         box.disabled = !f.text.trim() || f.stale;
@@ -1540,6 +1542,22 @@ export function mountAdvisor(
       })
       .join('');
   }
+  function choiceMatchHTML(f) {
+    const q = Q[f.questionId];
+    return peers
+      .filter((person) =>
+        sameChoice(
+          q,
+          f,
+          peerResponses(person).find((r) => r.id === f.id),
+        ),
+      )
+      .map(
+        (person) =>
+          `<span class="choice-match" title="You and ${esc(person.name)} selected the same original ${q.type === 'choice' ? 'option' : 'options'}.">${q.type === 'choice' ? 'Same choice' : 'Same choices'}${peers.length > 1 ? ' · ' + esc(person.name) : ''}</span>`,
+      )
+      .join('');
+  }
   function summaryCard(f) {
     const ideal = f.id === 'q-ideal_responsibilities';
     const edit = ideal
@@ -1555,7 +1573,7 @@ export function mountAdvisor(
       ${!ideal && !f.stale ? `<button class="small ghost" data-resetwording="${f.id}" ${f.mode !== 'narrative' || f.kind === 'comment' ? 'hidden' : ''}>Restore generated wording</button>` : ''}
       <div class="reviewcontrols"><label for="reviewed-${f.id}"><input type="checkbox" id="reviewed-${f.id}" data-answerreview="${f.id}" ${f.reviewed ? 'checked' : ''} ${!f.text.trim() || f.stale ? 'disabled' : ''}>I reviewed this wording.</label><label for="included-${f.id}"><input type="checkbox" id="included-${f.id}" data-answerinclude="${f.id}" ${f.included ? 'checked' : ''} ${!f.text.trim() || f.stale ? 'disabled' : ''}>Include in shared summary.</label></div>`;
     return `<section class="reviewfield ${!f.empty && f.included ? 'is-included' : ''}" id="review-card-${esc(f.id)}" aria-labelledby="summary-heading-${esc(f.id)}">
-      <h3 id="summary-heading-${esc(f.id)}">${esc(f.title)}</h3>
+      <div class="match-heading"><h3 id="summary-heading-${esc(f.id)}">${esc(f.title)}</h3><span class="choice-match-slot">${choiceMatchHTML(f)}</span></div>
       ${ideal ? `<p class="fine">${esc(Q.ideal_responsibilities.prompt)}</p>` : ''}
       <div class="answer-comparison ${peers.length ? '' : 'own-only'}"><div class="own-response"><div class="own-response-heading"><h4 class="comparison-label">Your response</h4>${edit}</div>${own}</div>${peers.length ? `<div class="peer-responses">${comparisonHTML(f)}</div>` : ''}</div></section>`;
   }

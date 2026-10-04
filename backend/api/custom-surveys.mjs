@@ -324,14 +324,10 @@ export function customSurveysHandler({
           nextOffset: shared.nextOffset,
           definition: {
             ...(survey.definition || definition),
-            respondents: members
-              .filter(
-                (m) => !survey.definition || m.advisor_id === member.advisor_id,
-              )
-              .map((m) => ({
-                id: m.advisor_id,
-                name: m.display_name,
-              })),
+            respondents: members.map((m) => ({
+              id: m.advisor_id,
+              name: m.display_name,
+            })),
           },
           results: survey.definition
             ? [

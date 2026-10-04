@@ -752,10 +752,14 @@ export function mountCustomSurveys(root, api, options = {}) {
       const request = ++generation;
       target.replaceChildren(node('p', 'Loading surveys…', 'hint'));
       try {
-        const [{ surveys }, { events }] = await Promise.all([
-          api('/api/custom-surveys?action=catalog'),
-          api('/api/events?admin=1'),
-        ]);
+        const [{ surveys }, { events }, { events: savedEvents }] =
+          await Promise.all([
+            api('/api/custom-surveys?action=catalog'),
+            api('/api/events?admin=1'),
+            collection === 'custom'
+              ? Promise.resolve({ events: [] })
+              : api('/api/surveys?view=all'),
+          ]);
         if (request !== generation) return;
         const matching = surveys
           .filter(
@@ -771,6 +775,45 @@ export function mountCustomSurveys(root, api, options = {}) {
               Number(b.status === 'draft') - Number(a.status === 'draft'),
           );
         const list = node('div', undefined, 'survey-library-list');
+        if (collection !== 'custom') {
+          // Include registration before the first answer, and keep saved answers
+          // discoverable after registration closes or its event is archived.
+          const registrations = new Map(
+            savedEvents.map((event) => [event.id, event]),
+          );
+          for (const event of events)
+            if (
+              event.draft?.registrationOpen ||
+              event.published?.registrationOpen
+            )
+              registrations.set(event.id, {
+                id: event.id,
+                title: event.draft?.title || event.published?.title || event.id,
+              });
+          const section = node('section', undefined, 'survey-library-section');
+          section.dataset.group = 'Event surveys';
+          section.append(node('h2', 'Event surveys'));
+          for (const event of registrations.values()) {
+            if (!event.title.toLowerCase().includes(query.trim().toLowerCase()))
+              continue;
+            const link = node(
+              'a',
+              undefined,
+              'survey-library-row survey-library-summary',
+            );
+            link.href =
+              '#/surveys/events?event=' + encodeURIComponent(event.id);
+            const title = node('div');
+            title.append(node('strong', event.title));
+            link.append(
+              title,
+              node('span', 'RSVP', 'chip'),
+              node('span', 'Open responses →', 'hint'),
+            );
+            section.append(link);
+          }
+          if (section.children.length > 1) list.append(section);
+        }
         for (const survey of matching) {
           const sectionName =
             survey.status === 'draft'
@@ -826,7 +869,7 @@ export function mountCustomSurveys(root, api, options = {}) {
           if (section) list.append(section);
         }
         target.replaceChildren(
-          matching.length
+          list.children.length
             ? list
             : node('p', 'No surveys in this collection yet.', 'empty-state'),
         );

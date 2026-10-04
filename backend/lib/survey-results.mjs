@@ -45,22 +45,28 @@ export async function surveyResultPage(
   };
 }
 // The CSV export holds what Submitted responses lists: every active
-// respondent's saved answers, across every page.
+// respondent's saved answers, across every page. Like the Inbox export, it
+// refuses a set too large to send instead of cutting it short.
 export async function surveyExportRows(db, surveyId) {
-  return (
-    await db.query(
-      `SELECT m.display_name,m.email,m.active,r.responses,r.submitted_at
-      FROM club_forms.custom_survey_members m
-      JOIN club_forms.custom_survey_responses r USING(survey_id,advisor_id)
-      WHERE m.survey_id=$1 AND m.active AND jsonb_array_length(r.responses)>0
-      ORDER BY r.submitted_at DESC,m.advisor_id`,
-      [surveyId],
-    )
-  ).rows;
+  const { rows } = await db.query(
+    `SELECT m.display_name,m.email,m.active,r.responses,r.submitted_at
+    FROM club_forms.custom_survey_members m
+    JOIN club_forms.custom_survey_responses r USING(survey_id,advisor_id)
+    WHERE m.survey_id=$1 AND m.active AND jsonb_array_length(r.responses)>0
+    ORDER BY r.submitted_at DESC,m.advisor_id LIMIT 10001`,
+    [surveyId],
+  );
+  if (rows.length > 10000)
+    throw new RequestError(
+      413,
+      'More than 10,000 responses. Download responses one at a time as PDF instead.',
+    );
+  return rows;
 }
 // One row per respondent and one column per question, in survey order.
 // Answers read as on screen: '1. … 2. …' rankings, chosen options joined
-// with '; ', and dials as '65 of 100 — <wording>'. Builder surveys list
+// with '; ', and dials as '65 of 100 — <wording>'. Wording a respondent
+// rewrote for sharing starts '[Shared wording only] '. Builder surveys list
 // every question; Advisor Studio lists the answers respondents shared.
 export function surveyResultsCSV(rows, definition) {
   const rank = answerRank(definition),
@@ -76,8 +82,11 @@ export function surveyResultsCSV(rows, definition) {
   const cell = (answer) => {
     if (!answer) return '';
     const { kind, lines, dial } = answerFormat(answer, definition),
-      text = lines.join(kind === 'choices' ? '; ' : ' ');
-    return dial === undefined ? text : `${dial} of 100 — ${text}`;
+      text = lines.filter(Boolean).join(kind === 'choices' ? '; ' : ' ');
+    return (
+      (answer.mode === 'narrative' ? '[Shared wording only] ' : '') +
+      (dial === undefined ? text : `${dial} of 100 — ${text}`)
+    );
   };
   const header = [
     'Name',
@@ -87,7 +96,8 @@ export function surveyResultsCSV(rows, definition) {
     ...ordered.map((column) => column.title),
   ];
   const lines = rows.map((row) => [
-    row.display_name,
+    // As on screen, a respondent without a name is shown by email.
+    row.display_name || row.email,
     row.email,
     received.format(new Date(row.submitted_at)),
     row.active ? 'Active' : 'Archived',

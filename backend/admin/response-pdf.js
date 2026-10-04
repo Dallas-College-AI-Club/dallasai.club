@@ -1,46 +1,11 @@
 // Lays out a responseDocument() as a US Letter PDF. Loaded on demand, so
-// jsPDF stays out of the Club Office's first download.
+// jsPDF stays out of the Club Office's first download. The document must
+// come from pdfReady(): the built-in font draws Windows-1252 text only.
 import { jsPDF } from 'jspdf';
-// Helvetica, built into every PDF reader, has Windows-1252 glyphs only, and
-// jsPDF garbles a whole line that contains anything else. Emoji become '?';
-// other characters an ASCII spelling, their unaccented letter, or '?'.
-const supported = /[\n\x20-\x7e\xa0-\xff€‚ƒ„…†‡ˆ‰Š‹ŒŽ‘’“”•–—˜™š›œžŸ]/,
-  spelled = {
-    '→': '->',
-    '←': '<-',
-    '↔': '<->',
-    '≥': '>=',
-    '≤': '<=',
-    '≠': '!=',
-    '−': '-',
-    '‐': '-',
-    '‑': '-',
-    '‒': '–',
-    '―': '—',
-    '′': "'",
-    '″': '"',
-    '✓': 'v',
-    '✔': 'v',
-  };
-export const pdfText = (text) =>
-  Array.from(
-    String(text ?? '')
-      .replace(/[\r\u200b\u200c\u2060\ufe0e\ufe0f]/g, '')
-      .replace(
-        /\p{Extended_Pictographic}(?:\p{Emoji_Modifier}|\u200d\p{Extended_Pictographic})*/gu,
-        (emoji) => (supported.test(emoji) ? emoji : '?'),
-      ),
-    (c) => {
-      if (supported.test(c)) return c;
-      if (spelled[c]) return spelled[c];
-      if (/\s/.test(c)) return ' ';
-      const plain = c.normalize('NFKD').replace(/\p{M}/gu, '');
-      return plain && [...plain].every((p) => supported.test(p)) ? plain : '?';
-    },
-  ).join('');
+// Club Office's accent (6.7:1 on white) for headings; dark body text.
 const ink = '#1f2937',
   muted = '#6b7280',
-  accent = '#1e3a8a',
+  accent = '#5546cb',
   rule = '#d1d5db';
 export function responsePdf(model) {
   const doc = new jsPDF({ unit: 'pt', format: 'letter', compress: true }),
@@ -52,7 +17,7 @@ export function responsePdf(model) {
     bottom = height - 72;
   let y = top;
   doc.setProperties({
-    title: pdfText(model.title + ' — ' + model.details[0][1]),
+    title: model.title + ' — ' + model.details[0][1],
     subject: 'Survey response',
     creator: model.club,
   });
@@ -64,7 +29,7 @@ export function responsePdf(model) {
     return size * 1.4;
   };
   // Lines that fit `room` points at the current font size.
-  const wrap = (text, room) => doc.splitTextToSize(pdfText(text), room);
+  const wrap = (text, room) => doc.splitTextToSize(text, room);
   const fit = (space) => {
     if (y + space <= bottom) return;
     doc.addPage();
@@ -121,6 +86,11 @@ export function responsePdf(model) {
     write(title, left, titleLead);
     y += 3;
     for (const text of block.lines) {
+      // A blank line the respondent typed between paragraphs.
+      if (!text) {
+        y += bodyLead / 2;
+        continue;
+      }
       const item =
         block.kind === 'ranked'
           ? /^(\d+\.)\s*(.*)$/.exec(text)
@@ -131,7 +101,6 @@ export function responsePdf(model) {
       else style(10.5);
       if (!item) {
         write(wrap(text, right - left), left, bodyLead);
-        y += 3;
         continue;
       }
       const rest = wrap(item[2], right - left - 22);
@@ -140,6 +109,7 @@ export function responsePdf(model) {
       write(rest, left + 22, bodyLead);
       y += 2;
     }
+    y += 3;
     for (const note of block.notes) {
       style(10, 'italic', muted);
       write(wrap(note, right - left), left, 10 * 1.4);

@@ -97,9 +97,9 @@ test('every server action code has a label', async () => {
       'survey-restored',
       'survey-summary:all',
       'survey-export-csv:office-event',
-      // Built as '<code>:' + survey id.
+      // Built as '<code>:<survey id>' and '<code>:<survey id>:<respondent>'.
       'custom-survey-export-csv:2c1f0b4e-0000-4000-8000-000000000000',
-      'custom-survey-pdf:2c1f0b4e-0000-4000-8000-000000000000',
+      'custom-survey-pdf:2c1f0b4e-0000-4000-8000-000000000000:avery',
       'contact-purged:entries=1:notes=0:files=0',
       // Built as 'state:' + body.state.
       'state:cancelled',

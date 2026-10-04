@@ -29,8 +29,9 @@ export function answerRank(definition) {
   };
 }
 // How a saved answer reads: a numbered ranking ('1. …' lines), a list of
-// chosen options, or text, plus the dial position when there is one. The
-// downloads use this so they match the screen.
+// chosen options, or text, plus the dial position when there is one. One ''
+// line marks each paragraph break (a blank line). The downloads use this so
+// they match the screen.
 export function answerFormat(answer, definition) {
   const question = definition?.questions?.find(
       (q) => q.id === (answer.questionId ?? answer.id),
@@ -47,7 +48,10 @@ export function answerFormat(answer, definition) {
     lines: String(answer.text ?? '')
       .split('\n')
       .map((line) => line.trim())
-      .filter(Boolean),
+      .filter(
+        (line, i, all) =>
+          line || (all[i - 1] && all.slice(i + 1).some(Boolean)),
+      ),
     dial:
       answer.mode === 'structured' && answer.answer?.mode === 'value'
         ? answer.answer.value

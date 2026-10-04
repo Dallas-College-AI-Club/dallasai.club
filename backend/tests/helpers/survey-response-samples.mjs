@@ -16,11 +16,12 @@ const structured = (fields) =>
     customOptions: [],
     ...fields,
   });
+// Six paragraphs separated by blank lines; the first has a line break too.
 const ideal = Array.from(
   { length: 6 },
   (_, n) =>
-    `Paragraph ${n + 1}: a monthly check-in, a review of student prototypes before showcases, and introductions to people who can give honest feedback on real problems. Students would lead; I would ask the questions that sharpen their thinking.`,
-).join('\n');
+    `Paragraph ${n + 1}: a monthly check-in, a review of student prototypes before showcases, and introductions to people who can give honest feedback on real problems.${n ? ' ' : '\n'}Students would lead; I would ask the questions that sharpen their thinking.`,
+).join('\n\n');
 export const advisorResponses = () => [
   structured({
     id: 'q-spark',

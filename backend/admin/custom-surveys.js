@@ -3,8 +3,12 @@ import { actionLabel, actorLabel, dateTime, isoDay, plural } from './format.js';
 import { currentOfficer } from './session.js';
 import { mountRespondents } from './survey-respondents.js';
 import { mountSurveyBuilder } from './survey-builder.js';
-import { fileSlug, responseSections } from '../surveys/results-ui.js';
-import { responseDocument, responseFilename } from './response-document.js';
+import {
+  fileSlug,
+  partitionResponses,
+  responseSections,
+} from '../surveys/results-ui.js';
+import { closePrintView, downloadResponse } from './response-download.js';
 // Self-registered respondents may have no display name; officers see the
 // email instead. Respondent-facing pages keep their own masking.
 const named = (results) =>
@@ -22,6 +26,7 @@ export function mountCustomSurveys(root, api) {
   }
   async function load() {
     stopBuilder();
+    closePrintView();
     const current = ++generation;
     root.replaceChildren(node('p', 'Loading custom surveys…'));
     try {
@@ -233,8 +238,7 @@ export function mountCustomSurveys(root, api) {
           }
           const isCurrent = () =>
             current === generation && request === requestGeneration;
-          // Each response downloads as a PDF made here from what is shown;
-          // jsPDF loads on first use.
+          // Each response downloads as a PDF made here from what is shown.
           const pdfActions = (result) => {
             const actions = node('div', undefined, 'entry-actions'),
               button = node('button', 'Download PDF', 'secondary'),
@@ -244,34 +248,16 @@ export function mountCustomSurveys(root, api) {
               'Download PDF for ' + result.display_name,
             );
             status.setAttribute('role', 'status');
-            button.onclick = async () => {
-              button.disabled = true;
-              status.textContent = 'Preparing PDF…';
-              try {
-                const [{ responsePdf }] = await Promise.all([
-                  import('./response-pdf.js').catch(() => {
-                    throw new Error(
-                      'Couldn’t prepare the PDF. Check your connection and try again.',
-                    );
-                  }),
-                  api('/api/custom-surveys?action=response-pdf', {
-                    id: survey.id,
-                  }),
-                ]);
-                if (!isCurrent()) return;
-                responsePdf(
-                  responseDocument(result, {
-                    title: survey.title,
-                    definition: data.resultsDefinition,
-                  }),
-                ).save(responseFilename(survey.title, result));
-                status.textContent = 'PDF downloaded.';
-              } catch (error) {
-                if (isCurrent()) status.textContent = error.message;
-              } finally {
-                button.disabled = false;
-              }
-            };
+            button.onclick = () =>
+              downloadResponse({
+                survey,
+                result,
+                definition: data.resultsDefinition,
+                api,
+                isCurrent,
+                status,
+                trigger: button,
+              });
             actions.append(button, status);
             return actions;
           };
@@ -279,7 +265,8 @@ export function mountCustomSurveys(root, api) {
             exportStatus = node('p'),
             exportActions = node('div', undefined, 'entry-actions');
           exportStatus.setAttribute('role', 'status');
-          exportCSV.disabled = !survey.response_count;
+          // From these results, not the survey list, which may be older.
+          exportCSV.disabled = !partitionResponses(data.results).active.length;
           exportCSV.onclick = async () => {
             exportCSV.disabled = true;
             exportStatus.textContent = 'Preparing CSV for all responses…';
@@ -380,6 +367,7 @@ export function mountCustomSurveys(root, api) {
       if (builder) return;
       generation++;
       dropped = true;
+      closePrintView();
       root.replaceChildren();
     },
     refresh() {
@@ -402,6 +390,7 @@ export function mountCustomSurveys(root, api) {
     clear() {
       generation++;
       stopBuilder();
+      closePrintView();
       selected = '';
       root.replaceChildren();
     },

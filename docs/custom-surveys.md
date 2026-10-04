@@ -279,8 +279,8 @@ prints the temporary test URLs. It is not included in the deployed public build.
 ## Create another survey
 
 Choose **Create custom survey**, then follow **Template → Audience → Questions
-→ Preview → Publish**. Blank and quick-feedback templates support text, single
-choice, multiple choice, and 1–5 rating questions. Choice order supports dragging
+→ Preview → Publish**. Blank and quick-feedback templates support the answer types
+listed above. Choice order supports dragging
 and move buttons. In a multiple-choice question, check **Exclusive** beside one
 choice, such as “Any of these” or “None of these”. Choosing it clears and blocks the
 other choices until it is unchecked, and the server rejects it combined with others.

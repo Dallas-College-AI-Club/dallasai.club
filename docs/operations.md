@@ -191,11 +191,34 @@ reply after the save commits, or reject one oversized CSV download. Use it to
 verify retries, consent, pagination, and error recovery without real respondents.
 Never submit synthetic test data or send test email through production.
 
+Typed-answer verification (2026-10-04): all 223 backend tests and all 62 Office
+browser scenarios passed. The RSVP browser lifecycle and all nine grouped-survey
+browser scenarios passed, including
+zero-valued numbers, invalid email rejection, dated choices, empty RSVP-enabled
+events, default dropdowns, saved-response editing, CSV exports and phone layouts.
+Fourteen backend mutation probes and four browser probes each made their relevant
+regression fail when a fix was removed. The event visibility and dropdown checks
+also reproduced their failures before the fixes.
+
+An owner-approved, schema-only Neon branch verified real cloud persistence with
+synthetic data: 90 concurrent RSVP attempts saved exactly 30 registrations, and 36
+custom-survey attempts saved exactly 12 responses. Each participant retried three
+times. Nine Game Night date/period groups retained their matching dates and choices;
+contradictory exclusive choices were rejected. Separate typed RSVP and custom-survey
+saves confirmed JSON numbers (including zero), choice arrays, ISO calendar dates,
+minute-precision clock times and normalized emails. The test branch was deleted
+after verification. This checked correctness under concurrent retries, not maximum
+service capacity. No production response was created or altered by these tests.
+
 After review, deploy a protected Vercel preview with its own `AUTH_BASE_URL` and
 trusted Neon Auth origin. Verify database permissions and private files. Deploy the
 backend using `vercel --prod --scope ai-c64d` from `backend/`, then publish the public
 site. Pushing Git alone does not deploy Vercel. GitHub Pages publishes passing pushes
 to `main` or `hugo` and rebuilds daily at 08:15 UTC for scheduled articles.
+
+Deploy both the backend and the public site before publishing RSVP questions with
+new answer types. Existing responses keep their original question snapshots;
+updating an event form must not rewrite previously submitted answers.
 
 Keep the live event API available during rollback. Original event files are a base
 registry; database drafts, unpublishing and archives override them. Reverting to a

@@ -3308,9 +3308,33 @@ try {
       await ideal.locator('[data-answerreview]').check();
       await ideal.locator('[data-answerinclude]').check();
       await page.locator('#approve-playbook').check();
+      const attempts = [];
+      await page.route('**/api/custom-surveys?action=submit', async (route) => {
+        attempts.push(route.request().postDataJSON());
+        if (attempts.length > 1) return route.continue();
+        const committed = await route.fetch();
+        assert.equal(committed.status(), 200);
+        await route.abort('failed');
+      });
+      await page.locator('#submitPlaybook').click();
+      await expect(page.locator('#submit-status')).not.toHaveText(
+        'Saving selected responses…',
+      );
+      await expect(page.locator('#submitPlaybook')).toBeEnabled();
       await page.locator('#submitPlaybook').click();
       await expect(page.locator('#submit-status')).toContainText(
         'Shared summary saved. Revision 1.',
+      );
+      assert.equal(attempts.length, 2);
+      assert.deepEqual(attempts[1], attempts[0]);
+      assert.equal(
+        (
+          await fixture.db.query(
+            'SELECT count(*)::int n FROM club_forms.custom_survey_receipts WHERE survey_id=$1',
+            [id],
+          )
+        ).rows[0].n,
+        1,
       );
       const saved = (
         await fixture.db.query(
@@ -3344,6 +3368,26 @@ try {
         assert.ok(peer.y >= own.y + own.height);
       }
       await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.reload();
+      await page
+        .getByRole('button', { name: 'Open my questions', exact: true })
+        .click();
+      await page.locator('#saved-results summary').first().click();
+      await expect(page.locator('#saved-results')).toContainText(
+        'Updated private wording.',
+      );
+      await expect(page.locator('#saved-results')).toContainText(
+        'My own private draft comment.',
+      );
+      const office = await page.context().newPage();
+      await office.goto(fixture.origin + '/admin/#/surveys/custom/' + id);
+      await expect(office.locator('#main')).toContainText(
+        'Updated private wording.',
+      );
+      await expect(office.locator('#main')).toContainText(
+        'My own private draft comment.',
+      );
+      await office.close();
       await page.goto(url + '&preview=1');
       await page
         .getByRole('button', {
@@ -3623,10 +3667,12 @@ try {
       });
       await skip.focus();
       await skip.click();
+      assert.equal(page.url(), url + '&preview=1');
+      await expect(page.locator('#main')).toBeFocused();
       await expect(page.locator('#who')).toHaveText(
         'Preview · answering disabled',
       );
-      await page.goBack();
+      await page.reload();
       await expect(page.locator('#who')).toHaveText(
         'Preview · answering disabled',
       );
@@ -3649,6 +3695,34 @@ try {
         page.getByRole('button', { name: 'Send sign-in code', exact: true }),
       ).toBeEnabled();
       await expect(page.locator('#survey-preview')).toBeVisible();
+      for (const width of [1440, 390, 320]) {
+        await page.setViewportSize({ width, height: 844 });
+        for (let repeat = 0; repeat < 5; repeat++) {
+          await page.locator('#survey-preview').click();
+          await expect(page.locator('#who')).toHaveText(
+            'Preview · answering disabled',
+          );
+          await page.goBack();
+          await expect(
+            page.getByLabel('Email address', { exact: true }),
+          ).toBeVisible();
+          await page.goForward();
+          await expect(page.locator('#who')).toHaveText(
+            'Preview · answering disabled',
+          );
+          await page
+            .getByRole('link', { name: 'Sign in to answer →', exact: true })
+            .click();
+          await expect(
+            page.getByLabel('Email address', { exact: true }),
+          ).toBeVisible();
+          assert.ok(
+            await page.evaluate(
+              () => document.documentElement.scrollWidth <= innerWidth,
+            ),
+          );
+        }
+      }
     },
   );
 } finally {

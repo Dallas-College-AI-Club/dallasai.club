@@ -279,6 +279,39 @@ test('selected answers commit atomically with an idempotent receipt and are visi
     0,
   );
 });
+test('concurrent retries save once and competing replacements cannot lose an accepted revision', async () => {
+  const first = submission();
+  const retries = await Promise.all(
+    Array.from({ length: 20 }, () => request('submit', first)),
+  );
+  for (const response of retries) {
+    assert.equal(response.status, 200);
+    assert.equal((await response.json()).receipt.id, first.requestId);
+  }
+  const replacements = Array.from({ length: 20 }, (_, i) =>
+    submission([{ ...narrative(), text: 'Concurrent selection ' + i }], 1),
+  );
+  const results = await Promise.all(
+    replacements.map((body) => request('submit', body)),
+  );
+  assert.equal(results.filter((r) => r.status === 200).length, 1);
+  assert.equal(results.filter((r) => r.status === 409).length, 19);
+  const winner = replacements[results.findIndex((r) => r.status === 200)];
+  const saved = (
+    await f.db.query(
+      'SELECT revision,responses FROM club_forms.custom_survey_responses',
+    )
+  ).rows;
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].revision, 2);
+  assert.equal(saved[0].responses[0].text, winner.responses[0].text);
+  const receipts = (
+    await f.db.query('SELECT id FROM club_forms.custom_survey_receipts')
+  ).rows
+    .map((r) => r.id)
+    .sort();
+  assert.deepEqual(receipts, [first.requestId, winner.requestId].sort());
+});
 test('replacement summaries remove omitted answers; stale revisions and altered retries cannot overwrite current results', async () => {
   const first = submission();
   assert.equal((await request('submit', first)).status, 200);

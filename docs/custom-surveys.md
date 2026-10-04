@@ -12,7 +12,9 @@ the respondent survey.
 
 The invitation opens advisor email verification. Returning from the question
 preview with Back or **Sign in to answer** restores that real sign-in form;
-the admin sample remains a separate mode.
+the admin sample remains a separate mode. **Skip to survey** moves keyboard
+focus without replacing the invitation in the address bar, so refresh preserves
+the current mode.
 
 Open **Club office → Surveys → All surveys**. Search by survey title and use
 **Collection** to show all surveys, event feedback, or standalone custom surveys.
@@ -247,7 +249,11 @@ from the authenticated office.
 
 `npm test` in `backend/` covers request boundaries, scope, remembered devices,
 revocation, preview privacy, atomic persistence/rollback, replacement snapshots,
-idempotency, the scoped Neon proxy, and the CSV and PDF downloads. Build with
+idempotency (including concurrent retries and competing revisions), the scoped
+Neon proxy, and the CSV and PDF downloads. Browser checks also drop an advisor
+save acknowledgement after commit, retry it, and verify the single saved result
+after reload and in Club Office. Preview-return checks repeat at desktop and
+phone widths. These stress cases run against the isolated PGlite fixture. Build with
 `npm run build`; the PDF code (jsPDF) is a separate file that loads on the
 first **Download PDF**.
 `node backend/tests/serve-custom-survey.mjs` starts an isolated PGlite UI fixture

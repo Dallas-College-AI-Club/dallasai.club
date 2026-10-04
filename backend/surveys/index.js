@@ -1,10 +1,15 @@
 import { responseSections } from './results-ui.js';
 const q = (selector) => document.querySelector(selector);
 const params = new URLSearchParams(location.hash.slice(1));
+// Keep the invitation fragment when moving keyboard focus into the survey.
+q('.skip').onclick = (event) => {
+  event.preventDefault();
+  q('#main').focus();
+  q('#main').scrollIntoView();
+};
 // Back/Forward can change only the fragment and retain the preview DOM.
 // Reopen the matching mode whenever the invitation or preview changes.
 window.addEventListener('hashchange', () => {
-  if (location.hash === '#main') return;
   const next = new URLSearchParams(location.hash.slice(1));
   if (
     ['invite', 'preview', 'sample'].some(

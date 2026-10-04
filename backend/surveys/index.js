@@ -85,7 +85,13 @@ async function request(action, body, path, offset) {
   }
   if (!response.ok) {
     const error = new Error(
-      data.error || 'Could not connect. Your answers remain in this tab.',
+      data.code === 'INVALID_OTP'
+        ? 'That sign-in code is not valid. Use the latest code or request a new one.'
+        : data.code === 'OTP_EXPIRED'
+          ? 'That sign-in code has expired. Request a new one.'
+          : data.error ||
+            data.message ||
+            'Could not connect. Your answers remain in this tab.',
     );
     error.status = response.status;
     throw error;

@@ -3725,6 +3725,79 @@ try {
       }
     },
   );
+  await check(
+    'Survey sign-in explains upstream code errors and recovers with a fresh code',
+    async (page) => {
+      await page.goto(fixture.origin + '/surveys/#invite=' + fixture.token);
+      await page
+        .getByLabel('Email address', { exact: true })
+        .fill('pearlman@example.com');
+      await page
+        .getByRole('button', { name: 'Send sign-in code', exact: true })
+        .click();
+      const failures = [
+        [
+          { code: 'INVALID_OTP', message: 'Invalid OTP' },
+          'That sign-in code is not valid. Use the latest code or request a new one.',
+        ],
+        [
+          { code: 'OTP_EXPIRED', message: 'OTP expired' },
+          'That sign-in code has expired. Request a new one.',
+        ],
+        [
+          {
+            code: 'TOO_MANY_ATTEMPTS',
+            message: 'Too many attempts. Please try again later.',
+          },
+          'Too many attempts. Please try again later.',
+        ],
+      ];
+      let attempt = 0;
+      await page.route(
+        '**/api/custom-surveys?action=auth&path=sign-in%2Femail-otp',
+        (route) => {
+          const failure = failures[attempt++];
+          return failure
+            ? route.fulfill({
+                status: 400,
+                contentType: 'application/json',
+                body: JSON.stringify(failure[0]),
+              })
+            : route.continue();
+        },
+      );
+      for (const [, message] of failures) {
+        await page.getByLabel('Sign-in code', { exact: true }).fill('123456');
+        await page
+          .getByRole('button', {
+            name: 'Verify and open questions',
+            exact: true,
+          })
+          .click();
+        await expect(page.locator('#auth-message')).toHaveText(message);
+        await expect(
+          page.getByLabel('Sign-in code', { exact: true }),
+        ).toBeEnabled();
+        await page
+          .getByRole('button', { name: 'Send a new code', exact: true })
+          .click();
+        await expect(page.locator('#auth-message')).toContainText(
+          'Use the latest six-digit code',
+        );
+      }
+      await page.getByLabel('Sign-in code', { exact: true }).fill('123456');
+      await page
+        .getByRole('button', { name: 'Verify and open questions', exact: true })
+        .click();
+      await expect(page.locator('#who')).toHaveText('Mr. Russ Pearlman');
+      await expect(
+        page.getByRole('button', {
+          name: '5 Your playbook, in your words',
+          exact: true,
+        }),
+      ).toBeEnabled();
+    },
+  );
 } finally {
   await browser.close();
   await fixture.close();

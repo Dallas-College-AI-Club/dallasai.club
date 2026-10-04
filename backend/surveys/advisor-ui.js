@@ -8,7 +8,7 @@ import { answerRank } from './results-ui.js';
 export function mountAdvisor(
   bootstrap,
   transport,
-  { readOnly = false, welcomeHTML = '' } = {},
+  { readOnly = false, welcomeHTML = '', sample = null } = {},
 ) {
   let submitting = false;
   const BANK = bootstrap.definition;
@@ -35,10 +35,10 @@ export function mountAdvisor(
   let ui = { plain: false, motion: !reduce.matches };
   const fresh = () => ({
     advisorId: bootstrap.advisorId,
-    step: readOnly ? -1 : 0,
-    answers: {},
+    step: readOnly || sample ? -1 : 0,
+    answers: structuredClone(sample?.answers || {}),
     custom: {},
-    notes: {},
+    notes: { ...sample?.notes },
     review: {},
     bulk: { reviewed: new Set(), included: new Set() },
     approved: false,
@@ -241,7 +241,7 @@ export function mountAdvisor(
       ? 'Preview · answering disabled'
       : BANK.respondents.find((r) => r.id === state.advisorId)?.name || '';
     $('nav').innerHTML =
-      '<button class="navitem" data-nav="-1">Welcome</button>' +
+      `<button class="navitem ${state.step < 0 ? 'active' : ''}" data-nav="-1" ${state.step < 0 ? 'aria-current="step"' : ''}>Welcome</button>` +
       BANK.chapters
         .map(
           (c, i) =>
@@ -249,7 +249,7 @@ export function mountAdvisor(
         )
         .join('');
     $('progress').innerHTML =
-      `<div class="progress"><div style="width:${(Math.max(0, state.step + 1) / 5) * 100}%"></div></div><span class="micro">${state.step < 0 ? 'Welcome' : state.step < 4 ? `Page ${state.step + 1} of 5` : 'Review your answers'}</span>`;
+      `<div class="progress"><div style="width:${((state.step + 1) / 5) * 100}%"></div></div><span class="micro">${state.step < 4 ? `Page ${state.step + 1} of 5` : 'Review your answers'}</span>`;
     if (state.step < 0) {
       welcome();
       assignFocusIDs();
@@ -278,7 +278,7 @@ export function mountAdvisor(
     if (active && $(active)) $(active).focus({ preventScroll: true });
   }
   function welcome() {
-    if (readOnly) {
+    if (welcomeHTML) {
       $('main').innerHTML = welcomeHTML;
       return;
     }
@@ -1593,7 +1593,7 @@ export function mountAdvisor(
           : '';
       })
       .join('');
-    return `<div class="playbook-person"><span class="eyebrow">Your advising playbook</span><h2>${esc(advisorName())}</h2>${peers.length ? `<p class="comparison-guide">Compare with ${esc(new Intl.ListFormat('en-US').format(peers.map((p) => p.name)))}’s shared responses, question by question.</p>` : ''}</div><p class="share-guide">Each response has two separate choices: approve its wording and decide whether to share it. Only responses marked for inclusion and reviewed will be submitted. Your unanswered questions stay out of your submission.</p><div class="chiprow review-bulk"><button data-bulk-review="reviewed" aria-pressed="${state.bulk.reviewed.size > 0}" ${fields.some((f) => f.text.trim() && !f.stale) ? '' : 'disabled'}>${bulkLabel('reviewed')}</button><button data-bulk-review="included" aria-pressed="${state.bulk.included.size > 0}" ${fields.some((f) => f.text.trim() && !f.stale) ? '' : 'disabled'}>${bulkLabel('included')}</button></div><p class="fine bulk-hint">Click a bulk button again to undo only the checks it added. Individual choices are kept.</p>${summaryCard(ideal)}${grouped}<section class="send-panel"><h2>Share your playbook</h2><p>Submitting replaces your previously shared summary with this selection. Responses you leave out are removed from the current shared results.</p><p id="selection-summary" class="selection-summary">${count} ${count === 1 ? 'response' : 'responses'} selected for sharing.</p><p class="fine" id="sharing-issues" role="status">${count ? esc(issues.join(' ')) : ''}</p><label class="check final-approval"><input id="approve-playbook" type="checkbox" ${state.approved ? 'checked' : ''} ${issues.length ? 'disabled' : ''}><span>${esc(consentWording())}</span></label><div class="chiprow"><button id="submitPlaybook" class="primary" data-submit-control ${valid ? '' : 'disabled'}>Submit shared summary</button></div><div id="submit-status" role="status" aria-live="polite" class="submit-status"></div><div class="personal-copy"><h3>Keep a full copy for yourself</h3><p>These files contain all your responses, comments, and edited wording, including answers you do not include in the shared summary. Downloading does not submit anything.</p><div class="chiprow"><button id="exportFullWord" class="ghost" data-personal-export ${hasFullResponses() ? '' : 'disabled'}>Download full responses (.docx)</button><button id="exportFullMarkdown" class="ghost" data-personal-export ${hasFullResponses() ? '' : 'disabled'}>Download full responses (.md)</button></div></div></section>`;
+    return `<div class="playbook-person"><span class="eyebrow">Your advising playbook</span><h2>${esc(advisorName())}</h2>${peers.length ? `<p class="comparison-guide">Compare with ${esc(new Intl.ListFormat('en-US').format(peers.map((p) => p.name)))}’s shared responses, question by question.</p>` : ''}</div><p class="share-guide">Each response has two separate choices: approve its wording and decide whether to share it. Only responses marked for inclusion and reviewed will be submitted. Your unanswered questions stay out of your submission.</p><div class="chiprow review-bulk"><button data-bulk-review="reviewed" aria-pressed="${state.bulk.reviewed.size > 0}" ${fields.some((f) => f.text.trim() && !f.stale) ? '' : 'disabled'}>${bulkLabel('reviewed')}</button><button data-bulk-review="included" aria-pressed="${state.bulk.included.size > 0}" ${fields.some((f) => f.text.trim() && !f.stale) ? '' : 'disabled'}>${bulkLabel('included')}</button></div><p class="fine bulk-hint">Click a bulk button again to undo only the checks it added. Individual choices are kept.</p>${summaryCard(ideal)}${grouped}<section class="send-panel"><h2>Share your playbook</h2><p>Submitting replaces your previously shared summary with this selection. Responses you leave out are removed from the current shared results.</p><p id="selection-summary" class="selection-summary">${count} ${count === 1 ? 'response' : 'responses'} selected for sharing.</p><p class="fine" id="sharing-issues" role="status">${count ? esc(issues.join(' ')) : ''}</p><label class="check final-approval"><input id="approve-playbook" type="checkbox" ${state.approved ? 'checked' : ''} ${issues.length ? 'disabled' : ''}><span>${esc(consentWording())}</span></label><div class="chiprow"><button id="submitPlaybook" class="primary" data-submit-control ${valid ? '' : 'disabled'}>${sample ? 'Test submission' : 'Submit shared summary'}</button></div><div id="submit-status" role="status" aria-live="polite" class="submit-status"></div><div class="personal-copy"><h3>Keep a full copy for yourself</h3><p>These files contain all your responses, comments, and edited wording, including answers you do not include in the shared summary. Downloading does not submit anything.</p><div class="chiprow"><button id="exportFullWord" class="ghost" data-personal-export ${hasFullResponses() ? '' : 'disabled'}>Download full responses (.docx)</button><button id="exportFullMarkdown" class="ghost" data-personal-export ${hasFullResponses() ? '' : 'disabled'}>Download full responses (.md)</button></div></div></section>`;
   }
   function editResponse(id) {
     const f = comparisonFields(reviewFields()).find((x) => x.id === id);
@@ -1665,18 +1665,26 @@ export function mountAdvisor(
       const data = sharedData();
       submitting = true;
       button.disabled = true;
-      status.textContent = 'Saving selected responses…';
+      status.textContent = sample
+        ? 'Testing selected responses…'
+        : 'Saving selected responses…';
       const receipt = await transport.submit(data);
       state.approved = false;
       render();
       $('submit-status').textContent =
-        'Shared summary saved. Revision ' +
+        (sample
+          ? 'Sample submission complete. Nothing was saved or sent. Revision '
+          : 'Shared summary saved. Revision ') +
         receipt.revision +
         '. Reference: ' +
         receipt.id;
       const approval = $('approve-playbook');
       if (approval) approval.checked = false;
-      announce('Shared summary saved.');
+      announce(
+        sample
+          ? 'Sample submission complete. Nothing was saved or sent.'
+          : 'Shared summary saved.',
+      );
     } catch (error) {
       status.textContent = error.message;
       button.disabled = !canShare();
@@ -1856,6 +1864,7 @@ export function mountAdvisor(
   window.addEventListener('beforeunload', (e) => {
     if (
       !readOnly &&
+      !sample &&
       state.advisorId &&
       (Object.keys(state.answers).length ||
         Object.keys(state.notes).length ||

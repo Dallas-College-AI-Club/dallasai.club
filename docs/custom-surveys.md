@@ -1,5 +1,15 @@
 # Private custom surveys
 
+Officers can select **Preview sample comparison** for Advisor Studio in Club
+Office to test the full survey with fictional Jordan Morgan and Alex Rivera
+responses. Choose either sample respondent, edit answers and comments, review
+and include responses, test submission, and download personal copies. **Reset
+sample** restores the fictional starting answers. Sample submissions stay in
+the tab and never call the survey save endpoint or create Neon records. The
+sample entry requires the existing officer sign-in; the shareable question
+preview remains read-only. The welcome design and survey themes are shared with
+the respondent survey.
+
 Open **Club office → Surveys → All surveys**. Search by survey title and use
 **Collection** to show all surveys, event feedback, or standalone custom surveys.
 Drafts appear first. Expand a survey to read its saved responses in place; linked

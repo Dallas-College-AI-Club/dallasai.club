@@ -414,6 +414,17 @@ export function mountCustomSurveys(root, api, options = {}) {
             };
             const actions = node('div', undefined, 'entry-actions');
             actions.append(preview, copyPreview);
+            if (!survey.definition) {
+              const sample = node(
+                'a',
+                'Preview sample comparison',
+                'button-link',
+              );
+              sample.href = '/surveys/#sample=sample-jordan&step=review';
+              sample.target = '_blank';
+              sample.rel = 'noopener noreferrer';
+              actions.append(sample);
+            }
             if (survey.privateLink)
               actions.append(link, copy, surveyQR(survey));
             content.append(actions, notice);

@@ -75,8 +75,8 @@ It grants deletion only for device tokens, not survey responses. The migration i
 repeatable. Cleanup is bounded and retries on later daily runs if there is a backlog.
 
 Apply `019_help_entries.sql` to let officers add their own Help topics. Until it is
-applied, Help shows the built-in topics with “Officer topics are not set up yet.”, and
-saving a topic answers 503 with a message naming migration 019. The topics are stored
+applied with migration 020, Help reports that topics are not set up, and
+saving a topic answers 503 naming the required migrations. The topics are stored
 only in Neon, never in this public repository. The migration is repeatable and grants
 the runtime role select, insert, delete and updates of the editable columns.
 

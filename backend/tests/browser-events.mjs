@@ -309,7 +309,7 @@ try {
   );
   assert.ok(
     await page.evaluate(
-      async () => (await document.fonts.load('14px Geist')).length > 0,
+      async () => (await document.fonts.load('14px "DM Sans"')).length > 0,
     ),
   );
   await page.waitForFunction(

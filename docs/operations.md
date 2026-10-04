@@ -218,7 +218,7 @@ reply after the save commits, or reject one oversized CSV download. Use it to
 verify retries, consent, pagination, and error recovery without real respondents.
 Never submit synthetic test data or send test email through production.
 
-Typed-answer verification (2026-10-04): all 251 backend tests and all 64 Office
+Typed-answer verification (2026-10-04): all 251 backend tests and all 67 Office
 browser scenarios passed. The RSVP browser lifecycle and all nine grouped-survey
 browser scenarios passed, including
 zero-valued numbers, invalid email rejection, dated choices, empty RSVP-enabled

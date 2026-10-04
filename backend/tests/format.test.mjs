@@ -8,6 +8,8 @@ import {
   dateTime,
   day,
   fieldLabel,
+  fullDateTime,
+  isoDay,
   kindLabel,
   plural,
   statusLabel,
@@ -33,6 +35,14 @@ test('dateTime() is one Central format across daylight saving changes', () => {
   for (const text of [dateTime('2026-07-02T20:05:00Z', now), clock(now)])
     assert.doesNotMatch(text, /[\u202f\u2009]|:\d\d:\d\d|C[DS]T|\d{4}-\d{2}/);
   assert.equal(dateTime(null), '');
+  // Downloads always carry the year, and file names the Central day.
+  assert.equal(
+    fullDateTime('2026-10-03T04:34:00Z'),
+    'Fri, Oct 2, 2026, 11:34 PM CT',
+  );
+  assert.equal(isoDay('2026-10-03T04:34:00Z'), '2026-10-02');
+  assert.equal(isoDay('2026-10-03T05:00:00Z'), '2026-10-03');
+  assert.equal(fullDateTime(null) + isoDay(undefined), '');
 });
 test('day() shows calendar dates without shifting them', () => {
   assert.equal(day('2026-10-23', now), 'Fri, Oct 23');
@@ -87,6 +97,9 @@ test('every server action code has a label', async () => {
       'survey-restored',
       'survey-summary:all',
       'survey-export-csv:office-event',
+      // Built as '<code>:<survey id>' and '<code>:<survey id>:<respondent>'.
+      'custom-survey-export-csv:2c1f0b4e-0000-4000-8000-000000000000',
+      'custom-survey-pdf:2c1f0b4e-0000-4000-8000-000000000000:avery',
       'contact-purged:entries=1:notes=0:files=0',
       // Built as 'state:' + body.state.
       'state:cancelled',

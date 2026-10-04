@@ -1,10 +1,16 @@
 import { chromium, expect } from '@playwright/test';
 import assert from 'node:assert/strict';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { officeFixture } from './helpers/office-fixture.mjs';
+import {
+  advisorResponses,
+  builderSample,
+} from './helpers/survey-response-samples.mjs';
+import { pdfLines } from './helpers/pdf-text.mjs';
 import { changeDraft } from '../lib/survey-builder.mjs';
 import { privateSurveyToken } from '../lib/custom-surveys.mjs';
+import { definition } from '../lib/survey-contract.mjs';
 import { randomUUID } from 'node:crypto';
 const fixture = await officeFixture();
 const browser = await chromium.launch({
@@ -2365,6 +2371,326 @@ try {
         );
         assert.ok(nav.width >= width - 1, `tabs not full width at ${width}px`);
       }
+    },
+  );
+  // Synthetic surveys for the downloads: one in the original Advisor Studio
+  // design (no builder definition), a builder survey, and a builder survey
+  // whose first response arrives after the survey list has loaded.
+  const studio = randomUUID(),
+    feedback = randomUUID(),
+    late = randomUUID(),
+    sample = builderSample();
+  await fixture.db.query(
+    `INSERT INTO club_forms.custom_surveys(id,slug,title,content_version,status,link_digest,expires_at) VALUES($1,'advisor-studio-sample','Advisor Studio sample',$2,'closed',$3,now())`,
+    [studio, definition.content_version, randomUUID()],
+  );
+  for (const [id, title] of [
+    [feedback, sample.definition.title],
+    [late, 'Late responses sample'],
+  ])
+    for (const [action, expectedRevision] of [
+      ['save', 0],
+      ['publish', 1],
+    ])
+      await changeDraft(
+        fixture.db,
+        { email: 'officer@example.com' },
+        {
+          id,
+          definition: { ...sample.definition, title },
+          action,
+          expectedRevision,
+          requestId: randomUUID(),
+        },
+      );
+  const addResponse = async (survey, id, name, responses) => {
+    await fixture.db.query(
+      'INSERT INTO club_forms.custom_survey_members(survey_id,advisor_id,display_name,email) VALUES($1,$2,$3,$4)',
+      [survey, id, name, id + '@example.com'],
+    );
+    await fixture.db.query(
+      "INSERT INTO club_forms.custom_survey_responses(survey_id,advisor_id,revision,responses,submitted_at) VALUES($1,$2,1,$3,'2026-10-03T03:30:00Z')",
+      [survey, id, JSON.stringify(responses)],
+    );
+  };
+  await addResponse(studio, 'avery', 'Avery Sample', advisorResponses());
+  await addResponse(
+    feedback,
+    'jordan',
+    'Jordan Example',
+    sample.answers('Clear examples'),
+  );
+  const openCustomSurvey = async (page, id) => {
+    await page.locator('#surveys-tab').click();
+    await page.locator('#custom-surveys-group').click();
+    await page.getByLabel('Custom survey', { exact: true }).selectOption(id);
+  };
+  const pdfAudits = async (survey) =>
+    (
+      await fixture.db.query(
+        'SELECT actor,action FROM club_forms.audit WHERE action LIKE $1',
+        ['custom-survey-pdf:' + survey + ':%'],
+      )
+    ).rows;
+  await check('Custom survey responses download as PDF files', async (page) => {
+    const scripts = () =>
+      page.evaluate(() =>
+        performance
+          .getEntriesByType('resource')
+          .map((entry) => new URL(entry.name).pathname)
+          .filter((path) => path.endsWith('.js')),
+      );
+    const dialog = page.getByRole('dialog', {
+        name: 'Download PDF',
+        exact: true,
+      }),
+      heading = dialog.getByLabel('PDF heading', { exact: true }),
+      avery = page.getByRole('button', {
+        name: 'Download PDF for Avery Sample',
+        exact: true,
+      });
+    // After an update, the old PDF file is gone: the page asks for a reload
+    // and records nothing.
+    await page.route('**/admin/response-pdf-*.js', (route) => route.abort());
+    await openCustomSurvey(page, studio);
+    await avery.click();
+    await dialog
+      .getByRole('button', { name: 'Download PDF', exact: true })
+      .click();
+    await expect(
+      page.getByText(
+        'Club Office was updated. Reload the page to download the PDF.',
+        { exact: true },
+      ),
+    ).toBeVisible();
+    assert.deepEqual(await pdfAudits(studio), []);
+    await page.unroute('**/admin/response-pdf-*.js');
+    await page.reload();
+    await page.locator('#office').waitFor();
+    await openCustomSurvey(page, studio);
+    await avery.waitFor();
+    // jsPDF is not part of the first download.
+    assert.deepEqual(await scripts(), ['/admin/index.js']);
+    await avery.click();
+    await expect(heading).toHaveValue('Advisor Studio sample');
+    // The sample's Korean note is beyond the PDF font, so Print is offered.
+    await expect(
+      dialog.getByRole('button', { name: 'Print / Save as PDF', exact: true }),
+    ).toBeVisible();
+    await heading.fill('Advisor notes — Avery');
+    let download = page.waitForEvent('download');
+    await dialog
+      .getByRole('button', { name: 'Download PDF', exact: true })
+      .click();
+    let file = await download;
+    assert.equal(
+      file.suggestedFilename(),
+      'advisor-studio-sample-avery-sample-2026-10-02.pdf',
+    );
+    let bytes = await readFile(await file.path());
+    assert.equal(bytes.subarray(0, 5).toString(), '%PDF-');
+    let lines = pdfLines(bytes);
+    for (const text of [
+      'Dallas College AI Club',
+      'Advisor notes — Avery',
+      'Avery Sample',
+      '1.',
+      'Build or review an AI prototype together',
+      'Dial position: 65 of 100.',
+      'Avery Sample · Advisor notes — Avery',
+    ])
+      assert.ok(lines.includes(text), text);
+    assert.ok(!lines.includes('Advisor Studio sample'));
+    await expect(
+      page.getByText('PDF downloaded.', { exact: true }),
+    ).toBeVisible();
+    assert.match(
+      (await scripts()).join(' '),
+      /^\/admin\/index\.js \/admin\/response-pdf-\w+\.js$/,
+    );
+    assert.deepEqual(await pdfAudits(studio), [
+      {
+        actor: 'officer@example.com',
+        action: `custom-survey-pdf:${studio}:avery`,
+      },
+    ]);
+    // The heading is remembered for this survey; Cancel changes nothing.
+    await avery.click();
+    await expect(heading).toHaveValue('Advisor notes — Avery');
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(avery).toBeFocused();
+    // Without browser storage the dialog still opens with the survey title.
+    await page.evaluate(() => {
+      for (const name of ['getItem', 'setItem', 'removeItem'])
+        Storage.prototype[name] = () => {
+          throw new Error('Storage is blocked');
+        };
+    });
+    await page
+      .getByLabel('Custom survey', { exact: true })
+      .selectOption(feedback);
+    await page
+      .getByRole('button', { name: 'Download PDF for Jordan Example' })
+      .click();
+    await expect(heading).toHaveValue('Workshop feedback sample');
+    // Plain Latin text needs no print view.
+    await expect(
+      dialog.getByRole('button', { name: 'Print / Save as PDF', exact: true }),
+    ).toBeHidden();
+    download = page.waitForEvent('download');
+    await dialog
+      .getByRole('button', { name: 'Download PDF', exact: true })
+      .click();
+    file = await download;
+    assert.equal(
+      file.suggestedFilename(),
+      'workshop-feedback-sample-jordan-example-2026-10-02.pdf',
+    );
+    // Builder surveys list a skipped question as 'No answer'.
+    lines = pdfLines(await readFile(await file.path()));
+    for (const text of ['Jordan Example', '•', 'Agents', 'No answer'])
+      assert.ok(lines.includes(text), text);
+    // The response and its button fit a phone.
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page
+      .getByRole('heading', { name: 'Submitted responses', exact: true })
+      .evaluate((heading) => heading.scrollIntoView());
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      true,
+    );
+    await page.screenshot({
+      path: path.join(screens, 'custom-survey-pdf-375.png'),
+    });
+  });
+  await check(
+    'Names the PDF font lacks are offered Print / Save as PDF',
+    async (page) => {
+      await addResponse(
+        feedback,
+        'haneul',
+        '김하늘',
+        sample.answers('좋았어요. Clear examples'),
+      );
+      await page.evaluate(() => {
+        window.printCalls = 0;
+        window.print = () => window.printCalls++;
+      });
+      await openCustomSurvey(page, feedback);
+      await page
+        .locator('.response-person > summary', { hasText: '김하늘' })
+        .click();
+      const trigger = page.getByRole('button', {
+        name: 'Download PDF for 김하늘',
+        exact: true,
+      });
+      await trigger.click();
+      const dialog = page.getByRole('dialog', {
+        name: 'Download PDF',
+        exact: true,
+      });
+      await expect(dialog).toContainText(
+        'Some characters here only show with Print / Save as PDF.',
+      );
+      await dialog
+        .getByLabel('PDF heading', { exact: true })
+        .fill('Workshop notes for 하늘');
+      await dialog
+        .getByRole('button', { name: 'Print / Save as PDF', exact: true })
+        .click();
+      const view = page.getByRole('dialog', {
+        name: 'Print view',
+        exact: true,
+      });
+      await expect(view).toBeVisible();
+      await expect(view.locator('h1')).toHaveText('Workshop notes for 하늘');
+      await expect(view.locator('dd').first()).toHaveText('김하늘');
+      await expect(view).toContainText('좋았어요. Clear examples');
+      await expect(view).toContainText('No answer');
+      assert.equal(await page.evaluate(() => window.printCalls), 1);
+      assert.deepEqual((await pdfAudits(feedback)).at(-1), {
+        actor: 'officer@example.com',
+        action: `custom-survey-pdf:${feedback}:haneul`,
+      });
+      // On paper a plain copy of the document prints, with no Club Office
+      // around it; on screen the copy stays hidden.
+      const copy = page.locator('.print-copy');
+      await page.emulateMedia({ media: 'print' });
+      for (const id of ['#app-bar', '#app-nav', '#main'])
+        await expect(page.locator(id)).toBeHidden();
+      await expect(view).toBeHidden();
+      await expect(copy.locator('h1')).toHaveText('Workshop notes for 하늘');
+      await expect(copy).toContainText('김하늘');
+      await page.emulateMedia({ media: 'screen' });
+      await expect(copy).toBeHidden();
+      await view
+        .getByRole('button', { name: 'Print / Save as PDF', exact: true })
+        .click();
+      assert.equal(await page.evaluate(() => window.printCalls), 2);
+      await view.getByRole('button', { name: 'Close', exact: true }).click();
+      await expect(view).toHaveCount(0);
+      await expect(copy).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+      // Printing the office itself is unchanged.
+      await page.emulateMedia({ media: 'print' });
+      await expect(page.locator('#main')).toBeVisible();
+      await page.emulateMedia({ media: 'screen' });
+    },
+  );
+  await check(
+    'Custom survey CSV export downloads every active response',
+    async (page) => {
+      const exportButton = page
+        .locator('#custom-surveys-root')
+        .getByRole('button', { name: 'Export CSV', exact: true });
+      // The button follows the results just loaded, not the older survey
+      // list: a first response after the list loaded can be exported.
+      await openCustomSurvey(page, late);
+      await expect(exportButton).toBeDisabled();
+      await addResponse(late, 'riley', 'Riley Sample', sample.answers('Late'));
+      await page
+        .getByLabel('Custom survey', { exact: true })
+        .selectOption(studio);
+      await page
+        .getByLabel('Custom survey', { exact: true })
+        .selectOption(late);
+      await expect(
+        page.getByRole('button', { name: 'Download PDF for Riley Sample' }),
+      ).toBeVisible();
+      await expect(exportButton).toBeEnabled();
+      await page
+        .getByLabel('Custom survey', { exact: true })
+        .selectOption(studio);
+      await expect(
+        page.getByRole('button', { name: 'Download PDF for Avery Sample' }),
+      ).toBeVisible();
+      const download = page.waitForEvent('download');
+      await exportButton.click();
+      const file = await download;
+      assert.match(
+        file.suggestedFilename(),
+        /^advisor-studio-sample-responses-\d{4}-\d{2}-\d{2}\.csv$/,
+      );
+      const csv = await readFile(await file.path(), 'utf8');
+      assert.match(
+        csv,
+        /^\ufeff"Name","Email","Submitted \(Central\)","Status","What would you actually look forward to\?"/,
+      );
+      assert.match(csv, /\r\n"Avery Sample","avery@example.com","Oct 2, 2026/);
+      assert.match(
+        csv,
+        /"Active","1\. Build or review an AI prototype together 2\. Shape/,
+      );
+      assert.match(csv, /"\[Shared wording only\] =SUM\(A1\)/);
+      await expect(
+        page.getByText(
+          'CSV downloaded. It includes every active response across all pages.',
+          { exact: true },
+        ),
+      ).toBeVisible();
     },
   );
 } finally {

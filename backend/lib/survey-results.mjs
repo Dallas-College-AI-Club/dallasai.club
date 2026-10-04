@@ -1,4 +1,6 @@
 import { RequestError } from './errors.mjs';
+import { csvCell, centralDate, received } from './submission-export.mjs';
+import { answerFormat, answerRank, fileSlug } from '../surveys/results-ui.js';
 
 export async function surveyResultPage(
   db,
@@ -42,3 +44,79 @@ export async function surveyResultPage(
     nextOffset: rows.length > 10 ? start + 10 : null,
   };
 }
+// The CSV export holds what Submitted responses lists: every active
+// respondent's saved answers, across every page. Like the Inbox export, it
+// refuses a set too large to send instead of cutting it short.
+export async function surveyExportRows(db, surveyId) {
+  const { rows } = await db.query(
+    `SELECT m.display_name,m.email,m.active,r.responses,r.submitted_at
+    FROM club_forms.custom_survey_members m
+    JOIN club_forms.custom_survey_responses r USING(survey_id,advisor_id)
+    WHERE m.survey_id=$1 AND m.active AND jsonb_array_length(r.responses)>0
+    ORDER BY r.submitted_at DESC,m.advisor_id LIMIT 10001`,
+    [surveyId],
+  );
+  if (rows.length > 10000)
+    throw new RequestError(
+      413,
+      'More than 10,000 responses. Download responses one at a time as PDF instead.',
+    );
+  return rows;
+}
+// One row per respondent and one column per question, in survey order.
+// Answers read as on screen: '1. … 2. …' rankings, chosen options joined
+// with '; ', and dials as '65 of 100 — <wording>'. Wording a respondent
+// rewrote for sharing starts '[Shared wording only] '. Builder surveys list
+// every question; Advisor Studio lists the answers respondents shared.
+export function surveyResultsCSV(rows, definition) {
+  const rank = answerRank(definition),
+    columns = new Map();
+  if (!definition?.chapters)
+    for (const q of definition?.questions || []) columns.set(q.id, q);
+  for (const row of rows)
+    for (const answer of row.responses)
+      if (!columns.has(answer.id)) columns.set(answer.id, answer);
+  const ordered = [...columns.values()].sort(
+    (a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id),
+  );
+  const cell = (answer) => {
+    if (!answer) return '';
+    const { kind, lines, dial } = answerFormat(answer, definition),
+      text = lines.filter(Boolean).join(kind === 'choices' ? '; ' : ' ');
+    return (
+      (answer.mode === 'narrative' ? '[Shared wording only] ' : '') +
+      (dial === undefined ? text : `${dial} of 100 — ${text}`)
+    );
+  };
+  const header = [
+    'Name',
+    'Email',
+    'Submitted (Central)',
+    'Status',
+    ...ordered.map((column) => column.title),
+  ];
+  const lines = rows.map((row) => [
+    // As on screen, a respondent without a name is shown by email.
+    row.display_name || row.email,
+    row.email,
+    received.format(new Date(row.submitted_at)),
+    row.active ? 'Active' : 'Archived',
+    ...ordered.map((column) =>
+      cell(row.responses.find((answer) => answer.id === column.id)),
+    ),
+  ]);
+  return (
+    '\uFEFF' +
+    [header, ...lines]
+      .map((line) =>
+        line
+          .map((value) => csvCell(String(value ?? '').replace(/[\r\n]+/g, ' ')))
+          .join(','),
+      )
+      .join('\r\n') +
+    '\r\n'
+  );
+}
+// <survey>-responses-<Central date>.csv
+export const surveyExportFilename = (title, now = new Date()) =>
+  `${fileSlug(title) || 'custom-survey'}-responses-${centralDate.format(now)}.csv`;

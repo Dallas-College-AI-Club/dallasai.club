@@ -39,3 +39,10 @@ export function adminOrigin(req) {
   )
     throw new RequestError(403, 'Please use the club admin page.');
 }
+// adminOrigin() for a GET download that writes an audit row: browsers mark a
+// request from another site's link, image or form, and such requests stop.
+// Club Office's own requests are same-origin; a typed address is 'none'.
+export function sameOriginRead(req) {
+  if (!['same-origin', 'none'].includes(req.headers['sec-fetch-site']))
+    throw new RequestError(403, 'Please use the club admin page.');
+}

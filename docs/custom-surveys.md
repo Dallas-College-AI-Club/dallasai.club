@@ -19,6 +19,44 @@ and officer view. The invitation secret stays in the URL fragment and a
 same-origin request header, outside ordinary URL/access logs. Never add survey
 request bodies or private link headers to logs or analytics.
 
+## Downloads
+
+**Export CSV** under Submitted responses downloads every active response across
+all pages, like the event survey export: one row per respondent with name (or
+email when there is no name), email, submitted time (Central) and status, then
+one column per question in survey order. Rankings read `1. … 2. …`, chosen
+options are joined with semicolons, dials read `65 of 100 — <wording>`, and
+wording a respondent rewrote for sharing starts `[Shared wording only]`. Builder
+surveys have a column for every question; Advisor Studio has a column for each
+answer respondents shared. Archived responses stay in Inbox → Archived →
+Questions. Formula values are escaped. The file is
+`<survey>-responses-<YYYY-MM-DD>.csv`. More than 10,000 responses, or a file over
+4 MB, is refused with a message instead of a partial file. The export runs only
+from Club Office or a typed address, never from another site's link.
+
+Each response has **Download PDF**. It opens a dialog with one field, **PDF
+heading**, filled with the survey title; the heading can change, the answers
+cannot. This browser remembers the last heading for each survey. **Download
+PDF** saves one respondent's answers as a Letter-size PDF, made in the browser
+from the results on screen: the club name, the heading, respondent name and
+email, submitted time (Central) and number of answers, then each chapter and
+question in survey order, formatted as on screen. Builder questions the
+respondent skipped read **No answer**, blank lines in written answers start new
+paragraphs, and a question title is kept with its answer. Every page has the
+respondent, heading and page number at the foot. The file is
+`<survey>-<respondent>-<YYYY-MM-DD>.pdf`, dated by the Central submission day.
+
+The PDF uses the built-in Helvetica font: emoji are left out, and a few symbols
+are spelled out (`→` as `->`). When a name or answer has other characters, such
+as Korean, the dialog says so and offers **Print / Save as PDF**. That opens the
+same document in a print view with the page's own fonts and the browser's print
+dialog, where **Save as PDF** keeps every character.
+
+Both downloads write an audit row with the officer's email:
+`custom-survey-export-csv:<survey id>`, or
+`custom-survey-pdf:<survey id>:<respondent id>` once the PDF is made or the print
+view opens. The respondent id is never an email address.
+
 ## Access
 
 - Anyone with the current private link may preview the questions. The preview
@@ -33,7 +71,8 @@ request bodies or private link headers to logs or analytics.
 - Officers keep the existing ADMIN_EMAILS plus Neon admin-role check. Advisor
   survey membership grants no inbox or event-editor access. An account may
   already have officer privileges independently of its advisor membership.
-- Officer result routes are GET-only. Advisors can submit only their own
+- Officer result and CSV routes are GET-only; a PDF download records its
+  audit row with a same-origin POST. Advisors can submit only their own
   responses and see only the shared summaries in their assigned survey.
 - Cookie-authenticated writes require the configured same origin. No endpoint
   grants roles or accepts a client-selected advisor identity as authorization.
@@ -112,7 +151,9 @@ from the authenticated office.
 
 `npm test` in `backend/` covers request boundaries, scope, remembered devices,
 revocation, preview privacy, atomic persistence/rollback, replacement snapshots,
-idempotency, and the scoped Neon proxy. Build with `npm run build`.
+idempotency, the scoped Neon proxy, and the CSV and PDF downloads. Build with
+`npm run build`; the PDF code (jsPDF) is a separate file that loads on the
+first **Download PDF**.
 `node backend/tests/serve-custom-survey.mjs` starts an isolated PGlite UI fixture
 at port 4187, with synthetic advisor addresses and code `123456`. The fixture
 prints the temporary test URLs. It is not included in the deployed public build.

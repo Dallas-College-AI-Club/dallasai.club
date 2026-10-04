@@ -1,5 +1,5 @@
 import { database } from '../lib/db.mjs';
-import { requireAdmin, adminOrigin } from '../lib/auth.mjs';
+import { requireAdmin, adminOrigin, sameOriginRead } from '../lib/auth.mjs';
 import { neonSession, proxyNeonAuth } from '../lib/neon-auth.mjs';
 import { expiredAdminCookies } from '../lib/admin-session.mjs';
 import { send, fail, jsonBody, limit } from '../lib/http.mjs';
@@ -7,7 +7,12 @@ import { RequestError } from '../lib/errors.mjs';
 import { definition } from '../lib/survey-contract.mjs';
 import { getDraft, changeDraft } from '../lib/survey-builder.mjs';
 import { surveyCatalog } from '../lib/survey-catalog.mjs';
-import { surveyResultPage } from '../lib/survey-results.mjs';
+import {
+  surveyResultPage,
+  surveyExportRows,
+  surveyResultsCSV,
+  surveyExportFilename,
+} from '../lib/survey-results.mjs';
 import {
   respondentList,
   changeRespondent,
@@ -101,10 +106,38 @@ export function customSurveysHandler({
           );
         throw new RequestError(405, 'Method not allowed.');
       }
-      if (action === 'catalog' || action === 'results') {
-        await authorize(req);
+      // The PDF of one response is made in the browser from the results it
+      // already shows. Like the CSV export, it records who downloaded it:
+      // the survey and the respondent's id, never an email address.
+      if (action === 'response-pdf') {
+        const actor = await authorize(req);
+        if (req.method !== 'POST') throw new RequestError(405, 'Use POST.');
+        const body = await jsonBody(req, 1000),
+          id = surveyId(body.id),
+          db = getDatabase();
+        if (
+          typeof body.advisorId !== 'string' ||
+          !body.advisorId ||
+          body.advisorId.length > 100
+        )
+          throw new RequestError(400, 'Choose a response.');
+        const found = await db.query(
+          'SELECT 1 FROM club_forms.custom_survey_responses WHERE survey_id=$1 AND advisor_id=$2',
+          [id, body.advisorId],
+        );
+        if (!found.rows.length)
+          throw new RequestError(404, 'Response not found.');
+        await db.query(
+          'INSERT INTO club_forms.audit(actor,action) VALUES($1,$2)',
+          [actor.email, `custom-survey-pdf:${id}:${body.advisorId}`],
+        );
+        return send(res, 200, { recorded: true });
+      }
+      if (action === 'catalog' || action === 'results' || action === 'export') {
+        const actor = await authorize(req);
         if (req.method !== 'GET')
           throw new RequestError(405, 'Survey results are read-only.');
+        if (action === 'export') sameOriginRead(req);
         const db = getDatabase();
         if (action === 'catalog') {
           return send(res, 200, {
@@ -119,6 +152,31 @@ export function customSurveysHandler({
           )
         ).rows[0];
         if (!survey) throw new RequestError(404, 'Survey not found.');
+        if (action === 'export') {
+          const csv = surveyResultsCSV(
+            await surveyExportRows(db, id),
+            survey.definition || definition,
+          );
+          // Vercel sends at most 4.5 MB; refuse rather than fail midway.
+          if (Buffer.byteLength(csv) > 4000000)
+            throw new RequestError(
+              413,
+              'These responses make a CSV larger than 4 MB, more than Club Office can send at once. Download responses one at a time as PDF instead.',
+            );
+          // Like the event survey export, record who read the full set.
+          await db.query(
+            'INSERT INTO club_forms.audit(actor,action) VALUES($1,$2)',
+            [actor.email, 'custom-survey-export-csv:' + id],
+          );
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+          res.setHeader(
+            'Content-Disposition',
+            `attachment; filename="${surveyExportFilename(survey.title)}"`,
+          );
+          res.setHeader('X-Content-Type-Options', 'nosniff');
+          return res.end(csv);
+        }
         return send(res, 200, {
           survey,
           resultsDefinition: survey.definition || definition,

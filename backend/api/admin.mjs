@@ -138,12 +138,12 @@ export function adminHandler({
               [since],
             )
           ).rows[0];
-          const inView = (
+          const { arrivedInView, newInView } = (
             await db.query(
-              `SELECT count(*)::int AS n FROM club_forms.entries e ${where} AND date_trunc('milliseconds',e.created_at)>$${filters.length + 1}::timestamptz`,
+              `SELECT count(*) FILTER (WHERE date_trunc('milliseconds',e.created_at)>$${filters.length + 1}::timestamptz)::int AS "arrivedInView",count(*) FILTER (WHERE review_status='new')::int AS "newInView" FROM club_forms.entries e ${where}`,
               [...filters, since],
             )
-          ).rows[0].n;
+          ).rows[0];
           return send(res, 200, {
             user: user.email,
             counts,
@@ -152,7 +152,8 @@ export function adminHandler({
               null,
             ),
             arrived,
-            arrivedInView: inView,
+            arrivedInView,
+            newInView,
             asOf,
             configured: {
               uploads: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
@@ -255,7 +256,7 @@ export function adminHandler({
         // The page is chosen first, so the per-row extras run for 51 rows; an
         // empty page still returns one row, with a null id, for the totals.
         const result = await db.query(
-          `SELECT list.total AS list_total,list."asOf" AS list_as_of,e.*,
+          `SELECT list.total AS list_total,list."newInView" AS list_new,list."asOf" AS list_as_of,e.*,
         (SELECT COALESCE(json_agg(json_build_object('id',a.id,'name',a.name,'size',a.size)),'[]') FROM club_forms.attachments a WHERE a.entry_id=e.id) AS attachments,
         (SELECT count(*)::int FROM club_forms.entry_comments c WHERE c.entry_id=e.id) AS comment_count,
         (SELECT json_build_object('action',a.action,'actor',a.actor,'at',a.created_at) FROM club_forms.audit a WHERE a.entry_id=e.id AND a.action LIKE 'review:%' ORDER BY a.id DESC LIMIT 1) AS last_review,
@@ -263,14 +264,18 @@ export function adminHandler({
         (SELECT count(*)::int FROM club_forms.contact_emails a JOIN club_forms.entries o ON o.email=a.email WHERE a.contact_email=link.contact_email AND o.id<>e.id) AS contact_others,
         (SELECT count(*)::int FROM club_forms.contact_emails a JOIN club_forms.contact_notes n ON n.email=a.email WHERE a.contact_email=link.contact_email) AS contact_notes,
         person.deleted_at AS contact_deleted_at
-        FROM (SELECT count(*)::int AS total,now() AS "asOf" FROM club_forms.entries e ${where}) list
+        FROM (SELECT count(*)::int AS total,count(*) FILTER (WHERE review_status='new')::int AS "newInView",now() AS "asOf" FROM club_forms.entries e ${where}) list
         LEFT JOIN (SELECT e.*,to_char(e.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at FROM club_forms.entries e ${where}${page.where} ORDER BY ${page.order} LIMIT 51 OFFSET $7) e ON true
         LEFT JOIN club_forms.contact_emails link ON link.email=e.email
         LEFT JOIN club_forms.contacts person ON person.email=link.contact_email
         ORDER BY ${page.order}`,
           [...filters, offset, ...page.values],
         );
-        const { list_total: total, list_as_of: asOf } = result.rows[0];
+        const {
+          list_total: total,
+          list_new: newInView,
+          list_as_of: asOf,
+        } = result.rows[0];
         const rows = result.rows.filter((row) => row.id !== null);
         const summary = url.searchParams.get('summary') === '1';
         const entries = rows
@@ -278,6 +283,7 @@ export function adminHandler({
           .map(
             ({
               list_total,
+              list_new,
               list_as_of,
               cursor_at,
               contact_email,
@@ -315,6 +321,7 @@ export function adminHandler({
           // microsecond time, which a JSON created_at does not.
           nextBefore: rows.length > 50 ? `${last.cursor_at}|${last.id}` : null,
           total,
+          newInView,
           asOf,
           counts,
           eventCounts,

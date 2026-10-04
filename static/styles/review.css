@@ -776,11 +776,29 @@ body.reading {
   font-size: 12px;
 }
 .publication-rule .review-actions button:last-child {
-  background: #244d39;
-  color: #f5f5e9;
   padding: 9px 15px;
   min-height: 38px;
   border-radius: 5px;
+}
+.publication-rule .review-actions button[data-open='contribute'] {
+  min-height: 42px;
+  padding: 9px 15px;
+  border: 1px solid #c58f64;
+  border-radius: 24px;
+  color: #925823;
+  background: transparent;
+  outline-color: currentColor;
+  transition:
+    background 0.2s,
+    border-color 0.2s,
+    transform 0.2s;
+}
+.publication-rule
+  .review-actions
+  button[data-open='contribute']:is(:hover, :focus-visible) {
+  border-color: currentColor;
+  background: color-mix(in srgb, currentColor 5%, transparent);
+  transform: translateY(-2px);
 }
 .publication .publication-filter {
   padding-top: 28px;

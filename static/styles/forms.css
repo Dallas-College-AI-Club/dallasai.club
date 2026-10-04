@@ -164,6 +164,36 @@
   outline: 3px solid #8caa79;
   outline-offset: 5px;
 }
+.membership-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+body .membership-actions .teams-link {
+  background: #185abd;
+  border-color: #185abd;
+  color: #fff;
+}
+body .membership-actions .teams-link:hover {
+  background: #124a9d;
+  border-color: #124a9d;
+}
+.membership-event {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line, #d6d6cc);
+}
+body .content p.membership-event-label {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--muted, #53584b);
+}
+body .content .membership-event h3 {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.5;
+}
 .workshop-dialog .form-complete {
   margin-top: 0;
 }

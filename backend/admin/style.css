@@ -2738,6 +2738,10 @@ html.survey-report-open {
   background: var(--notice);
   color: var(--notice-text);
 }
+.survey-library-summary .survey-published {
+  background: var(--success-surface);
+  color: var(--success);
+}
 .custom-survey-group-body {
   padding: 0 20px 20px;
 }

@@ -124,6 +124,7 @@ function queued(path, body) {
   );
 }
 async function send(path, body) {
+  const current = round;
   let response;
   try {
     response = await fetch(path, {
@@ -152,6 +153,8 @@ async function send(path, body) {
   }
   setOffline(false);
   const data = await response.json().catch(() => null);
+  // A reply from a discarded account must not reopen or pause its successor.
+  if (current !== round) throw new ApiError('auth', otherAccount, 401);
   if (response.status === 401) {
     if (data?.code === 'not-officer') {
       showNotOfficer();
@@ -451,6 +454,11 @@ export function accountChanged(email) {
   return true;
 }
 function showNotOfficer() {
+  if (account || paused) {
+    const signedInEmail = identity;
+    discard('Officer access ended.');
+    identity = signedInEmail;
+  }
   for (const id of ['#session-loading', '#login', '#load-error'])
     q(id).hidden = true;
   q('#office').hidden = true;

@@ -67,6 +67,7 @@ let since = null,
   // before one of them is stale and is fetched again.
   saves = 0,
   newCount = 0,
+  viewNewCount = 0,
   routeTitle = 'Inbox';
 const latestOf = (counts) =>
   counts.reduce(
@@ -121,6 +122,8 @@ function clearOffice() {
   sessionGeneration++;
   signedIn = false;
   since = lastLatest = lastCounts = loadedKey = listRequest = null;
+  homeRequest = null;
+  viewNewCount = 0;
   setNewCount(0);
   q('#arrivals').hidden = true;
   q('#inbox-updated').replaceChildren();
@@ -446,8 +449,9 @@ function setNewCount(count) {
 }
 // People's names never go into titles: they land in browser history.
 function setTitle() {
+  const count = routeTitle === 'Inbox' ? viewNewCount : newCount;
   document.title =
-    (signedIn && newCount > 0 ? '(' + newCount + ') ' : '') +
+    (signedIn && count > 0 ? '(' + count + ') ' : '') +
     (signedIn ? routeTitle + ' · ' : '') +
     'Club Office';
 }
@@ -550,6 +554,7 @@ async function fetchList(key) {
       offset = Math.max(0, offset - 50);
       return load();
     }
+    viewNewCount = data.newInView;
     if (!snapshot(data)) return;
     loadedKey = key;
     q('#arrivals').hidden = true;
@@ -629,6 +634,7 @@ async function poll() {
   if (!signedIn || isPaused() || polling) return;
   polling = true;
   const generation = sessionGeneration,
+    viewKey = JSON.stringify(view),
     params = new URLSearchParams({ counts: '1' });
   if (since) params.set('since', since);
   if (!view.id)
@@ -643,6 +649,7 @@ async function poll() {
     if (generation !== sessionGeneration || accountChanged(data.user)) return;
     lastPoll = Date.now();
     since ??= data.asOf;
+    if (viewKey === JSON.stringify(view)) viewNewCount = data.newInView;
     updateCounts(data);
     // Home redraws only while shown, and only when a count moved.
     if (
@@ -805,10 +812,13 @@ const helpEntries = mountHelpEntries(api);
 // first load, and a response read before the officer's own save is fetched
 // again.
 function loadHome() {
-  homeRequest ??= fetchHome().finally(() => {
-    homeRequest = null;
+  if (homeRequest) return homeRequest;
+  const request = fetchHome();
+  homeRequest = request;
+  request.finally(() => {
+    if (homeRequest === request) homeRequest = null;
   });
-  return homeRequest;
+  return request;
 }
 async function fetchHome() {
   const generation = sessionGeneration,
@@ -930,8 +940,12 @@ const sections = {
         eventId: route.query.event || '',
         id: route.params.id || '',
       };
-      if (JSON.stringify(next) !== JSON.stringify(view)) offset = 0;
+      if (JSON.stringify(next) !== JSON.stringify(view)) {
+        offset = 0;
+        viewNewCount = 0;
+      }
       view = next;
+      setTitle();
       selectInboxStatus(view.status);
       q('#filters [name="kind"]').value = view.kind;
       q('#filters [name="eventId"]').value = view.eventId;

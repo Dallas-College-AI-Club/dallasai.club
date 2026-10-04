@@ -48,12 +48,19 @@
     serif;
 }
 .site-footer .footer-signature {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: max-content;
-  text-align: center;
+  text-align: left;
+}
+body .site-footer button.coladde-wordmark {
+  font-size: 32px;
+  line-height: 1.1;
 }
 .site-footer .footer-tagline {
-  margin-top: 4px;
-  font-size: 18px;
+  margin-top: 0;
+  font-size: 14px;
   line-height: 1.25;
 }
 .site-footer .footer-tagline em {

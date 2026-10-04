@@ -103,6 +103,209 @@ async function typeContactNote(page, text) {
 }
 try {
   await check(
+    'Revoked officer access closes editors and clears private records',
+    async (page) => {
+      const entry = fixture.entries.find((row) => row.kind === 'question');
+      const card = page.locator('#entry-' + entry.id);
+      await card.locator(':scope > summary').click();
+      await card
+        .getByRole('button', { name: 'Edit response', exact: true })
+        .click();
+      const dialog = page.locator('.submission-dialog[open]');
+      await dialog
+        .getByLabel('Full name', { exact: true })
+        .fill('Revoked draft');
+      await dialog.getByLabel('Subject', { exact: true }).fill('Access check');
+      await page.route('**/api/admin', (route) =>
+        route.fulfill({
+          status: 401,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            code: 'not-officer',
+            error: 'Officer access ended.',
+          }),
+        }),
+      );
+      await dialog
+        .getByRole('button', { name: 'Save changes', exact: true })
+        .click();
+      await expect(page.locator('#not-officer')).toBeVisible();
+      await expect(page.locator('dialog[open]')).toHaveCount(0);
+      await expect(page.locator('#entries')).toBeEmpty();
+      await expect(page.locator('#not-officer h1')).toBeFocused();
+      await page
+        .locator('#not-officer')
+        .getByRole('button', { name: 'Sign out', exact: true })
+        .click();
+      await expect(page.locator('#login')).toBeVisible();
+    },
+  );
+  await check(
+    'A new sign-in does not wait for a previous Home request',
+    async (page) => {
+      let release;
+      const pending = new Promise((resolve) => {
+        release = resolve;
+      });
+      let started;
+      const received = new Promise((resolve) => {
+        started = resolve;
+      });
+      let homeReads = 0,
+        finishFresh,
+        freshStarted;
+      const freshReceived = new Promise((resolve) => {
+        freshStarted = resolve;
+      });
+      const freshHeld = new Promise((resolve) => {
+        finishFresh = resolve;
+      });
+      await page.route('**/api/admin?home=1', async (route) => {
+        homeReads++;
+        if (homeReads === 1) {
+          started();
+          await pending;
+          return route.fulfill({
+            status: 401,
+            contentType: 'application/json',
+            body: '{"error":"Expired old session"}',
+          });
+        }
+        if (homeReads === 3) {
+          const response = await route.fetch();
+          freshStarted();
+          await freshHeld;
+          return route.fulfill({ response });
+        }
+        return route.continue();
+      });
+      try {
+        await page.locator('#home-tab').click();
+        await received;
+        await page.locator('#account-button').click();
+        await page
+          .getByRole('button', { name: 'Sign out', exact: true })
+          .click();
+        await expect(page.locator('#login')).toBeVisible();
+        await signInAgain(page, 'officer@example.com');
+        await expect(page.locator('#office')).toBeVisible();
+        await expect(page.locator('#home-tiles')).toHaveAttribute(
+          'aria-busy',
+          'false',
+        );
+        // Hold another Home read while the discarded session finishes. Its
+        // completion must not clear the request belonging to this session.
+        await page.locator('#contacts-tab').click();
+        await page.locator('#home-tab').click();
+        await freshReceived;
+        const oldReply = page.waitForResponse(
+          (response) =>
+            response.url().includes('home=1') && response.status() === 401,
+        );
+        release();
+        await oldReply;
+        await page.locator('#contacts-tab').click();
+        await expect(
+          page.locator('#contacts-pane input[type="search"]'),
+        ).toBeVisible();
+        await expect(page.locator('#office')).toBeVisible();
+        await expect(page.locator('#login')).toBeHidden();
+        await page.locator('#home-tab').click();
+        finishFresh();
+        await expect(page.locator('#home-tiles')).toHaveAttribute(
+          'aria-busy',
+          'false',
+        );
+        assert.equal(homeReads, 3);
+      } finally {
+        release();
+        finishFresh?.();
+      }
+    },
+  );
+  await check(
+    'Inbox tab count follows filters and ignores an old poll',
+    async (page) => {
+      await expect(page).toHaveTitle('(6) Inbox · Club Office');
+      await page.locator('#filters [name="kind"]').selectOption('join');
+      await expect(page).toHaveTitle('(1) Inbox · Club Office');
+      await expect(page.locator('#nav-new-count')).toHaveText('6 new');
+      let release, received;
+      const held = new Promise((resolve) => {
+        release = resolve;
+      });
+      const started = new Promise((resolve) => {
+        received = resolve;
+      });
+      await page.route(
+        '**/api/admin?counts=1*',
+        async (route) => {
+          const response = await route.fetch();
+          received();
+          await held;
+          await route.fulfill({ response });
+        },
+        { times: 1 },
+      );
+      try {
+        await page.locator('#refresh').click();
+        await started;
+        await page.locator('[data-inbox-status="reviewed"]').click();
+        await expect(page).toHaveTitle('Inbox · Club Office');
+        await expect(page.locator('#entries')).toHaveAttribute(
+          'aria-busy',
+          'false',
+        );
+        await page.evaluate(() => {
+          window.testTitles = [];
+          new MutationObserver(() =>
+            window.testTitles.push(document.title),
+          ).observe(document.querySelector('title'), { childList: true });
+        });
+        const reply = page.waitForResponse((response) =>
+          response.url().includes('counts=1'),
+        );
+        release();
+        await reply;
+        // A browser round trip lets the response handler finish before checking.
+        await expect(page.locator('#nav-new-count')).toHaveText('6 new');
+        await expect(page).toHaveTitle('Inbox · Club Office');
+        assert.ok(
+          (await page.evaluate(() => window.testTitles)).every(
+            (title) => title === 'Inbox · Club Office',
+          ),
+        );
+        await page.locator('[data-inbox-status="new"]').click();
+        await expect(page).toHaveTitle('(1) Inbox · Club Office');
+        const card = page.locator(
+          '#entry-' + fixture.entries.find((row) => row.kind === 'join').id,
+        );
+        await card.locator(':scope > summary').click();
+        await card
+          .getByRole('button', { name: 'Mark reviewed', exact: true })
+          .click();
+        await expect(page).toHaveTitle('Inbox · Club Office');
+        await expect(page.locator('#nav-new-count')).toHaveText('5 new');
+        await page.locator('[data-inbox-status="closed"]').click();
+        await expect(page).toHaveTitle('Inbox · Club Office');
+        await page.locator('#filters [name="kind"]').selectOption('rsvp');
+        await page.locator('[data-inbox-status="active"]').click();
+        await page
+          .locator('#event-chips')
+          .getByRole('button', { name: 'Office audit event', exact: true })
+          .click();
+        await expect(page).toHaveTitle('(1) Inbox · Club Office');
+        await page.reload();
+        await expect(page).toHaveTitle('(1) Inbox · Club Office');
+      } finally {
+        release();
+        await fixture.db.query(
+          "UPDATE club_forms.entries SET review_status='new' WHERE kind='join'",
+        );
+      }
+    },
+  );
+  await check(
     'RSVP availability exclusive choices clear dates and allow switching back',
     async (page) => {
       const game = JSON.parse(

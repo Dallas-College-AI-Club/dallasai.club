@@ -976,7 +976,7 @@ test('officers record a cancelled RSVP or a withdrawn newsletter request, and ca
   );
 });
 
-test('a cancelled RSVP or withdrawn newsletter request is active and New again when the person signs up again', async () => {
+test('an unverified resubmission preserves withdrawal and asks officers to review it once', async () => {
   const forms = [
     {
       kind: 'rsvp',
@@ -1025,27 +1025,53 @@ test('a cancelled RSVP or withdrawn newsletter request is active and New again w
     assert.equal(again.alreadySubmitted, true);
     assert.equal(again.id, first.id);
     const saved = await row(first.id);
-    assert.equal(saved.state, 'active');
+    assert.equal(saved.state, withdrawn);
     assert.equal(saved.review_status, 'new');
     const history = await audited(first.id);
     assert.equal(history.length, 3);
     assert.equal(history[2].actor, 'website');
     assert.equal(history[2].action, 'resubmitted');
-    assert.match(history[2].body, /active again/);
-    // An officer still seeing it withdrawn is told why it changed.
+    assert.match(history[2].body, /Officer review is required/);
+    // Repeated requests do not change state or flood the inbox with notes.
+    await submit(db, { ...form, requestId: randomUUID() }, events);
+    assert.equal((await row(first.id)).state, withdrawn);
+    assert.equal((await audited(first.id)).length, 3);
     const stale = await post({
+      action: 'state',
+      id: first.id,
+      state: withdrawn,
+      from: 'active',
+    });
+    assert.equal(stale.status, 409);
+    assert.doesNotMatch(stale.body.error, /active again/);
+    // Only the officer's explicit decision reactivates it.
+    const restored = await post({
       action: 'state',
       id: first.id,
       state: 'active',
       from: withdrawn,
     });
-    assert.equal(stale.status, 409);
-    assert.equal(stale.body.code, 'stale-state');
-    assert.match(stale.body.error, /signed up again through the website/);
-    assert.equal(stale.body.current.actor, 'website');
+    assert.equal(restored.status, 200);
+    assert.equal((await row(first.id)).state, 'active');
     // A further repeat while active adds nothing.
     await submit(db, { ...form, requestId: randomUUID() }, events);
-    assert.equal((await audited(first.id)).length, 3);
+    assert.equal((await audited(first.id)).length, 4);
+    // A later cancellation is a new review cycle, not a retry of the old one.
+    await post({
+      action: 'state',
+      id: first.id,
+      state: withdrawn,
+      from: 'active',
+    });
+    await post({ action: 'review', id: first.id, status: 'reviewed' });
+    await submit(db, { ...form, requestId: randomUUID() }, events);
+    assert.equal((await row(first.id)).state, withdrawn);
+    assert.equal((await row(first.id)).review_status, 'new');
+    assert.equal(
+      (await audited(first.id)).filter((a) => a.action === 'resubmitted')
+        .length,
+      2,
+    );
   }
 });
 

@@ -98,7 +98,7 @@ async function typeContactNote(page, text) {
 }
 try {
   await check(
-    'RSVP availability None and Not sure choices clear and disable specific dates',
+    'RSVP availability exclusive choices clear dates and allow switching back',
     async (page) => {
       const game = JSON.parse(
         await readFile(
@@ -155,12 +155,18 @@ try {
         const choice = page.getByRole('checkbox', { name: label, exact: true });
         await choice.check();
         await expect(date).not.toBeChecked();
-        await expect(date).toBeDisabled();
-        await expect(
-          page.getByRole('checkbox', { name: 'Other', exact: true }),
-        ).toBeDisabled();
-        await choice.uncheck();
         await expect(date).toBeEnabled();
+        await date.check();
+        await expect(choice).not.toBeChecked();
+        await choice.check();
+        const other = page.getByRole('checkbox', {
+          name: 'Other',
+          exact: true,
+        });
+        await other.check();
+        await expect(choice).not.toBeChecked();
+        await expect(date).not.toBeChecked();
+        await other.uncheck();
       }
     },
   );

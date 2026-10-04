@@ -44,14 +44,24 @@ async function recordResubmission(tx, row, input) {
   );
 }
 
-// An officer recorded this RSVP as cancelled or this newsletter request as
-// withdrawn, and the person has now signed up again: the entry is active and
-// New, with a website note saying why. The public reply does not change.
+// A public request cannot prove ownership or undo an officer's cancellation.
 const withdrawnStates = { rsvp: 'cancelled', subscribe: 'unsubscribed' };
-async function reactivate(tx, row) {
+async function recordWithdrawalRequest(tx, row) {
   if (withdrawnStates[row.kind] !== row.state) return;
+  const body =
+    'An unverified request to sign up again was received through the public website. ' +
+    'Officer review is required; the existing ' +
+    (row.kind === 'rsvp' ? 'RSVP cancellation' : 'subscription withdrawal') +
+    ' remains in place.';
+  const seen = await tx.query(
+    `SELECT 1 FROM club_forms.entry_comments c JOIN club_forms.audit a ON a.comment_id=c.id
+     WHERE a.entry_id=$1 AND a.action='resubmitted' AND c.body=$2
+     AND a.id > COALESCE((SELECT max(id) FROM club_forms.audit WHERE entry_id=$1 AND action LIKE 'state:%'),0)`,
+    [row.id, body],
+  );
+  if (seen.rows.length) return;
   await tx.query(
-    "UPDATE club_forms.entries SET state='active',review_status='new' WHERE id=$1",
+    "UPDATE club_forms.entries SET review_status='new' WHERE id=$1",
     [row.id],
   );
   await insertSubmissionComment(
@@ -59,10 +69,7 @@ async function reactivate(tx, row) {
     {
       entryId: row.id,
       id: randomUUID(),
-      body:
-        row.kind === 'rsvp'
-          ? 'RSVPed again through the public website (unverified). The RSVP had been recorded as cancelled; it is active again.'
-          : 'Signed up again through the public website (unverified). The AI Review subscription had been recorded as withdrawn; it is active again.',
+      body,
     },
     WEBSITE,
     'resubmitted',
@@ -123,7 +130,7 @@ export async function submit(db, body, events, storage = { put, del }) {
         result.rows[0] ||
         (
           await tx.query(
-            'SELECT * FROM club_forms.entries WHERE dedupe_key=$1',
+            'SELECT * FROM club_forms.entries WHERE dedupe_key=$1 FOR UPDATE',
             [input.dedupeKey],
           )
         ).rows[0];
@@ -144,7 +151,7 @@ export async function submit(db, body, events, storage = { put, del }) {
       if (inserted) await saveSurveyResponse(tx, row, input.survey);
       if (!inserted && ['join', 'subscribe'].includes(input.kind))
         await recordResubmission(tx, row, input);
-      if (!inserted) await reactivate(tx, row);
+      if (!inserted) await recordWithdrawalRequest(tx, row);
       return { ...row, alreadySubmitted: !inserted };
     });
     if (!inserted && stored.length)

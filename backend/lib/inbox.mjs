@@ -289,7 +289,9 @@ export async function changeState(db, body, actor) {
         !last
           ? `Someone else already changed ${item}. Reload to see it.`
           : last.actor === 'website'
-            ? `They signed up again through the website, so ${item} is active again.`
+            ? entry.state === 'active'
+              ? `They signed up again through the website, so ${item} is active again.`
+              : `An unverified website request is awaiting review. ${Item} remains ${entry.kind === 'rsvp' ? 'cancelled' : 'withdrawn'}.`
             : `${last.actor} already ${entry.state === 'active' ? 'restored' : entry.kind === 'rsvp' ? 'cancelled' : 'withdrew'} ${item}.`,
         {
           code: 'stale-state',

@@ -83,12 +83,17 @@ function updateGameEntry() {
     ride: 'Resume ride',
     snake: 'Resume Snake',
   };
-  $('#explore-entry-label').textContent =
-    resumeLabels[next] || 'Explore & Play';
+  const saved = readArcade().games[next]?.state;
+  const finished = saved?.phase === 'over';
+  $('#explore-entry-label').textContent = finished
+    ? 'Play ' + names[next]
+    : resumeLabels[next] || 'Explore & Play';
   entry.title =
     next === 'play'
       ? 'Explore & Play: choose a game'
-      : 'Back to your spot in ' + names[next];
+      : finished
+        ? 'Play ' + names[next]
+        : 'Back to your spot in ' + names[next];
   entry.setAttribute('aria-label', entry.title);
   $('.arcade-library-link').hidden = next === 'play';
 }

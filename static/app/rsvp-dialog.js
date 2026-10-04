@@ -1,4 +1,4 @@
-import { eventText } from "./event-format.js";
+import { eventText, exclusiveSurveyChoice } from "./event-format.js";
 import {
   identityFields,
   formFooter,
@@ -169,29 +169,25 @@ export function rsvpDialog(root, { preview = false } = {}) {
       "</form>";
     dialog.querySelector(".dialog-close").onclick = close;
     const form = dialog.querySelector("form");
-    function validateChoices() {
+    for (const question of questions)
+      form
+        .querySelector('[name="answer-' + question.id + '"]')
+        .closest("fieldset").dataset.draftSchema = JSON.stringify(question);
+    function validateChoices(event) {
       for (const question of questions.filter((q) => q.type !== "text")) {
         const inputs = [
           ...form.querySelectorAll('[name="answer-' + question.id + '"]'),
         ];
         if (question.type === "multiple") {
-          const exclusive = inputs.find(
-            (input) =>
-              input.checked &&
-              (input.value === question.options[question.exclusiveOption] ||
-                [
-                  "any of these",
-                  "none of these",
-                  "none of these times",
-                  "not sure yet",
-                  "none of the above",
-                  "any of the above",
-                ].includes(input.value.trim().toLowerCase())),
-          );
-          for (const input of inputs) {
-            input.disabled = Boolean(exclusive?.checked && input !== exclusive);
-            if (input.disabled) input.checked = false;
-          }
+          const changed = event?.target;
+          if (inputs.includes(changed) && changed.checked)
+            for (const input of inputs)
+              if (
+                input !== changed &&
+                (exclusiveSurveyChoice(changed.value, question) ||
+                  exclusiveSurveyChoice(input.value, question))
+              )
+                input.checked = false;
         }
         const selected = inputs
           .filter((input) => input.checked)
@@ -251,6 +247,7 @@ export function rsvpDialog(root, { preview = false } = {}) {
         extra: { eventId, surveyVersion: event.surveyVersion || "" },
         serialize,
       });
+    validateChoices();
     if (!dialog.open) dialog.showModal();
     dialog.scrollTop = 0;
   }

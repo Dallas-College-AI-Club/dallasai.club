@@ -5,6 +5,7 @@ import {
 } from './survey-management.mjs';
 import { createHash } from 'node:crypto';
 import { RequestError } from './errors.mjs';
+import { exclusiveSurveyChoice } from './event-format.mjs';
 const questionId =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function text(value, label, max, required = false) {
@@ -149,22 +150,14 @@ export function validateSurvey(body, event) {
       if (
         question.type === 'multiple' &&
         values.length > 1 &&
-        values.some(
-          (choice) =>
-            choice === question.options[question.exclusiveOption] ||
-            [
-              'any of these',
-              'none of these',
-              'none of these times',
-              'not sure yet',
-              'none of the above',
-              'any of the above',
-            ].includes(choice.trim().toLowerCase()),
-        )
+        values.some((choice) => exclusiveSurveyChoice(choice, question))
       )
         throw new RequestError(
           400,
-          'Choose the exclusive answer by itself for: ' + question.label,
+          'Choose “' +
+            values.find((choice) => exclusiveSurveyChoice(choice, question)) +
+            '” by itself for: ' +
+            question.label,
         );
       if (values.includes('__other__') !== Boolean(other))
         throw new RequestError(

@@ -37,10 +37,16 @@ const sections = [
   ),
   page('play', 'Explore & Play', 'Choose a game and discover the club'),
   page('subscribe', 'Subscribe to The AI Review', 'Follow the publication'),
+  page('join', 'Join the club', 'Register your interest in the club'),
+  page('contribute', 'Contribute', 'Submit an article to The AI Review'),
   page('rankings', 'Rankings', 'Top ten scores for each game'),
 ];
 sections.find((e) => e.id === 'page-about').keywords =
-  'join Teams membership contact David Bracewell PhD professor Russ Pearlman JD';
+  'Teams contact David Bracewell PhD professor Russ Pearlman JD';
+sections.find((e) => e.id === 'page-join').keywords =
+  'join membership register signup';
+sections.find((e) => e.id === 'page-contribute').keywords =
+  'contribute submit write draft';
 sections.find((e) => e.id === 'page-summary').keywords =
   'news updates announcements';
 const searchEntries = () => [

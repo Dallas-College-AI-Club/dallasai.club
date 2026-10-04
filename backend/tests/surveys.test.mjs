@@ -249,6 +249,36 @@ test('survey validation rejects stale schemas, missing and forged answers withou
     { status: 400 },
   );
 });
+
+test('None and Not sure cannot accompany dates, each other, or Other', () => {
+  const index = event.surveyQuestions.findIndex((q) =>
+    q.options.includes('None of these times'),
+  );
+  const q = event.surveyQuestions[index];
+  for (const exclusive of ['None of these times', 'Not sure yet']) {
+    const request = body();
+    request.answers[index] = {
+      questionId: q.id,
+      value: [exclusive],
+      other: '',
+    };
+    assert.ok(validate(request, [event]));
+    for (const other of [
+      q.options[0],
+      'None of these times',
+      'Not sure yet',
+      '__other__',
+    ]) {
+      if (other === exclusive) continue;
+      request.answers[index] = {
+        questionId: q.id,
+        value: [exclusive, other],
+        other: other === '__other__' ? 'Another time' : '',
+      };
+      assert.throws(() => validate(request, [event]), { status: 400 });
+    }
+  }
+});
 test('RSVP and all answers commit together, retries preserve the original and snapshots survive event edits and archiving', async () => {
   await saveEvent(
     db,

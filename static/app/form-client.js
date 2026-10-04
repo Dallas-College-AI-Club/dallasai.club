@@ -90,6 +90,9 @@ const confirmationTitles = {
   workshop: 'Workshop request received',
   question: 'Question received',
 };
+// Drafts live only in this tab. Keep the retry receipt with the draft so an
+// uncertain save is not submitted as a new request after navigation.
+const drafts = new Map();
 export function mountForm(
   form,
   {
@@ -103,6 +106,29 @@ export function mountForm(
 ) {
   const controller = new AbortController();
   const dialog = form.closest('dialog');
+  const draftKey = kind + ':' + (extra.eventId || '');
+  const draft = drafts.get(draftKey) || {
+    fields: [],
+    requestId: crypto.randomUUID(),
+    lastPayload: '',
+  };
+  const schema = (field) =>
+    field.closest('[data-draft-schema]')?.dataset.draftSchema || '';
+  for (const field of form.elements) {
+    const saved = draft.fields.find(
+      (saved) =>
+        saved.name === field.name &&
+        saved.type === field.type &&
+        saved.schema === schema(field) &&
+        (!['checkbox', 'radio'].includes(field.type) ||
+          saved.value === field.value),
+    );
+    if (!saved) continue;
+    if (field.type === 'file') field.files = saved.files;
+    else if (['checkbox', 'radio'].includes(field.type))
+      field.checked = saved.checked;
+    else field.value = saved.value;
+  }
   let attempt,
     originalContent,
     confirmation,
@@ -127,12 +153,26 @@ export function mountForm(
     status.textContent = '';
     status.classList.remove('form-error');
   };
-  let requestId = crypto.randomUUID(),
-    busy = false,
-    lastPayload = '';
+  let busy = false;
   const button = form.querySelector('button[type="submit"]'),
     status = form.querySelector('.form-status'),
     label = button.textContent;
+  const remember = () => {
+    if (completed) return;
+    draft.fields = [...form.elements]
+      .filter((field) => field.name && field.name !== 'website')
+      .map((field) => ({
+        name: field.name,
+        type: field.type,
+        value: field.value,
+        checked: field.checked,
+        files: field.type === 'file' ? field.files : undefined,
+        schema: schema(field),
+      }));
+    drafts.set(draftKey, draft);
+  };
+  form.addEventListener('input', remember, { signal: controller.signal });
+  form.addEventListener('change', remember, { signal: controller.signal });
   const handler = async (event) => {
     event.preventDefault();
     if (busy || completed || !form.reportValidity()) return;
@@ -157,14 +197,16 @@ export function mountForm(
           ...form.querySelector('[type="file"]').files,
         ]);
       const serialized = JSON.stringify(body);
-      if (lastPayload && serialized !== lastPayload)
-        requestId = crypto.randomUUID();
-      lastPayload = serialized;
-      body.requestId = requestId;
+      if (draft.lastPayload && serialized !== draft.lastPayload)
+        draft.requestId = crypto.randomUUID();
+      draft.lastPayload = serialized;
+      body.requestId = draft.requestId;
+      remember();
       if (controller.signal.aborted || currentAttempt.signal.aborted) return;
       const result = await request('forms', body, currentAttempt.signal);
       if (controller.signal.aborted || currentAttempt.signal.aborted) return;
       completed = true;
+      drafts.delete(draftKey);
       originalContent = document.createDocumentFragment();
       originalContent.append(...form.childNodes);
       for (const element of form.parentElement.children) {
@@ -207,8 +249,8 @@ export function mountForm(
       heading.focus({ preventScroll: true });
       if (!dialog)
         confirmation.scrollIntoView({ block: 'center', behavior: 'instant' });
-      requestId = crypto.randomUUID();
-      lastPayload = '';
+      draft.requestId = crypto.randomUUID();
+      draft.lastPayload = '';
       onSuccess(result);
     } catch (error) {
       if (error.name !== 'AbortError') {
@@ -224,6 +266,7 @@ export function mountForm(
   dialog?.addEventListener(
     'close',
     () => {
+      remember();
       attempt?.abort();
       restore();
     },
@@ -231,6 +274,7 @@ export function mountForm(
   );
   form.addEventListener('submit', handler);
   return () => {
+    remember();
     controller.abort();
     attempt?.abort();
     form.removeEventListener('submit', handler);

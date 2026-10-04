@@ -134,3 +134,8 @@ export function eventPlainText(value) {
     .replace(/\s+/g, ' ')
     .trim();
 }
+// These options represent the entire answer, including when Other is offered.
+export const exclusiveSurveyChoice = (value, question) =>
+  (question?.exclusiveOption !== undefined &&
+    value === question.options[question.exclusiveOption]) ||
+  /^(any of (these|the above)$|none\b|not sure\b)/i.test(String(value).trim());

@@ -1,12 +1,11 @@
 import { csvCell } from './submission-export.mjs';
 import { RequestError } from './errors.mjs';
+import { exclusiveSurveyChoice } from './event-format.mjs';
 import { responseFilter, responseSelect } from './survey-management.mjs';
 const anyChoice = (value) =>
   String(value).trim().toLowerCase() === 'any of these';
 const ordinaryChoice = (value) =>
-  value !== '__other__' &&
-  !anyChoice(value) &&
-  !/^(none\b|not sure\b)/i.test(value.trim());
+  value !== '__other__' && !exclusiveSurveyChoice(value);
 const impliedChoice = (question, values, choice) =>
   question.type === 'multiple' &&
   values.some(anyChoice) &&

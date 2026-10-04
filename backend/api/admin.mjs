@@ -17,6 +17,8 @@ import {
   validTime,
 } from '../lib/inbox.mjs';
 import { submissionsCSV, exportFilename } from '../lib/submission-export.mjs';
+import { homeSummary } from '../lib/home.mjs';
+import { helpEntries, saveHelpEntry, changeHelpEntry } from '../lib/help.mjs';
 import { changeSubmission } from '../lib/submission-management.mjs';
 import {
   cleanupContactFiles,
@@ -152,6 +154,27 @@ export function adminHandler({
             },
           });
         }
+        // Home: one read-only summary, with the same counts as the poll.
+        if (url.searchParams.get('home') === '1') {
+          const published = await getEvents(db),
+            upcoming = upcomingEvents(published);
+          const counts = (
+            await db.query(countsQuery, [upcoming.map((event) => event.id)])
+          ).rows;
+          return send(res, 200, {
+            user: user.email,
+            counts,
+            ...(await homeSummary(db, published, upcoming)),
+            configured: {
+              uploads: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+            },
+          });
+        }
+        if (url.searchParams.get('help') === '1')
+          return send(res, 200, {
+            user: user.email,
+            ...(await helpEntries(db)),
+          });
         const savedEvents = (
           await db.query(
             `SELECT DISTINCT ON (data->>'eventId') data->>'eventId' AS id,data->>'eventTitle' AS title,data->>'eventDate' AS date,(data->>'potential')='true' AS potential FROM club_forms.entries WHERE kind='rsvp' ORDER BY data->>'eventId',created_at DESC,id`,
@@ -260,6 +283,15 @@ export function adminHandler({
           );
         const last = rows[49];
         const counts = (await db.query(countsQuery, [upcomingIds])).rows;
+        // Each event group's true size under these filters, not just the page.
+        const eventCounts = Object.fromEntries(
+          (
+            await db.query(
+              `SELECT e.data->>'eventId' AS id,count(*)::int AS n FROM club_forms.entries e ${where} AND e.kind='rsvp' GROUP BY 1`,
+              filters,
+            )
+          ).rows.map((row) => [row.id, row.n]),
+        );
         return send(res, 200, {
           user: user.email,
           entries,
@@ -270,6 +302,7 @@ export function adminHandler({
           total,
           asOf,
           counts,
+          eventCounts,
           events: allEvents.map(({ id, title, date }) => ({
             id,
             title,
@@ -292,6 +325,10 @@ export function adminHandler({
           result.filesCleaned = await cleanupContactFiles(db, storage);
         return send(res, 200, result);
       }
+      if (body.action === 'help-save')
+        return send(res, 200, await saveHelpEntry(db, body, user.email));
+      if (['help-archive', 'help-restore', 'help-delete'].includes(body.action))
+        return send(res, 200, await changeHelpEntry(db, body, user.email));
       if (body.action === 'comment') {
         const comment = await addSubmissionComment(db, body, user.email);
         return send(res, 200, { comment });

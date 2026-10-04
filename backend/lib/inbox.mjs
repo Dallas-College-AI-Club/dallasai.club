@@ -265,16 +265,18 @@ export async function changeState(db, body, actor) {
     )
       throw new RequestError(
         400,
-        'Only an RSVP can be cancelled, and only an AI Review subscription withdrawn.',
+        'Only an RSVP can be cancelled, and only The AI Review subscription withdrawn.',
       );
-    const item = entry.kind === 'rsvp' ? 'RSVP' : 'AI Review subscription';
+    // 'this RSVP', but always 'The AI Review subscription' by its name.
+    const item =
+      entry.kind === 'rsvp' ? 'this RSVP' : 'The AI Review subscription';
+    const Item = item[0].toUpperCase() + item.slice(1);
     // Legacy 'pending' or 'suppressed' entries are not managed here.
     if (!allowed.includes(entry.state))
-      throw new RequestError(
-        409,
-        `This ${item}'s state can't be changed here.`,
-        { code: 'unsupported-state', current: { state: entry.state } },
-      );
+      throw new RequestError(409, `${Item}'s state can't be changed here.`, {
+        code: 'unsupported-state',
+        current: { state: entry.state },
+      });
     if (body.from != null && entry.state !== body.from) {
       const last = (
         await tx.query(
@@ -285,10 +287,10 @@ export async function changeState(db, body, actor) {
       throw new RequestError(
         409,
         !last
-          ? `Someone else already changed this ${item}. Reload to see it.`
+          ? `Someone else already changed ${item}. Reload to see it.`
           : last.actor === 'website'
-            ? `They signed up again through the website, so this ${item} is active again.`
-            : `${last.actor} already ${entry.state === 'active' ? 'restored' : entry.kind === 'rsvp' ? 'cancelled' : 'withdrew'} this ${item}.`,
+            ? `They signed up again through the website, so ${item} is active again.`
+            : `${last.actor} already ${entry.state === 'active' ? 'restored' : entry.kind === 'rsvp' ? 'cancelled' : 'withdrew'} ${item}.`,
         {
           code: 'stale-state',
           current: {

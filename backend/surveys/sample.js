@@ -61,6 +61,10 @@ export function renderSample({ definition }) {
   const questions = new Map(definition.questions.map((q) => [q.id, q]));
   const responses = Object.entries(other.answers).flatMap(([id, answer]) => {
     const question = questions.get(id);
+    const group =
+      definition.chapters.find((chapter) =>
+        [...chapter.core, ...chapter.optional].includes(id),
+      )?.id || 'review';
     const label = (value) => question.options.find((o) => o.id === value).label;
     if (question.type === 'resources')
       return Object.keys(answer.items).map((optionId) => ({
@@ -68,6 +72,7 @@ export function renderSample({ definition }) {
         questionId: id,
         optionId,
         kind: 'resource',
+        group,
         mode: 'narrative',
         title: 'Possible resource — ' + label(optionId),
         text: answer.details[optionId],
@@ -86,6 +91,7 @@ export function renderSample({ definition }) {
       id: 'q-' + id,
       questionId: id,
       kind: 'question',
+      group,
       mode: structured ? 'structured' : 'narrative',
       title: question.title,
       text,
@@ -96,6 +102,7 @@ export function renderSample({ definition }) {
     id: 'note-spark',
     kind: 'comment',
     pageId: 'spark',
+    group: 'spark',
     mode: 'narrative',
     title: 'My thoughts — Find your sparks',
     text: other.notes.spark,

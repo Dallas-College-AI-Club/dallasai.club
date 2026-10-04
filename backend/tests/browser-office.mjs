@@ -98,6 +98,79 @@ async function typeContactNote(page, text) {
 }
 try {
   await check(
+    'RSVP availability exclusive choices clear dates and allow switching back',
+    async (page) => {
+      const game = JSON.parse(
+        await readFile(
+          new URL('./fixtures/game-night.json', import.meta.url),
+          'utf8',
+        ),
+      );
+      const question = game.surveyQuestions.find((q) =>
+        q.label.startsWith('When could'),
+      );
+      question.exclusiveOption = question.options.indexOf('Any of these');
+      const event = {
+        ...game,
+        id: 'choice-preview',
+        surveyQuestions: [question],
+      };
+      for (const [url, source] of [
+        ['/app/rsvp-dialog.js', '../../static/app/rsvp-dialog.js'],
+        ['/app/form-client.js', '../../static/app/form-client.js'],
+        ['/app/event-format.js', '../lib/event-format.mjs'],
+      ])
+        await page.route('**' + url, (route) =>
+          route.fulfill({
+            path: path.resolve(import.meta.dirname, source),
+            contentType: 'text/javascript',
+          }),
+        );
+      await page.route('**/content/published.js', (route) =>
+        route.fulfill({
+          contentType: 'text/javascript',
+          body: 'export const PUBLISHED={club:{FORMS_API_URL:""}};',
+        }),
+      );
+      await page.route('**/rsvp-choice-test', (route) =>
+        route.fulfill({
+          contentType: 'text/html',
+          body:
+            '<!doctype html><html><head><meta charset="utf-8"></head><body><script type="module">import {rsvpDialog} from "/app/rsvp-dialog.js"; rsvpDialog(document.body,{preview:true}).open(' +
+            JSON.stringify(event) +
+            ');</script></body></html>',
+        }),
+      );
+      await page.goto(fixture.origin + '/rsvp-choice-test');
+      const date = page.getByRole('checkbox', {
+        name: question.options[0],
+        exact: true,
+      });
+      for (const label of [
+        'None of these times',
+        'Not sure yet',
+        'Any of these',
+      ]) {
+        await date.check();
+        const choice = page.getByRole('checkbox', { name: label, exact: true });
+        await choice.check();
+        await expect(date).not.toBeChecked();
+        await expect(date).toBeEnabled();
+        await date.check();
+        await expect(choice).not.toBeChecked();
+        await choice.check();
+        const other = page.getByRole('checkbox', {
+          name: 'Other',
+          exact: true,
+        });
+        await other.check();
+        await expect(choice).not.toBeChecked();
+        await expect(date).not.toBeChecked();
+        await other.uncheck();
+      }
+    },
+  );
+  await check(
     'Response edits require discard confirmation and lock during saves',
     async (page, dialogs, setAccept) => {
       const entry = fixture.entries.find((row) => row.kind === 'rsvp');

@@ -136,8 +136,6 @@ export function eventPlainText(value) {
 }
 // These options represent the entire answer, including when Other is offered.
 export const exclusiveSurveyChoice = (value, question) =>
-  question?.exclusiveOption !== undefined
-    ? value === question.options[question.exclusiveOption]
-    : /^(any of (these|the above)$|none\b|not sure\b)/i.test(
-        String(value).trim(),
-      );
+  (question?.exclusiveOption !== undefined &&
+    value === question.options[question.exclusiveOption]) ||
+  /^(any of (these|the above)$|none\b|not sure\b)/i.test(String(value).trim());

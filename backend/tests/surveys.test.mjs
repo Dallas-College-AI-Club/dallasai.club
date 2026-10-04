@@ -26,6 +26,8 @@ const event = publicContent('game-night', game);
 test('RSVP exclusive None and custom choices reject mixed answers without changing old snapshots', () => {
   for (const [label, explicit] of [
     ['None of these', false],
+    ['None of these times', false],
+    ['Not sure yet', false],
     ['Any of the above', false],
     ['Not available', true],
   ]) {
@@ -59,6 +61,31 @@ test('RSVP exclusive None and custom choices reject mixed answers without changi
       { status: 400 },
     );
   }
+  // An explicitly marked Any option does not switch off the familiar None and
+  // Not sure rules used by the live availability question.
+  const availability = {
+    ...game.surveyQuestions.find((q) => q.label.startsWith('When could')),
+  };
+  availability.exclusiveOption = availability.options.indexOf('Any of these');
+  const questions = surveyQuestions([availability]);
+  for (const label of ['None of these times', 'Not sure yet'])
+    assert.throws(
+      () =>
+        validateSurvey(
+          {
+            surveyVersion: surveyVersion(questions),
+            answers: [
+              {
+                questionId: availability.id,
+                value: [availability.options[0], label],
+                other: '',
+              },
+            ],
+          },
+          { surveyQuestions: questions },
+        ),
+      { status: 400 },
+    );
 });
 const body = (extra = {}) => ({
   kind: 'rsvp',

@@ -47,6 +47,10 @@ await cp(
   path.join(root, 'public/admin/style.css'),
 );
 await cp(
+  path.join(root, 'admin/theme.js'),
+  path.join(root, 'public/admin/theme.js'),
+);
+await cp(
   path.join(root, 'admin/assets'),
   path.join(root, 'public/admin/assets'),
   { recursive: true },

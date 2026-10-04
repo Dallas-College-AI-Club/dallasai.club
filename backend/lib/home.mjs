@@ -97,6 +97,13 @@ export async function homeSummary(db, published, upcoming) {
     )
   ).rows;
   return {
+    deletedSubmissions: (
+      await db.query(`SELECT coalesce(sum(CASE
+        WHEN action='submission-permanently-deleted' THEN 1
+        WHEN action ~ '^contact-purged:entries=[0-9]+:'
+          THEN substring(action from '^contact-purged:entries=([0-9]+):')::bigint
+        ELSE 0 END),0)::int AS n FROM club_forms.audit`)
+    ).rows[0].n,
     rsvpGroups,
     newest,
     nextEvent,

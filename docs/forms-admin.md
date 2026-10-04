@@ -173,6 +173,20 @@ keyboard-accessible arrow buttons. Bulk entry with one option per line still wor
 In the event preview, try answers and open **Preview admin result** to review a
 clearly labeled sample. Those trial answers are never submitted or saved to Neon.
 
+## Help guidebook
+
+Help has a searchable topic list, a reading pane, and Topics, Archived and Activity
+buttons. Officers add topics directly to the guide under Everyday tasks or Office
+essentials. Use short paragraphs and numbered lines for readable steps.
+
+Edit topic, Archive, History and Copy topic link sit above the article. History
+expands inline with each action's officer and Central Time timestamp. A copied link
+opens that exact topic after officer sign-in and survives renaming. Archived links
+open the archived topic with Restore and Delete permanently. Deletion removes the
+text; Activity keeps its ID, actor and timestamp. A deleted link explains that the
+topic is unavailable. Unsaved edits ask before navigation, and stale saves cannot
+overwrite another officer's changes. Starter topics are editable too.
+
 ## Editing and deleting submissions
 
 Inbox groups submissions by event, or by form type when there is no event. Expand

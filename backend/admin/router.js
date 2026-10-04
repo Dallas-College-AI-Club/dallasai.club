@@ -7,6 +7,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
   slug = /^[a-z0-9][a-z0-9-]{0,99}$/;
 // The values each query key may take; anything else is dropped.
 const queries = {
+  surveys: { event: slug, copy: uuid },
   inbox: {
     status: ['reviewed', 'archived', 'all'],
     type: [...KINDS, 'rsvp-past', 'rsvp-all'],
@@ -72,7 +73,18 @@ export function parse(hash) {
   if (section === 'events' && n === 1) return route('events');
   if (section === 'contacts' && n === 1) return route('contacts');
   if (section === 'help' && n === 1) return route('help');
+  if (section === 'help' && n === 2) {
+    if (['archived', 'activity'].includes(a)) return route('help/' + a);
+    return uuid.test(a)
+      ? route('help/:id', { id: a.toLowerCase() })
+      : notFound(
+          'help',
+          'This topic link is incomplete. Open Help to find a topic.',
+        );
+  }
   if (section === 'surveys' && n === 1) return route('surveys');
+  if (section === 'surveys' && a === 'new' && n === 2)
+    return route('surveys/new');
   if (section === 'surveys' && a === 'events') {
     if (n === 2) return route('surveys/events');
     if (n === 5 && c === 'r' && slug.test(b) && uuid.test(d))

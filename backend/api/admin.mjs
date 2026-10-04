@@ -18,7 +18,12 @@ import {
 } from '../lib/inbox.mjs';
 import { submissionsCSV, exportFilename } from '../lib/submission-export.mjs';
 import { homeSummary } from '../lib/home.mjs';
-import { helpEntries, saveHelpEntry, changeHelpEntry } from '../lib/help.mjs';
+import {
+  helpEntries,
+  helpHistory,
+  saveHelpEntry,
+  changeHelpEntry,
+} from '../lib/help.mjs';
 import { changeSubmission } from '../lib/submission-management.mjs';
 import {
   cleanupContactFiles,
@@ -170,6 +175,16 @@ export function adminHandler({
             },
           });
         }
+        if (url.searchParams.has('helpHistory'))
+          return send(
+            res,
+            200,
+            await helpHistory(
+              db,
+              url.searchParams.get('helpHistory'),
+              url.searchParams.get('before'),
+            ),
+          );
         if (url.searchParams.get('help') === '1')
           return send(res, 200, {
             user: user.email,

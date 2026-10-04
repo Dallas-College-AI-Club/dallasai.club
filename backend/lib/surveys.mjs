@@ -50,6 +50,14 @@ export function surveyQuestions(input = []) {
     const options = question.options.map((option) =>
       text(option, 'the answer option', 200, true),
     );
+    if (
+      question.exclusiveOption !== undefined &&
+      (question.type !== 'multiple' ||
+        !Number.isInteger(question.exclusiveOption) ||
+        question.exclusiveOption < 0 ||
+        question.exclusiveOption >= options.length)
+    )
+      throw new RequestError(400, 'Choose a listed exclusive option.');
     if (options.includes('__other__'))
       throw new RequestError(400, 'Use a different answer option.');
     if (
@@ -67,6 +75,9 @@ export function surveyQuestions(input = []) {
       required: question.required,
       options,
       allowOther: choices && question.allowOther,
+      ...(question.exclusiveOption !== undefined
+        ? { exclusiveOption: question.exclusiveOption }
+        : {}),
     };
   });
 }
@@ -138,11 +149,20 @@ export function validateSurvey(body, event) {
       if (
         question.type === 'multiple' &&
         values.length > 1 &&
-        values.some((choice) => choice.trim().toLowerCase() === 'any of these')
+        values.some((choice) =>
+          question.exclusiveOption !== undefined
+            ? choice === question.options[question.exclusiveOption]
+            : [
+                'any of these',
+                'none of these',
+                'none of the above',
+                'any of the above',
+              ].includes(choice.trim().toLowerCase()),
+        )
       )
         throw new RequestError(
           400,
-          'Choose “Any of these” by itself for: ' + question.label,
+          'Choose the exclusive answer by itself for: ' + question.label,
         );
       if (values.includes('__other__') !== Boolean(other))
         throw new RequestError(

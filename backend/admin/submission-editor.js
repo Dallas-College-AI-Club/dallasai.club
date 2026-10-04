@@ -281,7 +281,16 @@ function questionInput(parent, question, answer) {
           .map((control) => control.value);
   function sync() {
     const any = controls.find(
-      (control) => control.value.toLowerCase().trim() === 'any of these',
+      (control) =>
+        control.checked &&
+        (question.exclusiveOption !== undefined
+          ? control.value === question.options[question.exclusiveOption]
+          : [
+              'any of these',
+              'none of these',
+              'none of the above',
+              'any of the above',
+            ].includes(control.value.toLowerCase().trim())),
     );
     for (const control of controls) {
       control.disabled = Boolean(any?.checked && control !== any);

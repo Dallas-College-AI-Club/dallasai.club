@@ -1,5 +1,9 @@
 import { node } from './ui.js';
-export function choiceEditor(question, onChange) {
+export function choiceEditor(
+  question,
+  onChange,
+  { limit = 12, maxLength = 120 } = {},
+) {
   const root = node('div');
   root.className = 'survey-choice-editor';
   let dragging = null;
@@ -67,7 +71,7 @@ export function choiceEditor(question, onChange) {
       };
       const input = node('input');
       input.value = value;
-      input.maxLength = 120;
+      input.maxLength = maxLength;
       input.setAttribute('aria-label', 'Choice ' + (i + 1));
       input.oninput = () => {
         question.options[i] = input.value;
@@ -113,7 +117,7 @@ export function choiceEditor(question, onChange) {
       row.append(remove);
       root.append(row);
     });
-    if (question.options.length < 12) {
+    if (question.options.length < limit) {
       const add = node('button', 'Add choice');
       add.type = 'button';
       add.onclick = () => {

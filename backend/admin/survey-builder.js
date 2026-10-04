@@ -27,7 +27,7 @@ const fresh = () => ({
   durationDays: 30,
   questions: [],
 });
-export function mountSurveyBuilder(root, api, onDone, id) {
+export function mountSurveyBuilder(root, api, onDone, id, eventId, copyId) {
   let definition = fresh(),
     surveyId = id || crypto.randomUUID(),
     revision = 0,
@@ -37,7 +37,8 @@ export function mountSurveyBuilder(root, api, onDone, id) {
     previewLink = '',
     saved = true,
     published = false,
-    active = true;
+    active = true,
+    events = [];
   const status = node('p');
   status.setAttribute('role', 'status');
   const retry = button('Retry the same save', async () => {
@@ -48,6 +49,47 @@ export function mountSurveyBuilder(root, api, onDone, id) {
   retry.hidden = true;
   const steps = ['Template', 'Audience', 'Questions', 'Preview', 'Publish'];
   async function initialize() {
+    try {
+      ({ events } = await api('/api/events?admin=1'));
+      if (!active) return;
+      if (copyId && !id) {
+        const { survey } = await api(
+          '/api/custom-surveys?action=draft&id=' + copyId,
+        );
+        if (!active) return;
+        if (!survey.definition)
+          throw Error(
+            'This survey format cannot be duplicated in the builder.',
+          );
+        definition = structuredClone(survey.definition);
+        definition.title = definition.title.slice(0, 153) + ' (copy)';
+        definition.questions.forEach((question) => {
+          question.id = crypto.randomUUID();
+        });
+        saved = false;
+      } else if (eventId && !id) {
+        const event = events.find((row) => row.id === eventId);
+        if (!event) throw Error('The linked event could not be found.');
+        definition.eventId = eventId;
+        definition.title = event.draft.title + ' · Feedback';
+        definition.template = 'feedback';
+        definition.audience = 'public';
+        definition.permissions.answer = 'verified';
+        definition.questions = [
+          newQuestion('How would you rate your experience?', 'scale'),
+          newQuestion('What worked well?'),
+          newQuestion('What would you improve?'),
+        ];
+      }
+    } catch (error) {
+      if (!active) return;
+      root.replaceChildren(
+        node('p', error.message),
+        button('Try again', initialize),
+        button('Back to surveys', () => onDone()),
+      );
+      return;
+    }
     if (id) {
       root.replaceChildren(node('p', 'Loading survey draft…'));
       try {
@@ -64,7 +106,7 @@ export function mountSurveyBuilder(root, api, onDone, id) {
       } catch (error) {
         if (!active) return;
         root.replaceChildren(node('p', error.message));
-        root.append(button('Back to surveys', onDone));
+        root.append(button('Back to surveys', () => onDone()));
         return;
       }
     }
@@ -194,6 +236,20 @@ export function mountSurveyBuilder(root, api, onDone, id) {
     if (step === 0) {
       panel.append(
         select(
+          'Linked event (optional)',
+          definition.eventId || '',
+          [
+            ['', 'No event · standalone survey'],
+            ...events.map((event) => [event.id, event.draft.title]),
+          ],
+          (value) => {
+            if (value) definition.eventId = value;
+            else delete definition.eventId;
+          },
+        ),
+      );
+      panel.append(
+        select(
           'Starting template',
           definition.template,
           [
@@ -301,7 +357,7 @@ export function mountSurveyBuilder(root, api, onDone, id) {
       panel.append(
         node(
           'p',
-          'Up to 30 questions. Text answers, single or multiple choice, and ratings from 1 to 5 are supported.',
+          'Up to 30 questions. Choose text, choices, ratings, calendar dates, or numbers.',
           'hint',
         ),
       );
@@ -338,6 +394,8 @@ export function mountSurveyBuilder(root, api, onDone, id) {
               ['single', 'Choose one'],
               ['multiple', 'Choose several'],
               ['scale', 'Rating: 1 to 5'],
+              ['date', 'Calendar date'],
+              ['number', 'Number'],
             ],
             (v) => {
               q.type = v;
@@ -430,6 +488,8 @@ export function mountSurveyBuilder(root, api, onDone, id) {
               single: 'Choose one',
               multiple: 'Choose several',
               scale: 'Rating from 1 to 5',
+              date: 'Calendar date',
+              number: 'Number',
             }[q.type] + (q.required ? ' · Required' : ' · Optional'),
           ),
         );

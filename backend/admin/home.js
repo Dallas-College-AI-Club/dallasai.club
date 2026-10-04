@@ -169,11 +169,26 @@ export function renderHome(root, data, actions) {
   const totals = tile('Inbox totals'),
     grid = node('div', undefined, 'tile-totals');
   for (const kind of KINDS) {
-    const count = data.counts.find((row) => row.kind === kind) || {
-        new: 0,
-        total: 0,
-      },
-      cell = link('', build('inbox', { type: kind }), 'total');
+    const count = data.counts
+        .filter(
+          (row) =>
+            row.kind === kind || (kind === 'rsvp' && row.kind === 'rsvp-past'),
+        )
+        .reduce(
+          (sum, row) => ({
+            new: sum.new + row.new,
+            total: sum.total + row.total,
+          }),
+          { new: 0, total: 0 },
+        ),
+      cell = link(
+        '',
+        build('inbox', {
+          type: kind === 'rsvp' ? 'rsvp-all' : kind,
+          status: 'all',
+        }),
+        'total',
+      );
     cell.classList.toggle('has-new', count.new > 0);
     cell.append(
       node('strong', count.total.toLocaleString('en-US')),
@@ -185,10 +200,22 @@ export function renderHome(root, data, actions) {
     );
     grid.append(cell);
   }
-  totals.append(grid);
+  const retained = data.counts.reduce((sum, row) => sum + row.total, 0),
+    archived = data.counts.reduce((sum, row) => sum + row.closed, 0),
+    deleted = data.deletedSubmissions || 0;
+  totals.append(
+    number(retained + deleted, 'submissions in all'),
+    node(
+      'p',
+      `${retained} saved (including ${archived} archived) · ${deleted} permanently deleted`,
+      'hint',
+    ),
+    grid,
+  );
   // Officers' own actions; never a member's name, email or text.
-  const recent = tile('Recent activity', 'tile-wide'),
+  const recent = node('details', undefined, 'tile tile-wide recent-activity'),
     log = node('ul', undefined, 'tile-list activity-list');
+  recent.append(node('summary', 'Recent activity', 'tile-label'));
   for (const row of data.activity) {
     const subject =
       row.source === 'entry'

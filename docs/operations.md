@@ -44,6 +44,8 @@ code. The private settings are under `%LOCALAPPDATA%/dallasai-club-website`.
 | `ADMIN_EMAILS` | Approved officer emails; empty disables officer access |
 | `BLOB_READ_WRITE_TOKEN` | Private attachments and event images |
 | `CRON_SECRET` | Authenticates daily maintenance; at least 32 characters |
+| `SHORT_IO_API_KEY`, `SHORT_IO_DOMAIN` | Optional server-only Short.io key and connected short domain for creating sharing links |
+| `TINYURL_API_TOKEN` | Optional server-only backup token for new links if Short.io is unavailable |
 | `FORMS_ALLOWED_ORIGINS` | Optional exact frontend preview origins |
 | `DATABASE_URL`, `SESSION_SECRET` | Existing leaderboard runtime connection and player signing key |
 | `AUTH_DATABASE_URL`, `BETTER_AUTH_SECRET` | No longer read; still set in Vercel and safe to remove later |
@@ -52,6 +54,23 @@ Keep signing secrets stable. Rotating `FORM_TOKEN_SECRET` invalidates existing
 derived survey links; coordinate that separately. Old digests must not be presented
 as working links. `SESSION_SECRET` rotation invalidates player tokens. Resend and
 the retired email queue are not used by the deployed intake flows.
+
+For automatic short links, connect `go.dallasai.club` to Short.io and add its CNAME
+record pointing to `cname.short.io`. Keep the main website's DNS records unchanged.
+Create a secret API key scoped to that domain under **Integrations & API**. Save it
+as a Vercel Secret named `SHORT_IO_API_KEY`, and set `SHORT_IO_DOMAIN` to
+`go.dallasai.club` after DNS and HTTPS are verified. A new deployment loads these
+settings. For backup creation, save a TinyURL API token with Create permission as
+the Vercel Secret `TINYURL_API_TOKEN`. Its Free account allows 30 links per month.
+
+Short.io's Free plan includes five custom domains and 1,000 links over the account's
+lifetime, including API-created links, as of October 4, 2026. No paid plan is required
+for this flow. The server uses Short.io's fixed API host and checks the returned
+destination and short address. If Short.io fails or is not configured, the server
+tries TinyURL. Both use stable aliases for retries; the saved link is preserved
+when the preferred provider recovers. Saved manual links, including Advisor Studio's
+`https://tinyurl.com/advisor-survey`, are never automatically replaced. Provider errors
+do not change the original invitation or saved responses.
 
 ## Database migrations
 
@@ -70,6 +89,7 @@ Keep runtime connections restricted. The original leaderboard setup is retained 
 | 019 | Officer Help topics (`club_forms.help_entries`) |
 | 020 | Help guidebook categories, editable starter topics, and topic-linked audit receipts |
 | 021 | Officer-recorded event attendance and registration snapshots for RSVPs without questions |
+| 022 | Optional custom-survey short link and permission for officers to update it |
 
 Apply `018_survey_maintenance.sql` before deploying the new maintenance handler.
 It grants deletion only for device tokens, not survey responses. The migration is
@@ -95,6 +115,13 @@ missing RSVP snapshots with empty question and answer arrays. Reruns preserve
 existing answer snapshots and attendance. Deleting a contact's email record
 cascades its attendance records. Attendance changes and report exports use the
 existing officer audit table; keep this additive migration on a code rollback.
+
+Apply `022_survey_share_link.sql` using the database owner before deploying the
+sharing-link catalog. It adds nullable metadata and a column-level update grant;
+it does not rewrite invitations, questions, respondents or answers. Runtime
+credentials intentionally cannot alter the schema. Keep the additive column on
+rollback. Availability questions and reply-by dates use existing event/survey JSON
+and need no schema migration.
 
 Feedback completion is calculated from nonempty saved responses across every
 published same-event custom survey, including archived respondents and closed or
@@ -191,7 +218,7 @@ reply after the save commits, or reject one oversized CSV download. Use it to
 verify retries, consent, pagination, and error recovery without real respondents.
 Never submit synthetic test data or send test email through production.
 
-Typed-answer verification (2026-10-04): all 223 backend tests and all 62 Office
+Typed-answer verification (2026-10-04): all 251 backend tests and all 64 Office
 browser scenarios passed. The RSVP browser lifecycle and all nine grouped-survey
 browser scenarios passed, including
 zero-valued numbers, invalid email rejection, dated choices, empty RSVP-enabled
@@ -209,6 +236,21 @@ saves confirmed JSON numbers (including zero), choice arrays, ISO calendar dates
 minute-precision clock times and normalized emails. The test branch was deleted
 after verification. This checked correctness under concurrent retries, not maximum
 service capacity. No production response was created or altered by these tests.
+
+A second schema-only Neon run verified the single availability question: 90 RSVP
+attempts saved 30 records and 30 custom-survey attempts saved 10 records. Structured
+statuses, date/period selections, alternative dates and optional times survived
+reload; contradictory answers were rejected and the legacy response was unchanged.
+That branch was deleted too. Availability, sharing and Home-count regression probes
+caught 46 backend mutations and 13 browser mutations, in addition to the earlier
+typed-answer probes. The sharing provider implementation separately caught 40
+backend and five browser mutations before integration.
+
+Migration 022 was applied to production through the explicitly owner-authorized
+Neon SQL editor on 2026-10-04. A fresh restricted-role connection confirmed the
+nullable text column and its update privilege. SHORT_IO_DOMAIN remains unset while
+DNS is being prepared; new links use the configured TinyURL fallback. Existing
+saved URLs are retained.
 
 After review, deploy a protected Vercel preview with its own `AUTH_BASE_URL` and
 trusted Neon Auth origin. Verify database permissions and private files. Deploy the

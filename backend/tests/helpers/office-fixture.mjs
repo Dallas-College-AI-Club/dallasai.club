@@ -201,7 +201,14 @@ export async function officeFixture() {
                 'data-site-origin="https://dallasai.club"',
                 'data-site-origin="' + origin + '"',
               )
-          : body,
+          : file.endsWith(path.join('content', 'published.js'))
+            ? body
+                .toString()
+                .replaceAll(
+                  'https://dallasai-leaderboard.vercel.app/api/events',
+                  origin + '/api/events',
+                )
+            : body,
       );
     } catch {
       res.statusCode = 404;

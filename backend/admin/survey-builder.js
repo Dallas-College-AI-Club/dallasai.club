@@ -2,6 +2,7 @@ import { button, copyText, node } from './ui.js';
 import { mountRespondents } from './survey-respondents.js';
 import { surveyTrial } from './survey-trial.js';
 import { choiceEditor } from './survey-choices.js';
+import { availabilityDateEditor } from '../surveys/availability-ui.js';
 import { drafts } from './session.js';
 const audienceNames = {
   students: 'Dallas College students',
@@ -399,12 +400,15 @@ export function mountSurveyBuilder(root, api, onDone, id, eventId, copyId) {
               ['time', 'Time of day'],
               ['number', 'Number'],
               ['email', 'Email address'],
+              ['availability', 'Date availability'],
             ],
             (v) => {
               q.type = v;
               if (v !== 'multiple') delete q.exclusiveOption;
               if (!['single', 'multiple'].includes(v)) delete q.choiceDate;
-              q.options = ['single', 'multiple'].includes(v)
+              if (v === 'availability') q.dates ||= [];
+              else delete q.dates;
+              q.options = ['single', 'multiple', 'availability'].includes(v)
                 ? q.options.length
                   ? q.options
                   : ['', '']
@@ -423,6 +427,13 @@ export function mountSurveyBuilder(root, api, onDone, id, eventId, copyId) {
         };
         required.append(check, node('span', 'Required question'));
         card.append(required);
+        if (q.type === 'availability')
+          card.append(
+            availabilityDateEditor(q.dates, (dates) => {
+              q.dates = dates;
+              saved = false;
+            }),
+          );
         if (['single', 'multiple'].includes(q.type)) {
           const label = node('label', 'Date for these choices (optional)'),
             date = node('input');
@@ -437,6 +448,15 @@ export function mountSurveyBuilder(root, api, onDone, id, eventId, copyId) {
           };
           label.append(date);
           card.append(label);
+        }
+        if (['single', 'multiple', 'availability'].includes(q.type)) {
+          if (q.type === 'availability')
+            card.append(
+              node(
+                'p',
+                'Time periods (editable labels, such as Afternoon and Evening)',
+              ),
+            );
           card.append(
             choiceEditor(q, () => {
               saved = false;
@@ -515,9 +535,12 @@ export function mountSurveyBuilder(root, api, onDone, id, eventId, copyId) {
               time: 'Time of day',
               number: 'Number',
               email: 'Email address',
+              availability: 'Date availability',
             }[q.type] + (q.required ? ' · Required' : ' · Optional'),
           ),
         );
+        if (q.type === 'availability')
+          card.append(node('p', q.dates.join(' · ')));
         if (q.options.length) {
           const list = node('ul');
           q.options.forEach((o, i) =>

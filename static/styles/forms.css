@@ -1,3 +1,52 @@
+@import url('../app/availability.css');
+.event-sharing {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  margin: 20px 0;
+}
+.event-sharing > img {
+  width: 128px;
+  height: 128px;
+  flex: none;
+  background: white;
+  border-radius: 12px;
+}
+.event-sharing > div {
+  flex: 1 1 150px;
+  min-width: 0;
+}
+.event-share-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+.event-share-address {
+  display: block;
+  overflow-wrap: anywhere;
+  padding-top: 8px;
+}
+.event-sharing button,
+.event-sharing a {
+  min-height: 44px;
+}
+.event-sharing [role='status'] {
+  overflow-wrap: anywhere;
+  margin: 6px 0 0;
+}
+.event-sharing [role='status']:empty {
+  display: none;
+}
+.event-deadline {
+  flex: 1 0 100%;
+  box-sizing: border-box;
+  padding: 14px 16px;
+  border: 1px solid currentColor;
+  border-radius: 14px;
+  font-weight: 600;
+}
 .club-form-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) minmax(220px, 1fr);

@@ -62,7 +62,7 @@ function lines(value, label) {
 export function draftContent(input, publish = false) {
   if (!input || typeof input !== 'object' || Array.isArray(input))
     throw new RequestError(400, 'Check the event details.');
-  for (const key of ['potential', 'requireEduEmail']) {
+  for (const key of ['potential', 'requireEduEmail', 'checkSharing']) {
     if (input[key] !== undefined && typeof input[key] !== 'boolean')
       throw new RequestError(400, 'Check the event settings.');
   }
@@ -70,6 +70,7 @@ export function draftContent(input, publish = false) {
     title: text(input.title, 'the event title', 160, true),
     category: text(input.category, 'the event type', 80) || 'Club event',
     potential: input.potential === true,
+    checkSharing: input.checkSharing !== false,
     requireEduEmail:
       input.requireEduEmail ??
       String(input.category || '')
@@ -80,6 +81,7 @@ export function draftContent(input, publish = false) {
       publish && input.potential !== true,
     ),
     surveyIntro: text(input.surveyIntro, 'the RSVP introduction', 2000),
+    rsvpDeadline: day(text(input.rsvpDeadline, 'the RSVP reply-by date', 10)),
     surveyQuestions: surveyQuestions(input.surveyQuestions),
     startTime: text(input.startTime, 'the start time', 5),
     endDate: day(text(input.endDate, 'the end date', 10)),
@@ -150,6 +152,7 @@ export function publicContent(id, input, preview = false) {
     potential: draft.potential,
     requireEduEmail: draft.requireEduEmail,
     surveyIntro: draft.surveyIntro,
+    rsvpDeadline: draft.rsvpDeadline,
     surveyQuestions: draft.surveyQuestions,
     surveyVersion: surveyVersion(draft.surveyQuestions),
     date: draft.startTime

@@ -4,6 +4,11 @@ import { digest, privateSurveyToken } from './custom-surveys.mjs';
 import { editorEvents } from './events.mjs';
 import { eventIdPattern } from './event-content.mjs';
 import { email, isCalendarDate } from './validation.mjs';
+import {
+  availabilityDates,
+  validateAvailability,
+} from './survey-availability.mjs';
+import { availabilityValues } from '../surveys/availability-values.js';
 export const FORM_VERSION = 'custom-form/1';
 const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const invalid = (message) => {
@@ -85,6 +90,7 @@ export function validateDefinition(input, publishing = false) {
       'options',
       ...(exclusive ? ['exclusiveOption'] : []),
       ...(Object.hasOwn(Object(q), 'choiceDate') ? ['choiceDate'] : []),
+      ...(q.type === 'availability' ? ['dates'] : []),
     ]);
     if (!uuid.test(q.id) || ids.has(q.id))
       invalid('Each question needs a unique reference.');
@@ -100,12 +106,14 @@ export function validateDefinition(input, publishing = false) {
         'time',
         'number',
         'email',
+        'availability',
       ].includes(q.type) ||
       typeof q.required !== 'boolean' ||
       !Array.isArray(q.options)
     )
       invalid('Choose a supported question type.');
     const choice = ['single', 'multiple'].includes(q.type);
+    const availability = q.type === 'availability';
     if (
       q.choiceDate !== undefined &&
       (!choice || !isCalendarDate(q.choiceDate))
@@ -113,10 +121,15 @@ export function validateDefinition(input, publishing = false) {
       invalid('Choose a valid date for these choices.');
     if (
       q.options.length > 12 ||
-      (!choice && q.options.length) ||
-      (publishing && choice && q.options.length < 2)
+      (!choice && !availability && q.options.length) ||
+      (publishing && choice && q.options.length < 2) ||
+      (publishing && availability && !q.options.length)
     )
-      invalid('Choice questions need 2 to 12 options.');
+      invalid(
+        availability
+          ? 'Availability needs 1 to 12 time periods.'
+          : 'Choice questions need 2 to 12 options.',
+      );
     const options = q.options.map((o) => text(o, 120, !publishing));
     if (
       publishing &&
@@ -140,6 +153,9 @@ export function validateDefinition(input, publishing = false) {
       type: q.type,
       required: q.required,
       options,
+      ...(availability
+        ? { dates: availabilityDates(q.dates, publishing) }
+        : {}),
       ...(exclusive ? { exclusiveOption: q.exclusiveOption } : {}),
       ...(q.choiceDate ? { choiceDate: q.choiceDate } : {}),
     };
@@ -395,7 +411,10 @@ export function validateFormResponse(body, survey, member) {
       continue;
     }
     let answerText;
-    if (q.type === 'text' || q.type === 'short' || q.type === 'email') {
+    if (q.type === 'availability') {
+      value = validateAvailability(value, q);
+      answerText = availabilityValues(value).join('\n');
+    } else if (q.type === 'text' || q.type === 'short' || q.type === 'email') {
       value = text(
         value,
         q.type === 'text' ? 5000 : q.type === 'email' ? 254 : 300,

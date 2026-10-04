@@ -1,6 +1,7 @@
 import { lock, node } from './ui.js';
 import { drafts } from './session.js';
 import { FIELD_SCHEMA } from './format.js';
+import { availabilityFields } from '../surveys/availability-ui.js';
 const campuses = [
   'Brookhaven',
   'Cedar Valley',
@@ -237,6 +238,15 @@ function questionInput(parent, question, answer) {
   if (question.choiceDate)
     group.append(node('p', 'Date: ' + question.choiceDate, 'hint'));
   parent.append(group);
+  if (question.type === 'availability') {
+    const control = availabilityFields(question, { value: answer?.value });
+    group.append(control.root);
+    return () => ({
+      questionId: question.id,
+      value: control.read(),
+      other: '',
+    });
+  }
   if (!['single', 'multiple'].includes(question.type)) {
     const control = input(
       group,

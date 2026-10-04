@@ -7,6 +7,10 @@ import { createHash } from 'node:crypto';
 import { RequestError } from './errors.mjs';
 import { exclusiveSurveyChoice } from './event-format.mjs';
 import { email, isCalendarDate } from './validation.mjs';
+import {
+  availabilityDates,
+  validateAvailability,
+} from './survey-availability.mjs';
 const questionId =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function text(value, label, max, required = false) {
@@ -45,6 +49,7 @@ export function surveyQuestions(input = []) {
         'time',
         'number',
         'email',
+        'availability',
       ].includes(question.type)
     )
       throw new RequestError(400, 'Choose a valid question type.');
@@ -54,6 +59,7 @@ export function surveyQuestions(input = []) {
     )
       throw new RequestError(400, 'Check the RSVP question settings.');
     const choices = ['single', 'multiple'].includes(question.type);
+    const availability = question.type === 'availability';
     if (
       question.choiceDate !== undefined &&
       (!choices || !isCalendarDate(question.choiceDate))
@@ -62,9 +68,16 @@ export function surveyQuestions(input = []) {
     if (
       !Array.isArray(question.options) ||
       question.options.length > 30 ||
-      (choices && question.options.length < 2)
+      (choices && question.options.length < 2) ||
+      (availability &&
+        (question.options.length < 1 || question.options.length > 12))
     )
-      throw new RequestError(400, 'Choice questions need 2–30 options.');
+      throw new RequestError(
+        400,
+        availability
+          ? 'Availability needs 1–12 time periods.'
+          : 'Choice questions need 2–30 options.',
+      );
     const options = question.options.map((option) =>
       text(option, 'the answer option', 200, true),
     );
@@ -83,7 +96,10 @@ export function surveyQuestions(input = []) {
       options.length
     )
       throw new RequestError(400, 'Use different answer options.');
-    if (!choices && (options.length || question.allowOther))
+    if (
+      (!choices && !availability && options.length) ||
+      (!choices && question.allowOther)
+    )
       throw new RequestError(400, 'Only choice questions use answer options.');
     return {
       id: question.id,
@@ -93,6 +109,7 @@ export function surveyQuestions(input = []) {
       required: question.required,
       options,
       allowOther: choices && question.allowOther,
+      ...(availability ? { dates: availabilityDates(question.dates) } : {}),
       ...(question.choiceDate ? { choiceDate: question.choiceDate } : {}),
       ...(question.exclusiveOption !== undefined
         ? { exclusiveOption: question.exclusiveOption }
@@ -142,7 +159,9 @@ export function validateSurvey(body, event) {
     const answer = byId.get(question.id);
     const other = text(answer.other, 'the Other answer', 1000);
     let value;
-    if (question.type === 'number') {
+    if (question.type === 'availability') {
+      value = validateAvailability(answer.value, question);
+    } else if (question.type === 'number') {
       value = answer.value ?? '';
       if (value === '' && !question.required) value = '';
       else if (

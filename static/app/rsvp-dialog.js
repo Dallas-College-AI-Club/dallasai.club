@@ -1,18 +1,21 @@
-import { eventText, exclusiveSurveyChoice } from "./event-format.js";
+import { eventText, exclusiveSurveyChoice } from './event-format.js';
+import { availabilityFields } from './availability-ui.js';
+import { availabilityValues } from './availability-values.js';
+import { eventSharing } from './event-sharing.js';
 import {
   identityFields,
   formFooter,
   mountForm,
   escapeHTML as h,
-} from "./form-client.js";
+} from './form-client.js';
 export function rsvpDialog(root, { preview = false } = {}) {
-  const dialog = document.createElement("dialog");
-  dialog.className = "workshop-dialog rsvp-dialog";
-  dialog.setAttribute("aria-labelledby", "rsvp-heading");
+  const dialog = document.createElement('dialog');
+  dialog.className = 'workshop-dialog rsvp-dialog';
+  dialog.setAttribute('aria-labelledby', 'rsvp-heading');
   root.append(dialog);
-  const mock = document.createElement("dialog");
-  mock.className = "workshop-dialog rsvp-answer-preview";
-  mock.setAttribute("aria-label", "Sample admin response — not saved");
+  const mock = document.createElement('dialog');
+  mock.className = 'workshop-dialog rsvp-answer-preview';
+  mock.setAttribute('aria-label', 'Sample admin response — not saved');
   root.append(mock);
   function previewResult(event, data, answers) {
     const el = (tag, text) => {
@@ -20,44 +23,48 @@ export function rsvpDialog(root, { preview = false } = {}) {
       n.textContent = text;
       return n;
     };
-    const close = el("button", "Back to preview");
-    close.type = "button";
-    close.className = "outline-link";
+    const close = el('button', 'Back to preview');
+    close.type = 'button';
+    close.className = 'outline-link';
     close.onclick = () => mock.close();
     mock.replaceChildren(
       close,
-      el("h2", "Sample admin response"),
-      el("p", "PREVIEW ONLY · These answers have not been submitted or saved."),
-      el("h3", event.title),
-      el("p", "Event date: " + (event.date || "TBD")),
-      el("p", data.get("name")),
-      el("p", data.get("email")),
+      el('h2', 'Sample admin response'),
+      el('p', 'PREVIEW ONLY · These answers have not been submitted or saved.'),
+      el('h3', event.title),
+      el('p', 'Event date: ' + (event.date || 'TBD')),
+      el('p', data.get('name')),
+      el('p', data.get('email')),
     );
-    const list = document.createElement("dl");
+    const list = document.createElement('dl');
     for (const question of event.surveyQuestions || []) {
       const answer = answers.find((a) => a.questionId === question.id);
-      const values = (
-        Array.isArray(answer?.value) ? answer.value : [answer?.value ?? ""]
-      )
-        .filter((value) => value !== "")
-        .map((value) =>
-          value === "__other__" ? "Other: " + answer.other : value,
-        );
+      const values =
+        question.type === 'availability'
+          ? availabilityValues(answer?.value)
+          : (Array.isArray(answer?.value)
+              ? answer.value
+              : [answer?.value ?? '']
+            )
+              .filter((value) => value !== '')
+              .map((value) =>
+                value === '__other__' ? 'Other: ' + answer.other : value,
+              );
       list.append(
         el(
-          "dt",
-          (question.choiceDate ? question.choiceDate + " · " : "") +
+          'dt',
+          (question.choiceDate ? question.choiceDate + ' · ' : '') +
             question.label,
         ),
-        el("dd", values.length ? values.join("\n") : "No answer"),
+        el('dd', values.length ? values.join('\n') : 'No answer'),
       );
     }
     mock.append(list);
     mock.showModal();
   }
-  mock.addEventListener("close", () => mock.replaceChildren());
+  mock.addEventListener('close', () => mock.replaceChildren());
   let stop = () => {},
-    eventId = "";
+    eventId = '';
   function close() {
     if (mock.open) mock.close();
     if (dialog.open) dialog.close();
@@ -68,28 +75,40 @@ export function rsvpDialog(root, { preview = false } = {}) {
     const questions = event.surveyQuestions || [];
     const fields = questions
       .map((question, index) => {
-        const name = "answer-" + question.id;
+        const name = 'answer-' + question.id;
         const help = question.description;
         const description = help
-          ? '<p id="' + name + '-help">' + h(help) + "</p>"
-          : "";
-        const described = help ? ' aria-describedby="' + name + '-help"' : "";
+          ? '<p id="' + name + '-help">' + h(help) + '</p>'
+          : '';
+        const described = help ? ' aria-describedby="' + name + '-help"' : '';
         const label =
           h(
             index +
               1 +
-              ". " +
-              (question.choiceDate ? question.choiceDate + " · " : "") +
+              '. ' +
+              (question.choiceDate ? question.choiceDate + ' · ' : '') +
               question.label,
           ) +
           (question.required
-            ? " <span>(required)</span>"
-            : " <span>(optional)</span>");
-        if (question.type === "text")
+            ? ' <span>(required)</span>'
+            : ' <span>(optional)</span>');
+        if (question.type === 'availability')
           return (
             '<fieldset class="survey-question"><legend>' +
             label +
-            "</legend>" +
+            '</legend>' +
+            description +
+            '<input type="hidden" name="' +
+            name +
+            '"><div data-availability="' +
+            question.id +
+            '"></div></fieldset>'
+          );
+        if (question.type === 'text')
+          return (
+            '<fieldset class="survey-question"><legend>' +
+            label +
+            '</legend>' +
             description +
             '<textarea aria-label="' +
             h(question.label) +
@@ -97,125 +116,141 @@ export function rsvpDialog(root, { preview = false } = {}) {
             name +
             '" maxlength="3000" rows="3"' +
             described +
-            (question.required ? " required" : "") +
-            "></textarea></fieldset>"
+            (question.required ? ' required' : '') +
+            '></textarea></fieldset>'
           );
         if (
-          ["short", "date", "time", "number", "email"].includes(question.type)
+          ['short', 'date', 'time', 'number', 'email'].includes(question.type)
         )
           return (
             '<fieldset class="survey-question"><legend>' +
             label +
-            "</legend>" +
+            '</legend>' +
             description +
             '<input type="' +
-            (question.type === "short" ? "text" : question.type) +
+            (question.type === 'short' ? 'text' : question.type) +
             '" aria-label="' +
             h(question.label) +
             '" name="' +
             name +
             '"' +
-            (question.type === "number" ? ' step="any"' : "") +
-            (question.type === "date"
+            (question.type === 'number' ? ' step="any"' : '') +
+            (question.type === 'date'
               ? ' min="0001-01-01" max="9999-12-31"'
-              : "") +
+              : '') +
             ' maxlength="' +
-            (question.type === "email" ? 254 : 300) +
+            (question.type === 'email' ? 254 : 300) +
             '"' +
             described +
-            (question.required ? " required" : "") +
-            "></fieldset>"
+            (question.required ? ' required' : '') +
+            '></fieldset>'
           );
         const options = [
           ...question.options,
-          ...(question.allowOther ? ["__other__"] : []),
+          ...(question.allowOther ? ['__other__'] : []),
         ];
         return (
           '<fieldset class="survey-question" data-question="' +
           question.id +
           '"><legend>' +
           label +
-          "</legend>" +
+          '</legend>' +
           description +
           options
             .map(
               (option) =>
                 '<label class="survey-choice"><input type="' +
-                (question.type === "multiple" ? "checkbox" : "radio") +
+                (question.type === 'multiple' ? 'checkbox' : 'radio') +
                 '" name="' +
                 name +
                 '" value="' +
                 h(option) +
                 '"' +
                 described +
-                (question.type === "single" && question.required
-                  ? " required"
-                  : "") +
-                "><span>" +
-                h(option === "__other__" ? "Other" : option) +
-                "</span></label>",
+                (question.type === 'single' && question.required
+                  ? ' required'
+                  : '') +
+                '><span>' +
+                h(option === '__other__' ? 'Other' : option) +
+                '</span></label>',
             )
-            .join("") +
-          (question.type === "single" && !question.required
+            .join('') +
+          (question.type === 'single' && !question.required
             ? '<button type="button" class="survey-clear outline-link" data-clear="' +
               question.id +
               '">Clear answer</button>'
-            : "") +
+            : '') +
           (question.allowOther
             ? '<label class="survey-other" hidden>Other answer<textarea name="' +
               name +
               '-other" maxlength="1000" rows="2" disabled></textarea></label>'
-            : "") +
-          "</fieldset>"
+            : '') +
+          '</fieldset>'
         );
       })
-      .join("");
+      .join('');
     dialog.innerHTML =
       '<div class="dialog-toolbar"><button type="button" class="dialog-close" aria-label="Close RSVP">×</button></div>' +
       '<span class="tag">' +
       (event.potential
-        ? "POTENTIAL EVENT · DATE " +
-          (event.date ? h(event.date.slice(0, 10)) : "TBD")
-        : "EVENT RSVP") +
-      "</span>" +
+        ? 'POTENTIAL EVENT · DATE ' +
+          (event.date ? h(event.date.slice(0, 10)) : 'TBD')
+        : 'EVENT RSVP') +
+      '</span>' +
       '<h2 id="rsvp-heading">' +
       h(event.title) +
-      "</h2>" +
+      '</h2>' +
       (preview
         ? '<p class="potential-notice">PREVIEW ONLY · Try the form below. Nothing will be submitted or saved.</p>'
-        : "") +
+        : '') +
       (event.potential
-        ? "<p>This records your interest. Final details and seats are not yet confirmed.</p>"
-        : "") +
+        ? '<p>This records your interest. Final details and seats are not yet confirmed.</p>'
+        : '') +
       (event.surveyIntro
         ? '<div class="survey-intro event-richtext">' +
           eventText(event.surveyIntro) +
-          "</div>"
-        : "") +
+          '</div>'
+        : '') +
       '<form id="event-rsvp" class="club-form">' +
       identityFields(event.requireEduEmail === true) +
       fields +
       (preview
         ? '<button type="submit" class="solid-link">Preview admin result</button>'
         : formFooter(
-            "Submit RSVP",
-            "I agree that club officers may use my RSVP and answers to plan this event and contact me about it.",
+            'Submit RSVP',
+            'I agree that club officers may use my RSVP and answers to plan this event and contact me about it.',
           )) +
-      "</form>";
-    dialog.querySelector(".dialog-close").onclick = close;
-    const form = dialog.querySelector("form");
+      '</form>';
+    dialog.querySelector('.dialog-close').onclick = close;
+    dialog.querySelector('#rsvp-heading').after(eventSharing(event));
+    const form = dialog.querySelector('form');
     for (const question of questions)
       form
         .querySelector('[name="answer-' + question.id + '"]')
-        .closest("fieldset").dataset.draftSchema = JSON.stringify(question);
+        .closest('fieldset').dataset.draftSchema = JSON.stringify(question);
+    const availability = questions
+      .filter((question) => question.type === 'availability')
+      .map((question) => {
+        const hidden = form.elements.namedItem('answer-' + question.id);
+        const control = availabilityFields(question, {
+          onChange(value) {
+            hidden.value = value === '' ? '' : JSON.stringify(value);
+            form.dispatchEvent(new Event('input', { bubbles: true }));
+          },
+        });
+        form
+          .querySelector('[data-availability="' + question.id + '"]')
+          .append(control.root);
+        return { hidden, control };
+      });
     function validateChoices(event) {
       for (const question of questions.filter((q) =>
-        ["single", "multiple"].includes(q.type),
+        ['single', 'multiple'].includes(q.type),
       )) {
         const inputs = [
           ...form.querySelectorAll('[name="answer-' + question.id + '"]'),
         ];
-        if (question.type === "multiple") {
+        if (question.type === 'multiple') {
           const changed = event?.target;
           if (inputs.includes(changed) && changed.checked)
             for (const input of inputs)
@@ -229,24 +264,24 @@ export function rsvpDialog(root, { preview = false } = {}) {
         const selected = inputs
           .filter((input) => input.checked)
           .map((input) => input.value);
-        if (question.type === "multiple")
+        if (question.type === 'multiple')
           inputs[0].setCustomValidity(
             question.required && !selected.length
-              ? "Choose at least one answer."
-              : "",
+              ? 'Choose at least one answer.'
+              : '',
           );
         const other = form.elements.namedItem(
-          "answer-" + question.id + "-other",
+          'answer-' + question.id + '-other',
         );
         if (other) {
-          other.disabled = !selected.includes("__other__");
+          other.disabled = !selected.includes('__other__');
           other.required = !other.disabled;
-          other.closest("label").hidden = other.disabled;
+          other.closest('label').hidden = other.disabled;
         }
       }
     }
-    form.addEventListener("change", validateChoices);
-    form.querySelectorAll("[data-clear]").forEach((button) => {
+    form.addEventListener('change', validateChoices);
+    form.querySelectorAll('[data-clear]').forEach((button) => {
       button.onclick = () => {
         form
           .querySelectorAll('[name="answer-' + button.dataset.clear + '"]')
@@ -259,18 +294,22 @@ export function rsvpDialog(root, { preview = false } = {}) {
       answers: questions.map((question) => ({
         questionId: question.id,
         value:
-          question.type === "multiple"
-            ? data.getAll("answer-" + question.id)
-            : question.type === "number" &&
-                data.get("answer-" + question.id) !== ""
-              ? Number(data.get("answer-" + question.id))
-              : data.get("answer-" + question.id) || "",
-        other: data.get("answer-" + question.id + "-other") || "",
+          question.type === 'availability'
+            ? data.get('answer-' + question.id)
+              ? JSON.parse(data.get('answer-' + question.id))
+              : ''
+            : question.type === 'multiple'
+              ? data.getAll('answer-' + question.id)
+              : question.type === 'number' &&
+                  data.get('answer-' + question.id) !== ''
+                ? Number(data.get('answer-' + question.id))
+                : data.get('answer-' + question.id) || '',
+        other: data.get('answer-' + question.id + '-other') || '',
       })),
     });
     if (preview) {
-      form.elements.name.value = "Preview participant";
-      form.elements.email.value = "preview@example.edu";
+      form.elements.name.value = 'Preview participant';
+      form.elements.email.value = 'preview@example.edu';
       form.onsubmit = (eventClick) => {
         eventClick.preventDefault();
         validateChoices();
@@ -283,10 +322,12 @@ export function rsvpDialog(root, { preview = false } = {}) {
       };
     } else
       stop = mountForm(form, {
-        kind: "rsvp",
-        extra: { eventId, surveyVersion: event.surveyVersion || "" },
+        kind: 'rsvp',
+        extra: { eventId, surveyVersion: event.surveyVersion || '' },
         serialize,
       });
+    for (const { hidden, control } of availability)
+      control.restore(hidden.value ? JSON.parse(hidden.value) : '');
     validateChoices();
     if (!dialog.open) dialog.showModal();
     dialog.scrollTop = 0;

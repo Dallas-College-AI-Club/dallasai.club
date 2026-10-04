@@ -18,6 +18,8 @@ import { dateTime } from '../admin/format.js';
 import { eventHandler } from '../api/events.mjs';
 import { RequestError } from '../lib/errors.mjs';
 import { validate } from '../lib/validation.mjs';
+import { createEventShareLink, eventURL } from '../lib/event-share-link.mjs';
+import qrcode from 'qrcode-generator';
 const actor = 'officer@example.com';
 const draft = {
   title: 'AI workshop',
@@ -35,8 +37,189 @@ let db;
 before(async () => {
   db = await testDatabase();
 });
-beforeEach(() => db.exec('TRUNCATE club_forms.events CASCADE'));
+beforeEach(() =>
+  db.exec('TRUNCATE club_forms.events, club_forms.audit CASCADE'),
+);
 after(() => db.close());
+test('reply-by dates survive saves and event QR downloads point to a public event without reading private data', async () => {
+  for (const rsvpDeadline of [
+    '2026-02-30',
+    'tomorrow',
+    '2026-10-11T00:00',
+    '<script>',
+  ])
+    assert.throws(() => draftContent({ ...draft, rsvpDeadline }), {
+      status: 400,
+    });
+  await save('publish', 0, { ...draft, rsvpDeadline: '2026-10-11' });
+  assert.equal(
+    (await liveEvents(db, legacy)).find((e) => e.id === 'new-event')
+      .rsvpDeadline,
+    '2026-10-11',
+  );
+  assert.equal(
+    (await editorEvents(db, legacy)).find((e) => e.id === 'new-event').draft
+      .rsvpDeadline,
+    '2026-10-11',
+  );
+  const handler = eventHandler({
+    getDatabase: () => ({
+      query: (sql, values) => {
+        assert.equal(
+          sql,
+          'SELECT published FROM club_forms.events WHERE id=$1',
+        );
+        return db.query(sql, values);
+      },
+    }),
+    authorize: () => {
+      throw Error('QR is public');
+    },
+  });
+  const call = async (query) => {
+    const response = {
+      headers: {},
+      setHeader(k, v) {
+        this.headers[k] = v;
+      },
+      end(value) {
+        this.body = value;
+      },
+    };
+    await handler({ method: 'GET', url: '/api/events?' + query }, response);
+    return response;
+  };
+  const qr = await call('qr=new-event&download=1');
+  assert.equal(qr.statusCode, 200);
+  assert.equal(qr.headers['Content-Type'], 'image/svg+xml');
+  assert.equal(
+    qr.headers['Content-Disposition'],
+    'attachment; filename="new-event-qr.svg"',
+  );
+  assert.match(qr.body, /<svg/);
+  assert.doesNotMatch(qr.body, /script|onload|officer|example.com/);
+  assert.notEqual(qr.body, (await call('qr=other-event')).body);
+  await createEventShareLink(
+    db,
+    'new-event',
+    actor,
+    async () => 'https://go.dallasai.club/test-game-night',
+  );
+  const expectedQR = qrcode(0, 'M');
+  expectedQR.addData('https://go.dallasai.club/test-game-night');
+  expectedQR.make();
+  assert.equal(
+    (await call('qr=new-event')).body,
+    expectedQR.createSvgTag(6, 24),
+  );
+  assert.equal(
+    (await call('qr=new-event')).headers['Cache-Control'],
+    'no-store',
+  );
+  assert.equal((await call('qr=bad%22id')).statusCode, 400);
+  assert.equal((await call('qr=' + 'a'.repeat(101))).statusCode, 400);
+});
+test('event short links are stable through retries, editing, archive, and restore; duplicates cannot inherit them', async () => {
+  await save('publish', 0, {
+    ...draft,
+    shortLink: 'https://attacker.example/',
+    checkSharing: false,
+  });
+  let creates = 0;
+  const create = async (url) => {
+    creates++;
+    assert.equal(url, 'https://dallasai.club/club.html?mode=events&event=new-event');
+    return 'https://go.dallasai.club/test-event';
+  };
+  const results = await Promise.all(
+    Array.from({ length: 10 }, () =>
+      createEventShareLink(db, 'new-event', actor, create),
+    ),
+  );
+  assert.equal(creates, 1);
+  assert.equal(results[0].draft.checkSharing, false);
+  assert.ok(
+    results.every(
+      (r) => r.published.shortLink === 'https://go.dallasai.club/test-event',
+    ),
+  );
+  assert.equal(results[0].revision, 1);
+  await save('draft', 1, {
+    ...draft,
+    title: 'New draft',
+    shortLink: 'https://attacker.example/',
+  });
+  assert.equal(
+    (await liveEvents(db, [])).find((e) => e.id === 'new-event').shortLink,
+    'https://go.dallasai.club/test-event',
+  );
+  await save('archive', 2);
+  await save('draft', 3, { ...draft });
+  await save('restore', 4);
+  const restored = await save('publish', 5);
+  assert.equal(
+    restored.published.shortLink,
+    'https://go.dallasai.club/test-event',
+  );
+  await save('draft', 0, restored.draft, 'copied-event');
+  assert.equal(
+    (await editorEvents(db, [])).find((e) => e.id === 'copied-event').draft
+      .shortLink,
+    undefined,
+  );
+  assert.equal(
+    (
+      await db.query(
+        "SELECT count(*)::int n FROM club_forms.audit WHERE action='event-share-link:new-event'",
+      )
+    ).rows[0].n,
+    1,
+  );
+});
+test('event Short link failures leave saved event data intact and allow a clean retry', async () => {
+  let creates = 0;
+  const create = async () => {
+    creates++;
+    throw Error('provider unavailable');
+  };
+  await assert.rejects(createEventShareLink(db, 'bad/id', actor, create), {
+    status: 400,
+  });
+  await assert.rejects(
+    createEventShareLink(db, 'missing-event', actor, create),
+    { status: 409 },
+  );
+  await save('draft', 0);
+  await assert.rejects(createEventShareLink(db, 'new-event', actor, create), {
+    status: 409,
+  });
+  assert.equal(creates, 0);
+  const published = await save('publish', 1);
+  await assert.rejects(
+    createEventShareLink(db, 'new-event', actor, create),
+    /provider unavailable/,
+  );
+  assert.deepEqual(
+    (await editorEvents(db, [])).find((e) => e.id === 'new-event'),
+    published,
+  );
+  assert.equal(
+    (
+      await createEventShareLink(
+        db,
+        'new-event',
+        actor,
+        async () => 'https://go.dallasai.club/retried-event',
+      )
+    ).published.shortLink,
+    'https://go.dallasai.club/retried-event',
+  );
+  assert.equal(draftContent(draft).checkSharing, true);
+  for (const checkSharing of ['false', null, 0])
+    assert.throws(() => draftContent({ ...draft, checkSharing }), {
+      status: 400,
+    });
+});
 const save = (action, revision, event = draft, id = 'new-event') =>
   saveEvent(db, { action, id, revision, event }, actor, legacy);
 test('activity pages retain attribution in revision order without exposing content or mixing events', async () => {
@@ -304,9 +487,15 @@ test('public API exposes only live content; admin reads and writes require autho
   process.env.AUTH_BASE_URL = 'https://office.example.com';
   await save('draft', 0);
   let allowed = false;
+  let providerFails = true;
   const handler = eventHandler({
     getDatabase: () => db,
     originals: legacy,
+    createShortLink: async () => {
+      if (providerFails)
+        throw Error('provider failure must not hide saved event');
+      return 'https://go.dallasai.club/api-event';
+    },
     authorize: async () => {
       if (!allowed) throw new RequestError(401, 'Sign in');
       return { email: actor };
@@ -362,6 +551,11 @@ test('public API exposes only live content; admin reads and writes require autho
     event: draft,
   };
   assert.equal((await call('POST', '/api/events', body)).statusCode, 401);
+  assert.equal(
+    (await call('POST', '/api/events', { action: 'share-link', id: body.id }))
+      .statusCode,
+    401,
+  );
   allowed = true;
   const history = await call('GET', '/api/events?admin=1&history=new-event');
   assert.equal(history.statusCode, 200);
@@ -381,6 +575,29 @@ test('public API exposes only live content; admin reads and writes require autho
     200,
   );
   assert.equal((await liveEvents(db, legacy)).length, 1);
-  assert.equal((await call('POST', '/api/events', body)).statusCode, 200);
+  const published = await call('POST', '/api/events', body);
+  assert.equal(published.statusCode, 200);
+  assert.equal(published.body.event.published.title, draft.title);
+  assert.match(published.body.sharingError, /Short link could not/);
+  assert.equal(published.body.event.published.shortLink, undefined);
+  providerFails = false;
+  const retry = { action: 'share-link', id: body.id };
+  assert.equal(
+    (await call('POST', '/api/events', retry, 'https://evil.example'))
+      .statusCode,
+    403,
+  );
+  assert.equal(
+    (await call('POST', '/api/events', retry)).body.event.published.shortLink,
+    'https://go.dallasai.club/api-event',
+  );
+  const preview = await call('POST', '/api/events', {
+    ...body,
+    action: 'preview',
+  });
+  assert.equal(
+    preview.body.event.shortLink,
+    'https://go.dallasai.club/api-event',
+  );
   assert.equal((await liveEvents(db, legacy)).length, 2);
 });

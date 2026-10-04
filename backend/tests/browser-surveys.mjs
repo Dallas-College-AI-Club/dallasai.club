@@ -31,6 +31,7 @@ const events = eventHandler({
   getDatabase: () => db,
   authorize: authorized,
   originals: [],
+  createShortLink: async () => 'https://go.dallasai.club/test-rsvp-event',
   storage: {
     put: async (path, bytes) => {
       imageFiles.set(path, bytes);
@@ -162,11 +163,16 @@ try {
   admin.on('dialog', (d) => d.accept());
   await admin.goto(origin + '/admin/#events');
   await admin.getByRole('button', { name: 'New event', exact: true }).click();
+  assert.equal(await admin.locator('[name=checkSharing]').isChecked(), true);
+  await admin.locator('[name=checkSharing]').uncheck();
   await admin.locator('[name=title]').fill('Potential social survey');
   await admin.locator('[name=category]').selectOption('Social');
   assert.equal(await admin.locator('[name=requireEduEmail]').isChecked(), true);
   await admin.locator('[name=potential]').check();
   await admin.locator('[name=surveyIntro]').fill('Test survey introduction.');
+  await admin
+    .getByLabel('Reply-by date (optional)', { exact: true })
+    .fill('2026-10-11');
   for (const [type, label, required, options, other] of [
     ['text', 'Friend name', false, [], false],
     ['single', 'Which day?', true, ['Friday', 'Saturday'], true],
@@ -176,6 +182,7 @@ try {
     ['number', 'Guests', true, [], false],
     ['email', 'Contact address', true, [], false],
     ['time', 'Arrival time', true, [], false],
+    ['availability', 'Availability', true, ['Afternoon', 'Evening'], false],
   ]) {
     await admin.locator('#add-survey-question').click();
     let box = admin.locator('.survey-editor-question').last();
@@ -186,6 +193,17 @@ try {
     if (['single', 'multiple'].includes(type)) {
       await box.getByLabel('Answer options').fill(options.join('\n'));
       await box.getByLabel('Allow an Other answer').setChecked(other);
+    }
+    if (type === 'availability') {
+      await box
+        .getByLabel('Time periods (one per line, 1–12 periods)')
+        .fill(options.join('\n'));
+      for (const [i, date] of ['2026-10-16', '2026-10-17'].entries()) {
+        await box
+          .getByRole('button', { name: 'Add date', exact: true })
+          .click();
+        await box.getByLabel('Date ' + (i + 1), { exact: false }).fill(date);
+      }
     }
   }
   // Choice order supports keyboard buttons and pointer dragging without losing text.
@@ -228,6 +246,13 @@ try {
     ['Arrival time', '18:30'],
   ])
     await preview.getByLabel(label, { exact: true }).fill(value);
+  await preview
+    .getByRole('button', { name: 'Preview admin result', exact: true })
+    .click();
+  assert.equal(await preview.locator('.rsvp-answer-preview[open]').count(), 0);
+  await preview
+    .getByRole('radio', { name: 'Not sure yet', exact: true })
+    .check();
   await preview
     .getByRole('button', { name: 'Preview admin result', exact: true })
     .click();
@@ -284,7 +309,8 @@ try {
     )
     .waitFor();
   const stored = (await db.query('SELECT * FROM club_forms.events')).rows[0];
-  assert.equal(stored.draft.surveyQuestions.length, 8);
+  assert.equal(stored.draft.surveyQuestions.length, 9);
+  assert.equal(stored.draft.checkSharing, false);
   assert.equal(stored.draft.surveyQuestions[2].choiceDate, '2026-10-16');
   assert.match(
     await admin.locator('#event-overview').textContent(),
@@ -294,7 +320,9 @@ try {
   await admin.reload();
   await admin.locator('.event-choice').click();
   await admin.locator('#edit-selected-event').click();
-  assert.equal(await admin.locator('.survey-editor-question').count(), 8);
+  assert.equal(await admin.locator('.survey-editor-question').count(), 9);
+  assert.equal(await admin.locator('[name=checkSharing]').isChecked(), false);
+  const tabsBeforePublish = context.pages().length;
   await admin
     .getByRole('button', { name: 'Publish event', exact: true })
     .click();
@@ -306,16 +334,29 @@ try {
     )
     .waitFor();
   const live = (await liveEvents(db, []))[0];
+  assert.equal(context.pages().length, tabsBeforePublish);
+  assert.equal(live.shortLink, 'https://go.dallasai.club/test-rsvp-event');
   const page = await context.newPage();
   page.on('pageerror', (e) => errors.push(e.message));
   await page.route(
     'https://dallasai-leaderboard.vercel.app/api/events*',
     async (route) => {
-      const response = await fetch(origin + '/api/events');
+      const response = await fetch(
+        origin + '/api/events' + new URL(route.request().url()).search,
+      );
       await route.fulfill({
         status: response.status,
-        contentType: 'application/json',
-        headers: { 'Access-Control-Allow-Origin': '*' },
+        contentType: response.headers.get('content-type'),
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          ...(response.headers.has('content-disposition')
+            ? {
+                'Content-Disposition': response.headers.get(
+                  'content-disposition',
+                ),
+              }
+            : {}),
+        },
         body: await response.text(),
       });
     },
@@ -352,6 +393,43 @@ try {
   assert.match(await page.locator('#potential-events').textContent(), /TBD/);
   assert.equal(await page.locator('#save-event').count(), 0);
   await page.locator('#open-rsvp').click();
+  const shareBox = page.locator('.rsvp-dialog .event-sharing');
+  assert.equal(
+    await shareBox.locator('time').getAttribute('datetime'),
+    '2026-10-11',
+  );
+  await shareBox.locator('img').evaluate((image) => image.decode());
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await shareBox
+    .getByRole('button', { name: 'Share event', exact: true })
+    .click();
+  assert.equal(
+    await page.evaluate(() => navigator.clipboard.readText()),
+    'https://go.dallasai.club/test-rsvp-event',
+  );
+  const qrDownloading = page.waitForEvent('download');
+  await shareBox
+    .getByRole('link', { name: 'Download QR', exact: true })
+    .click();
+  assert.match(
+    await readFile(await (await qrDownloading).path(), 'utf8'),
+    /<svg/,
+  );
+  for (const width of [320, 375, 390]) {
+    await page.setViewportSize({ width, height: 844 });
+    assert.equal(
+      await page
+        .locator('.rsvp-dialog')
+        .evaluate((el) => el.scrollWidth <= el.clientWidth),
+      true,
+    );
+    assert.notEqual(
+      await shareBox
+        .locator('.event-deadline')
+        .evaluate((el) => getComputedStyle(el).borderRadius),
+      '0px',
+    );
+  }
   await page.locator('#event-rsvp [name=name]').fill('Browser survey test');
   await page.locator('#event-rsvp [name=email]').fill('someone@gmail.com');
   await page
@@ -376,6 +454,36 @@ try {
     .getByLabel('Other answer')
     .fill('Chess');
   await page.locator('#event-rsvp [name=consent]').check();
+  const availability = page.locator('.availability');
+  await availability
+    .getByRole('checkbox', {
+      name: 'Fri, Oct 16, 2026 · Afternoon',
+      exact: true,
+    })
+    .check();
+  await availability
+    .getByRole('checkbox', { name: 'Sat, Oct 17, 2026 · Evening', exact: true })
+    .check();
+  await page.getByRole('button', { name: 'Close RSVP', exact: true }).click();
+  await page.locator('#open-rsvp').click();
+  assert.equal(
+    await availability
+      .getByRole('checkbox', {
+        name: 'Fri, Oct 16, 2026 · Afternoon',
+        exact: true,
+      })
+      .isChecked(),
+    true,
+  );
+  assert.equal(
+    await availability
+      .getByRole('checkbox', {
+        name: 'Sat, Oct 17, 2026 · Evening',
+        exact: true,
+      })
+      .isChecked(),
+    true,
+  );
   await page.locator('#event-rsvp button[type=submit]').click();
   assert.equal(submissions, 0, 'Non-edu email must fail in the browser');
   assert.equal(
@@ -415,13 +523,21 @@ try {
   );
   let response = (await db.query('SELECT * FROM club_forms.survey_responses'))
     .rows[0];
-  assert.equal(response.answers.length, 8);
+  assert.equal(response.answers.length, 9);
   assert.deepEqual(
-    response.answers.slice(3).map((a) => a.value),
+    response.answers.slice(3, 8).map((a) => a.value),
     ['Hello', '2028-02-29', 0, 'advisor@example.edu', '18:30'],
   );
   assert.deepEqual(response.answers[2].value, ['Cards', '__other__']);
   assert.equal(response.answers[2].other, 'Chess');
+  assert.deepEqual(response.answers[8].value, {
+    status: 'available',
+    selections: [
+      { date: '2026-10-16', periods: ['Afternoon'] },
+      { date: '2026-10-17', periods: ['Evening'] },
+    ],
+    alternatives: [],
+  });
   const entryId = response.entry_id;
   await page.getByRole('button', { name: 'Close', exact: true }).click();
   await page.locator('#open-rsvp').click();
@@ -477,6 +593,22 @@ try {
   assert.equal(await arrival.getAttribute('type'), 'time');
   await arrival.fill('19:00');
   await editing
+    .getByRole('radio', { name: 'Suggest alternative dates', exact: true })
+    .check();
+  assert.equal(
+    await editing
+      .getByRole('checkbox', {
+        name: 'Fri, Oct 16, 2026 · Afternoon',
+        exact: true,
+      })
+      .isDisabled(),
+    true,
+  );
+  await editing
+    .getByLabel('Suggested date', { exact: true })
+    .fill('2026-11-05');
+  await editing.getByLabel('Time (optional)', { exact: true }).fill('18:30');
+  await editing
     .getByRole('button', { name: 'Save changes', exact: true })
     .click();
   await editing.waitFor({ state: 'detached' });
@@ -488,6 +620,11 @@ try {
   ).rows[0];
   assert.equal(edited.answers[5].value, 0);
   assert.equal(edited.answers[7].value, '19:00');
+  assert.deepEqual(edited.answers[8].value, {
+    status: 'alternative',
+    selections: [],
+    alternatives: [{ date: '2026-11-05', time: '18:30' }],
+  });
   await admin.reload();
   await admin.locator('#survey-results .survey-response').waitFor();
   await admin.screenshot({

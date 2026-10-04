@@ -223,6 +223,7 @@ try {
         'multiple',
         'scale',
         'time',
+        'availability',
       ];
       for (const type of types) {
         await page
@@ -235,12 +236,27 @@ try {
         await question
           .getByLabel('Answer type', { exact: true })
           .selectOption(type);
-        await question.getByLabel('Required question', { exact: true }).check();
-        if (['single', 'multiple'].includes(type))
-          for (const [i, choice] of ['First', 'Second'].entries())
+        await question
+          .getByLabel('Required question', { exact: true })
+          .setChecked(type !== 'availability');
+        if (['single', 'multiple', 'availability'].includes(type))
+          for (const [i, choice] of (type === 'availability'
+            ? ['Afternoon', 'Evening']
+            : ['First', 'Second']
+          ).entries())
             await question
               .getByLabel('Choice ' + (i + 1), { exact: true })
               .fill(choice);
+        if (type === 'availability') {
+          for (const [i, date] of ['2026-10-16', '2026-10-17'].entries()) {
+            await question
+              .getByRole('button', { name: 'Add date', exact: true })
+              .click();
+            await question
+              .getByLabel('Date ' + (i + 1), { exact: false })
+              .fill(date);
+          }
+        }
         if (type === 'multiple')
           await question
             .getByLabel('Date for these choices (optional)', { exact: true })
@@ -273,6 +289,48 @@ try {
         await root
           .getByRole('combobox', { name: /^Basic scale/ })
           .selectOption('4');
+        const availability = root.locator('.availability');
+        await availability
+          .getByRole('checkbox', {
+            name: 'Fri, Oct 16, 2026 · Afternoon',
+            exact: true,
+          })
+          .check();
+        await availability
+          .getByRole('radio', { name: 'Not sure yet', exact: true })
+          .check();
+        await expect(availability.getByRole('checkbox').first()).toBeDisabled();
+        await expect(
+          availability.getByRole('checkbox').first(),
+        ).not.toBeChecked();
+        await availability
+          .getByRole('radio', { name: 'Not available', exact: true })
+          .check();
+        await expect(
+          availability.getByLabel('Suggested date', { exact: true }),
+        ).toBeVisible();
+        await availability
+          .getByLabel('Time (optional)', { exact: true })
+          .fill('00:00');
+        assert.equal(
+          await availability
+            .getByLabel('Suggested date', { exact: true })
+            .evaluate((el) => el.checkValidity()),
+          false,
+        );
+        await availability
+          .getByLabel('Suggested date', { exact: true })
+          .fill('2026-11-05');
+        await availability
+          .getByLabel('Time (optional)', { exact: true })
+          .fill('00:00');
+        await availability
+          .getByRole('button', { name: 'Add another date', exact: true })
+          .click();
+        await availability
+          .getByLabel('Suggested date', { exact: true })
+          .nth(1)
+          .fill('2026-11-06');
       };
       await fillAnswers(page.locator('.survey-trial'));
       await page
@@ -299,7 +357,7 @@ try {
       await preview
         .getByRole('button', { name: 'Preview the questions →', exact: true })
         .click();
-      await expect(preview.locator('.question')).toHaveCount(9);
+      await expect(preview.locator('.question')).toHaveCount(10);
       await expect(
         preview.locator(
           '.question input:enabled,.question textarea:enabled,.question select:enabled',
@@ -391,6 +449,14 @@ try {
           [0, 1],
           4,
           '18:30',
+          {
+            status: 'unavailable',
+            selections: [],
+            alternatives: [
+              { date: '2026-11-05', time: '00:00' },
+              { date: '2026-11-06', time: '' },
+            ],
+          },
         ],
       );
       assert.equal(
@@ -412,6 +478,29 @@ try {
       await expect(
         page.getByRole('textbox', { name: /^Basic email/ }),
       ).toHaveValue('advisor@example.edu');
+      await expect(
+        page
+          .locator('.availability')
+          .getByRole('radio', { name: 'Not available', exact: true }),
+      ).toBeChecked();
+      await expect(
+        page.getByLabel('Suggested date', { exact: true }).nth(0),
+      ).toHaveValue('2026-11-05');
+      await expect(
+        page.getByLabel('Time (optional)', { exact: true }).nth(0),
+      ).toHaveValue('00:00');
+      await expect(
+        page.getByLabel('Suggested date', { exact: true }).nth(1),
+      ).toHaveValue('2026-11-06');
+      await page
+        .getByRole('button', { name: 'Clear availability', exact: true })
+        .click();
+      await page
+        .getByRole('button', { name: 'Review answers →', exact: true })
+        .click();
+      await expect(page.locator('.answer-copy').last()).toHaveText(
+        'Not answered',
+      );
     },
   );
 

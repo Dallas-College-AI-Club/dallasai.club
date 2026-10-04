@@ -8,6 +8,10 @@ import { definition } from '../lib/survey-contract.mjs';
 import { getDraft, changeDraft } from '../lib/survey-builder.mjs';
 import { surveyCatalog } from '../lib/survey-catalog.mjs';
 import {
+  changeSurveyShareLink,
+  generateSurveyShareLink,
+} from '../lib/survey-share-link.mjs';
+import {
   surveyResultPage,
   surveyExportRows,
   surveyResultsCSV,
@@ -37,6 +41,7 @@ export function customSurveysHandler({
   authorize = requireAdmin,
   getSession = neonSession,
   authProxy = proxyNeonAuth,
+  generateShareLink = generateSurveyShareLink,
   rateLimit = (db, req) => limit(db, req, 'custom-survey', 120, 300),
 } = {}) {
   return async (req, res) => {
@@ -85,6 +90,17 @@ export function customSurveysHandler({
           pageSize: 10,
           readOnly: true,
         });
+      }
+      if (action === 'share-link' || action === 'generate-share-link') {
+        const actor = await authorize(req);
+        if (req.method !== 'POST') throw new RequestError(405, 'Use POST.');
+        return send(
+          res,
+          200,
+          await (
+            action === 'share-link' ? changeSurveyShareLink : generateShareLink
+          )(getDatabase(), actor, await jsonBody(req, 20000)),
+        );
       }
       if (action === 'draft' || action === 'draft-change') {
         const actor = await authorize(req),

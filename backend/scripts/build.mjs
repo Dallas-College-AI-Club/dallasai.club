@@ -47,6 +47,10 @@ await cp(
   path.join(root, 'public/admin/style.css'),
 );
 await cp(
+  path.join(root, 'surveys/availability.css'),
+  path.join(root, 'public/admin/availability.css'),
+);
+await cp(
   path.join(root, 'admin/theme.js'),
   path.join(root, 'public/admin/theme.js'),
 );
@@ -70,7 +74,7 @@ await build({
   external: ['canvg', 'dompurify', 'html2canvas'],
 });
 await mkdir(path.join(root, 'public/surveys'), { recursive: true });
-for (const file of ['index.html', 'style.css'])
+for (const file of ['index.html', 'style.css', 'availability.css'])
   await cp(
     path.join(root, 'surveys', file),
     path.join(root, 'public/surveys', file),

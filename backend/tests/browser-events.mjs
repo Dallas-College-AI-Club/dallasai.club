@@ -23,10 +23,18 @@ const authorized = (req) => {
     return { email: 'officer@example.com' };
   throw new RequestError(401, 'Sign in with an authorized club email address.');
 };
+let shortLinkFailure = true,
+  shortLinkCalls = 0;
 const events = eventHandler({
   getDatabase: () => db,
   authorize: authorized,
   originals: [],
+  createShortLink: async () => {
+    shortLinkCalls++;
+    if (shortLinkFailure)
+      throw new RequestError(503, 'Short link temporarily unavailable.');
+    return 'https://go.dallasai.club/test-published-event';
+  },
   storage: {
     put: async (path, bytes) => {
       imageFiles.set(path, bytes);
@@ -145,6 +153,15 @@ try {
     viewport: { width: 1365, height: 950 },
   });
   const page = await context.newPage();
+  await context.route(
+    'https://go.dallasai.club/test-published-event',
+    (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'text/html',
+        body: '<h1>Synthetic published event target</h1>',
+      }),
+  );
   page.on('pageerror', (e) => errors.push(e.message));
   page.on('dialog', (d) => d.accept());
   await page.goto(origin + '/admin/#events');
@@ -166,7 +183,7 @@ try {
   );
   assert.ok(
     await page.evaluate(() =>
-      getComputedStyle(document.documentElement).fontFamily.includes('Geist'),
+      getComputedStyle(document.documentElement).fontFamily.includes('DM Sans'),
     ),
   );
   await page
@@ -430,6 +447,8 @@ try {
   if (!(await page.locator('#event-form').isVisible()))
     await page.locator('#edit-selected-event').click();
   await page.locator('[name="endTime"]').fill('20:00');
+  assert.equal(await page.locator('[name="checkSharing"]').isChecked(), true);
+  const tabsBeforePublish = context.pages().length;
   if (!(await page.locator('#event-form').isVisible()))
     await page.locator('#edit-selected-event').click();
   await page
@@ -442,6 +461,51 @@ try {
       { exact: true },
     )
     .waitFor();
+  await page
+    .getByText(
+      'Short link could not be created. Use Create short link to try again.',
+      { exact: true },
+    )
+    .waitFor();
+  assert.equal((await liveEvents(db, []))[0].id, id);
+  await expect.poll(() => context.pages().length).toBe(tabsBeforePublish);
+  shortLinkFailure = false;
+  await page
+    .getByRole('button', { name: 'Create short link', exact: true })
+    .click();
+  await page
+    .getByText('Short link and QR opened in separate tabs for checking.', {
+      exact: true,
+    })
+    .waitFor();
+  await expect.poll(() => context.pages().length).toBe(tabsBeforePublish + 2);
+  const checks = context.pages().filter((p) => p !== page);
+  await expect
+    .poll(() =>
+      checks.some(
+        (p) => p.url() === 'https://go.dallasai.club/test-published-event',
+      ),
+    )
+    .toBe(true);
+  await expect
+    .poll(() => checks.some((p) => p.url() === origin + '/api/events?qr=' + id))
+    .toBe(true);
+  for (const check of checks) {
+    assert.equal(await check.evaluate(() => window.opener), null);
+    if (check.url().includes('?qr='))
+      await expect(check.locator('svg')).toBeVisible();
+    else
+      await expect(
+        check.getByRole('heading', {
+          name: 'Synthetic published event target',
+        }),
+      ).toBeVisible();
+    await check.close();
+  }
+  assert.equal(shortLinkCalls, 2);
+  await expect(
+    page.getByRole('link', { name: 'View published event ↗' }),
+  ).toHaveAttribute('href', 'https://go.dallasai.club/test-published-event');
   const publicPage = await context.newPage();
   publicPage.on('pageerror', (e) => errors.push(e.message));
   await publicPage.route(
@@ -455,6 +519,12 @@ try {
           status: result.status,
           contentType: 'image/webp',
           body: Buffer.from(await result.arrayBuffer()),
+        });
+      if (new URL(route.request().url()).searchParams.has('qr'))
+        return route.fulfill({
+          status: result.status,
+          contentType: 'image/svg+xml',
+          body: await result.text(),
         });
       return route.fulfill({
         contentType: 'application/json',
@@ -532,7 +602,9 @@ try {
     .locator('#event-detail h2')
     .filter({ hasText: 'Safe workshop' })
     .waitFor();
-  assert.equal(await publicPage.locator('#event-detail img').count(), 1);
+  // The uploaded event image and its QR are the only images; HTML in a title
+  // must remain text, never create another image or event handler.
+  assert.equal(await publicPage.locator('#event-detail img').count(), 2);
   assert.equal(
     await publicPage.locator('#event-detail img[onerror]').count(),
     0,
@@ -824,6 +896,34 @@ try {
   await page.getByLabel('Sign-in code', { exact: true }).fill('123456');
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.locator('.event-choice').waitFor();
+  assert.equal(
+    shortLinkCalls,
+    2,
+    'Editing and republishing reuse the saved link',
+  );
+  await page.getByRole('button', { name: 'New event', exact: true }).click();
+  await page.locator('[name="title"]').fill('Blocked popup check');
+  await page.locator('[name="potential"]').check();
+  await page.evaluate(() => {
+    window.open = () => null;
+  });
+  const tabsBeforeBlockedCheck = context.pages().length;
+  await page
+    .getByRole('button', { name: 'Publish event', exact: true })
+    .click();
+  await page
+    .getByText(
+      'Your browser blocked a check tab. Use View published event and Open event QR to open the checks.',
+      { exact: true },
+    )
+    .waitFor();
+  assert.equal(context.pages().length, tabsBeforeBlockedCheck);
+  await expect(
+    page.getByRole('link', { name: 'View published event ↗' }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Open event QR ↗' }),
+  ).toBeVisible();
   assert.deepEqual(errors, []);
   console.log(
     'Passed: four event types, fixed Studio design and office-only logo, workshop entry, private image preview, persistence, publish, public refresh, safe rendering, conflict recovery, archived editing, reload, restore as draft, preserved RSVPs/images, republish, unpublish, sign-out, and mobile layouts.',

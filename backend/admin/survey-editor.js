@@ -1,5 +1,6 @@
 import { node } from './ui.js';
 import { choiceEditor } from './survey-choices.js';
+import { availabilityDateEditor } from '../surveys/availability-ui.js';
 export function surveyEditor(root, addButton) {
   let questions = [];
   function render() {
@@ -32,6 +33,7 @@ export function surveyEditor(root, addButton) {
           ['time', 'Time of day'],
           ['number', 'Number'],
           ['email', 'Email address'],
+          ['availability', 'Date availability'],
         ])
           type.append(new Option(label, value));
         type.value = question.type;
@@ -40,6 +42,8 @@ export function surveyEditor(root, addButton) {
           if (type.value !== 'multiple') delete question.exclusiveOption;
           if (!['single', 'multiple'].includes(type.value))
             delete question.choiceDate;
+          if (type.value === 'availability') question.dates ||= [];
+          else delete question.dates;
           render();
         };
         typeLabel.append(type);
@@ -55,6 +59,12 @@ export function surveyEditor(root, addButton) {
           box.append(wrapper);
         }
         check('Required answer', 'required');
+        if (question.type === 'availability')
+          box.append(
+            availabilityDateEditor(question.dates, (dates) => {
+              question.dates = dates;
+            }),
+          );
         if (['single', 'multiple'].includes(question.type)) {
           const date = field('Date for these choices (optional)', 'choiceDate');
           date.type = 'date';
@@ -64,9 +74,13 @@ export function surveyEditor(root, addButton) {
             if (date.value) question.choiceDate = date.value;
             else delete question.choiceDate;
           };
+        }
+        if (['single', 'multiple', 'availability'].includes(question.type)) {
           const wrapper = node(
               'label',
-              'Answer options (one per line, 2–30 options)',
+              question.type === 'availability'
+                ? 'Time periods (one per line, 1–12 periods)'
+                : 'Answer options (one per line, 2–30 options)',
             ),
             input = node('textarea');
           input.rows = 6;
@@ -80,7 +94,10 @@ export function surveyEditor(root, addButton) {
                 () => {
                   input.value = question.options.join('\n');
                 },
-                { limit: 30, maxLength: 200 },
+                {
+                  limit: question.type === 'availability' ? 12 : 30,
+                  maxLength: 200,
+                },
               ),
             );
           input.oninput = () => {
@@ -97,7 +114,8 @@ export function surveyEditor(root, addButton) {
           refreshChoices();
           wrapper.append(input);
           box.append(wrapper, choices);
-          check('Allow an Other answer', 'allowOther');
+          if (question.type !== 'availability')
+            check('Allow an Other answer', 'allowOther');
         }
         const actions = node('div');
         actions.className = 'event-actions';
@@ -153,7 +171,9 @@ export function surveyEditor(root, addButton) {
     },
     value() {
       return questions.map(({ exclusiveOption, ...question }) => {
-        const options = ['single', 'multiple'].includes(question.type)
+        const options = ['single', 'multiple', 'availability'].includes(
+          question.type,
+        )
           ? question.options.map((x) => x.trim()).filter(Boolean)
           : [];
         const exclusive =

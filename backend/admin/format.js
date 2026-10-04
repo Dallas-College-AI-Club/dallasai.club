@@ -184,6 +184,7 @@ const actions = {
   'survey-export-csv': 'Exported survey responses',
   'custom-survey-export-csv': 'Exported survey responses',
   'custom-survey-pdf': 'Downloaded a response as PDF',
+  'custom-survey-share-link': 'Updated survey sharing link',
   'export-csv': 'Exported CSV',
   'state:cancelled': 'RSVP marked cancelled',
   'state:unsubscribed': 'The AI Review subscription withdrawn',

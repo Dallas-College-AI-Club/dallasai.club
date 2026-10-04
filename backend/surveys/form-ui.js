@@ -1,5 +1,7 @@
 import { responseSections } from './results-ui.js';
 import { hasAnswer } from './form-values.js';
+import { availabilityFields } from './availability-ui.js';
+import { availabilityValues } from './availability-values.js';
 const node = (tag, text, cls) => {
   const e = document.createElement(tag);
   if (text !== undefined) e.textContent = text;
@@ -31,7 +33,15 @@ export function questionFields(
     if (q.description) card.append(node('p', q.description, 'sub'));
     const group = node('div');
     group.setAttribute('aria-labelledby', title.id);
-    if (q.type === 'text' || q.type === 'short' || q.type === 'email') {
+    if (q.type === 'availability') {
+      group.append(
+        availabilityFields(q, {
+          value: values[q.id],
+          readOnly,
+          onChange: (value) => onChange(q.id, value),
+        }).root,
+      );
+    } else if (q.type === 'text' || q.type === 'short' || q.type === 'email') {
       const input = node(q.type === 'text' ? 'textarea' : 'input');
       if (q.type === 'email') input.type = 'email';
       if (q.type === 'text') input.rows = 4;
@@ -231,7 +241,7 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
     heading(welcome.title);
     main.append(
       node('p', welcome.intro, 'welcome-copy'),
-      node('p', expiry, 'micro'),
+      node('p', expiry, 'micro survey-deadline'),
       node(
         'p',
         welcome.permissions.results === 'respondents'
@@ -390,6 +400,7 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
   function answerText(q) {
     const v = values[q.id];
     if (!hasAnswer(v)) return 'Not answered';
+    if (q.type === 'availability') return availabilityValues(v).join('\n');
     return ['text', 'short', 'email', 'date', 'time', 'number'].includes(q.type)
       ? String(v).trim()
       : q.type === 'scale'

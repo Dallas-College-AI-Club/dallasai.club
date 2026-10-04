@@ -1,3 +1,9 @@
+@import url('./availability.css');
+.survey-deadline {
+  padding: 14px 16px;
+  border: 1px solid currentColor;
+  border-radius: 14px;
+}
 :root {
   color-scheme: dark;
   --bg: #10131d;

@@ -1,4 +1,5 @@
 import { database } from '../lib/db.mjs';
+import qrcode from 'qrcode-generator';
 import { requireAdmin, adminOrigin } from '../lib/auth.mjs';
 import { send, fail, jsonBody, limit } from '../lib/http.mjs';
 import {
@@ -9,6 +10,9 @@ import {
   serveEventImage,
 } from '../lib/event-assets.mjs';
 import { RequestError } from '../lib/errors.mjs';
+import { createEventShareLink, eventURL } from '../lib/event-share-link.mjs';
+import { createShortLink as shortenLink } from '../lib/survey-share-link.mjs';
+import { createHash } from 'node:crypto';
 import {
   liveEvents,
   editorEvents,
@@ -26,11 +30,43 @@ export function eventHandler({
   authorize = requireAdmin,
   originals,
   storage,
+  createShortLink = (target) =>
+    shortenLink(
+      target,
+      'dai-' + createHash('sha256').update(target).digest('hex').slice(0, 24),
+    ),
   rateLimit = (db, req) => limit(db, req, 'event-images', 30, 3600),
 } = {}) {
   return async (req, res) => {
     try {
       const url = new URL(req.url, 'https://events.invalid');
+      if (req.method === 'GET' && url.searchParams.has('qr')) {
+        const id = url.searchParams.get('qr');
+        if (!eventIdPattern.test(id))
+          throw new RequestError(400, 'Check the event.');
+        const qr = qrcode(0, 'M');
+        const saved = (
+          await getDatabase().query(
+            'SELECT published FROM club_forms.events WHERE id=$1',
+            [id],
+          )
+        ).rows[0];
+        qr.addData(saved?.published?.shortLink || eventURL(id));
+        qr.make();
+        res.statusCode = 200;
+        res.setHeader('X-Content-Type-Options', 'nosniff');
+        res.setHeader('Content-Type', 'image/svg+xml');
+        res.setHeader('Cache-Control', 'no-store');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.setHeader(
+          'Content-Disposition',
+          (url.searchParams.has('download') ? 'attachment' : 'inline') +
+            '; filename="' +
+            id +
+            '-qr.svg"',
+        );
+        return res.end(qr.createSvgTag(6, 24));
+      }
       if (req.method === 'GET' && url.searchParams.has('image'))
         return await serveEventImage(
           req,
@@ -90,6 +126,15 @@ export function eventHandler({
           200,
           await addEventType(getDatabase(), body.name, user.email, originals),
         );
+      if (body.action === 'share-link')
+        return send(res, 200, {
+          event: await createEventShareLink(
+            getDatabase(),
+            body.id,
+            user.email,
+            createShortLink,
+          ),
+        });
       if (!['unpublish', 'archive', 'restore'].includes(body.action))
         body.event = await validateEventAssets(
           getDatabase(),
@@ -99,12 +144,37 @@ export function eventHandler({
       if (body.action === 'preview') {
         if (!eventIdPattern.test(body.id || ''))
           throw new RequestError(400, 'Check the event.');
-        return send(res, 200, {
-          event: publicContent(body.id, body.event, true),
-        });
+        const preview = publicContent(body.id, body.event, true);
+        const saved = (
+          await getDatabase().query(
+            'SELECT published FROM club_forms.events WHERE id=$1',
+            [body.id],
+          )
+        ).rows[0];
+        if (saved?.published?.shortLink)
+          preview.shortLink = saved.published.shortLink;
+        return send(res, 200, { event: preview });
+      }
+      let event = await saveEvent(getDatabase(), body, user.email, originals);
+      let sharingError;
+      if (body.action === 'publish' && !event.published.shortLink) {
+        try {
+          event = await createEventShareLink(
+            getDatabase(),
+            body.id,
+            user.email,
+            createShortLink,
+          );
+        } catch {
+          // Publication succeeded. A provider outage must not suggest the saved
+          // event was lost or cause an officer to publish it a second time.
+          sharingError =
+            'Short link could not be created. Use Create short link to try again.';
+        }
       }
       return send(res, 200, {
-        event: await saveEvent(getDatabase(), body, user.email, originals),
+        event,
+        ...(sharingError ? { sharingError } : {}),
       });
     } catch (error) {
       fail(res, error);

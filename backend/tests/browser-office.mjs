@@ -12,6 +12,7 @@ import { changeDraft } from '../lib/survey-builder.mjs';
 import { privateSurveyToken, digest } from '../lib/custom-surveys.mjs';
 import { definition, canonicalResponse } from '../lib/survey-contract.mjs';
 import { randomUUID } from 'node:crypto';
+import qrcode from 'qrcode-generator';
 const fixture = await officeFixture();
 const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH,
@@ -2817,6 +2818,28 @@ try {
   await check(
     'Home is the landing page and its tiles show what needs review',
     async (page) => {
+      for (const [id, title] of [
+        ['home-potential-one', 'Potential with RSVP'],
+        ['home-potential-zero', 'Potential with no RSVPs'],
+      ]) {
+        const event = JSON.stringify({
+          id,
+          title,
+          date: '',
+          potential: true,
+          registrationOpen: true,
+        });
+        await fixture.db.query(
+          'INSERT INTO club_forms.events(id,draft,published,updated_by) VALUES($1,$2,$2,$3)',
+          [id, event, 'officer@example.com'],
+        );
+      }
+      const potentialResponse = randomUUID();
+      await fixture.db.query(
+        `INSERT INTO club_forms.entries(id,kind,email,dedupe_key,review_status,data)
+        VALUES($1::uuid,'rsvp','potential@example.edu',$1::text,'reviewed','{"eventId":"home-potential-one"}')`,
+        [potentialResponse],
+      );
       await page.goto(fixture.origin + '/admin/');
       await expect(page.locator('#home-pane')).toBeVisible();
       await expect(page.locator('#home-tab')).toHaveAttribute(
@@ -2824,6 +2847,46 @@ try {
         'page',
       );
       await expect(page).toHaveTitle(/^\(\d+\) Home · Club Office$/);
+      const upcoming = page.getByRole('region', {
+        name: 'Next event',
+        exact: true,
+      });
+      await expect(
+        upcoming.locator('[data-event="home-potential-one"]'),
+      ).toContainText('1 RSVP');
+      await expect(
+        upcoming.locator('[data-event="home-potential-zero"]'),
+      ).toContainText('0 RSVPs');
+      const desktopSize = page.viewportSize();
+      for (const width of [desktopSize.width, 320]) {
+        await page.setViewportSize({ width, height: desktopSize.height });
+        const spacing = await upcoming
+          .locator('.tile-number')
+          .first()
+          .evaluate((el) => {
+            const number = el.querySelector('strong').getBoundingClientRect();
+            const words = el.querySelector('span').getBoundingClientRect();
+            return words.left - number.right;
+          });
+        assert.ok(
+          spacing >= 7,
+          'RSVP label needs visible spacing from the count',
+        );
+        assert.ok(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        );
+      }
+      await page.setViewportSize(desktopSize);
+      await upcoming
+        .locator('[data-event="home-potential-one"]')
+        .getByRole('button', { name: 'Open event', exact: true })
+        .click();
+      await expect(page.locator('#event-overview')).toContainText(
+        'Potential with RSVP',
+      );
+      await page.locator('#home-tab').click();
       // The black-square logo in light mode too, at the original size.
       const logo = page.locator('.brand .office-logo');
       await expect(logo).toHaveAttribute('src', /club-office-logo-dark\.png$/);
@@ -2906,6 +2969,12 @@ try {
       );
       await expect(page.locator('.inbox-group > summary')).toHaveText(
         'Home check event · 2 RSVPs',
+      );
+      await fixture.db.query('DELETE FROM club_forms.entries WHERE id=$1', [
+        potentialResponse,
+      ]);
+      await fixture.db.exec(
+        "DELETE FROM club_forms.events WHERE id IN ('home-potential-one','home-potential-zero')",
       );
     },
   );
@@ -3422,7 +3491,7 @@ try {
       };
       await page.goto(fixture.origin + '/admin/#/surveys/custom/' + fixture.id);
       const link = page.getByRole('link', {
-        name: 'Preview sample comparison',
+        name: 'Test sample',
         exact: true,
       });
       await expect(link).toBeVisible();
@@ -3720,6 +3789,399 @@ try {
             ),
           );
         }
+      }
+    },
+  );
+  await check(
+    'Survey sharing preserves the actual invitation and saves short links for copy and QR',
+    async (page) => {
+      const actual = fixture.origin + '/surveys/#invite=' + fixture.token;
+      const short = 'https://tinyurl.com/advisor-survey';
+      await page
+        .context()
+        .grantPermissions(['clipboard-read', 'clipboard-write']);
+      const checkCopyAndQR = async (expected) => {
+        await page
+          .getByRole('button', { name: 'Copy link', exact: true })
+          .click();
+        await expect
+          .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+          .toBe(expected);
+        await page
+          .getByRole('button', { name: 'QR code', exact: true })
+          .click();
+        const qr = qrcode(0, 'M');
+        qr.addData(expected);
+        qr.make();
+        const path = /<path d="([^"]+)"/.exec(
+          qr.createSvgTag({ cellSize: 5, margin: 20, scalable: true }),
+        )[1];
+        await expect(page.locator('.survey-qr svg path')).toHaveAttribute(
+          'd',
+          path,
+        );
+        await page
+          .getByRole('button', { name: 'Close QR', exact: true })
+          .click();
+      };
+      await page.goto(fixture.origin + '/admin/#/surveys');
+      const card = page
+        .locator('.custom-survey-group')
+        .filter({ has: page.getByText('Advisor Studio', { exact: true }) });
+      await card.locator(':scope > summary').click();
+      await expect(
+        card.getByRole('link', { name: 'Open private survey ↗', exact: true }),
+      ).toHaveAttribute('href', actual);
+      await expect(
+        card.getByRole('link', { name: 'Test sample', exact: true }),
+      ).toHaveAttribute('href', '/surveys/#sample=sample-jordan&step=review');
+      await expect(
+        card.getByRole('link', { name: 'Preview questions ↗', exact: true }),
+      ).toHaveCount(0);
+      await expect(
+        card.getByRole('button', { name: 'Copy preview link', exact: true }),
+      ).toHaveCount(0);
+      await expect(card.getByText(/Private link expires/)).toHaveCount(0);
+      await expect(card.locator(':scope > summary')).toContainText('Ends');
+      const heldMembers = [];
+      const membersRoute = '**/api/custom-surveys?action=members&*';
+      await page.route(membersRoute, (route) => heldMembers.push(route));
+      await card
+        .getByRole('link', { name: 'Manage survey →', exact: true })
+        .click();
+      await checkCopyAndQR(actual);
+      await page.getByText('Short link', { exact: true }).click();
+      const input = page.getByRole('textbox', {
+        name: 'Short link (optional)',
+        exact: true,
+      });
+      const save = page.getByRole('button', {
+        name: 'Save short link',
+        exact: true,
+      });
+      await input.fill(short);
+      let requests = 0;
+      await page.route(
+        '**/api/custom-surveys?action=share-link',
+        async (route) => {
+          if (++requests === 1) {
+            await route.fetch();
+            await route.abort('failed');
+          } else await route.continue();
+        },
+      );
+      await save.click();
+      await expect(
+        page.getByText(
+          'Could not connect to Club Office. Check your connection and try again.',
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await expect(input).toHaveValue(short);
+      await save.click();
+      await expect(
+        page.getByText('Short link saved. Copy link and QR code now use it.', {
+          exact: true,
+        }),
+      ).toBeVisible();
+      assert.ok(heldMembers.length, 'Respondent loading is still pending');
+      await page.unroute(membersRoute);
+      for (const route of heldMembers) await route.continue();
+      assert.equal(
+        (
+          await fixture.db.query(
+            'SELECT short_link FROM club_forms.custom_surveys WHERE id=$1',
+            [fixture.id],
+          )
+        ).rows[0].short_link,
+        short,
+      );
+      await expect(
+        page.getByRole('link', { name: 'Open private survey ↗', exact: true }),
+      ).toHaveAttribute('href', actual);
+      await checkCopyAndQR(short);
+      await page.reload();
+      await page.getByText('Short link', { exact: true }).click();
+      await expect(input).toHaveValue(short);
+      await checkCopyAndQR(short);
+      for (const mode of ['Light', 'Dark']) {
+        await page.getByRole('button', { name: mode, exact: true }).click();
+        for (const width of [1440, 390, 320]) {
+          await page.setViewportSize({ width, height: 1000 });
+          assert.ok(
+            await page.evaluate(
+              () => document.documentElement.scrollWidth <= innerWidth,
+            ),
+          );
+          if (mode === 'Dark' && [1440, 320].includes(width))
+            await page.screenshot({
+              path: path.join(screens, `survey-sharing-${width}.png`),
+              fullPage: true,
+            });
+        }
+        await page.setViewportSize({ width: 1440, height: 1000 });
+      }
+      await input.fill('');
+      await save.click();
+      await expect(
+        page.getByText(
+          'Short link removed. Copy link and QR code use the original link.',
+          { exact: true },
+        ),
+      ).toBeVisible();
+      await checkCopyAndQR(actual);
+      assert.equal(
+        (
+          await fixture.db.query(
+            'SELECT short_link FROM club_forms.custom_surveys WHERE id=$1',
+            [fixture.id],
+          )
+        ).rows[0].short_link,
+        null,
+      );
+      const answering = await page.context().newPage();
+      try {
+        await answering.goto(actual);
+        await expect(
+          answering.getByLabel('Email address', { exact: true }),
+        ).toBeVisible();
+        await answering
+          .getByRole('button', {
+            name: 'Preview questions · no sign-in needed',
+            exact: true,
+          })
+          .click();
+        await expect(answering.locator('#who')).toHaveText(
+          'Preview · answering disabled',
+        );
+        await expect(answering.locator('.sample-bar')).toHaveCount(0);
+      } finally {
+        await answering.close();
+      }
+      const before = (
+        await fixture.db.query(
+          'SELECT expires_at FROM club_forms.custom_surveys WHERE id=$1',
+          [fixture.id],
+        )
+      ).rows[0];
+      try {
+        await fixture.db.query(
+          "UPDATE club_forms.custom_surveys SET expires_at=now()-interval '1 day',short_link=$2 WHERE id=$1",
+          [fixture.id, short],
+        );
+        await page.reload();
+        await expect(
+          page.getByText(
+            'This survey has expired. Saved responses remain available.',
+            { exact: true },
+          ),
+        ).toBeVisible();
+        for (const name of ['Copy link', 'QR code', 'Save short link'])
+          await expect(
+            page.getByRole('button', { name, exact: true }),
+          ).toHaveCount(0);
+        await expect(
+          page.getByRole('link', {
+            name: 'Open private survey ↗',
+            exact: true,
+          }),
+        ).toHaveCount(0);
+      } finally {
+        await fixture.db.query(
+          'UPDATE club_forms.custom_surveys SET expires_at=$2,short_link=NULL WHERE id=$1',
+          [fixture.id, before.expires_at],
+        );
+      }
+    },
+  );
+  await check(
+    'Short link generation protects manual drafts, retries failures and ignores stale responses',
+    async (page) => {
+      const short = 'https://go.dallasai.club/dai-generated',
+        manual = 'https://tinyurl.com/manually-created-survey',
+        pattern = '**/api/custom-surveys?action=generate-share-link';
+      let requests = 0,
+        held;
+      await page
+        .context()
+        .grantPermissions(['clipboard-read', 'clipboard-write']);
+      await page.route(pattern, async (route) => {
+        requests++;
+        assert.equal(route.request().method(), 'POST');
+        assert.deepEqual(route.request().postDataJSON(), { id: fixture.id });
+        if (requests === 1)
+          await route.fulfill({
+            status: 503,
+            contentType: 'application/json',
+            body: JSON.stringify({
+              error:
+                'Short link service is temporarily unavailable. Try again.',
+            }),
+          });
+        else held = route;
+      });
+      try {
+        await page.goto(
+          fixture.origin + '/admin/#/surveys/custom/' + fixture.id,
+        );
+        await page.getByText('Short link', { exact: true }).click();
+        const input = page.getByRole('textbox', {
+            name: 'Short link (optional)',
+            exact: true,
+          }),
+          create = page.getByRole('button', {
+            name: 'Create short link',
+            exact: true,
+            includeHidden: true,
+          }),
+          save = page.getByRole('button', {
+            name: 'Save short link',
+            exact: true,
+          });
+        await input.fill(manual);
+        await expect(create).toBeHidden();
+        // A stale/programmatic click must also respect a typed manual draft.
+        await create.evaluate((button) =>
+          button.dispatchEvent(new MouseEvent('click')),
+        );
+        await page.waitForTimeout(100);
+        assert.equal(requests, 0);
+        await expect(input).toHaveValue(manual);
+        await save.click();
+        await expect(
+          page.getByText(
+            'Short link saved. Copy link and QR code now use it.',
+            { exact: true },
+          ),
+        ).toBeVisible();
+        await input.fill('');
+        await expect(create).toBeHidden();
+        await create.evaluate((button) =>
+          button.dispatchEvent(new MouseEvent('click')),
+        );
+        await page.waitForTimeout(100);
+        assert.equal(requests, 0);
+        await save.click();
+        await expect(create).toBeVisible();
+        await page.setViewportSize({ width: 320, height: 844 });
+        await create.scrollIntoViewIfNeeded();
+        assert.ok(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        );
+        await expect(create).toBeInViewport();
+        await create.click();
+        await expect(
+          page.getByText(
+            'Short link service is temporarily unavailable. Try again.',
+            {
+              exact: true,
+            },
+          ),
+        ).toBeVisible();
+        await expect(input).toHaveValue('');
+        await expect(create).toBeEnabled();
+        await create.click();
+        await expect.poll(() => requests).toBe(2);
+        await expect(input).toBeDisabled();
+        await expect(save).toBeDisabled();
+        // Dispatch bypasses the DOM's disabled-button suppression to check the guard.
+        await create.evaluate((button) =>
+          button.dispatchEvent(new MouseEvent('click')),
+        );
+        await page.waitForTimeout(100);
+        assert.equal(requests, 2);
+        await fixture.db.query(
+          'UPDATE club_forms.custom_surveys SET short_link=$2 WHERE id=$1',
+          [fixture.id, short],
+        );
+        await held.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ id: fixture.id, short_link: short }),
+        });
+        held = null;
+        await expect(input).toHaveValue(short);
+        await expect(create).toBeHidden();
+        await expect(
+          page.getByText(
+            'Short link created. Copy link and QR code now use it.',
+            {
+              exact: true,
+            },
+          ),
+        ).toBeVisible();
+        await expect(
+          page.getByRole('link', {
+            name: 'Open private survey ↗',
+            exact: true,
+          }),
+        ).toHaveAttribute(
+          'href',
+          fixture.origin + '/surveys/#invite=' + fixture.token,
+        );
+        await page
+          .getByRole('button', { name: 'Copy link', exact: true })
+          .click();
+        await expect
+          .poll(() => page.evaluate(() => navigator.clipboard.readText()))
+          .toBe(short);
+        await page
+          .getByRole('button', { name: 'QR code', exact: true })
+          .click();
+        const qr = qrcode(0, 'M');
+        qr.addData(short);
+        qr.make();
+        await expect(page.locator('.survey-qr svg path')).toHaveAttribute(
+          'd',
+          /<path d="([^"]+)"/.exec(
+            qr.createSvgTag({ cellSize: 5, margin: 20, scalable: true }),
+          )[1],
+        );
+        await page
+          .getByRole('button', { name: 'Close QR', exact: true })
+          .click();
+        await page.reload();
+        await page.getByText('Short link', { exact: true }).click();
+        await expect(input).toHaveValue(short);
+        await expect(create).toBeHidden();
+        await input.fill('');
+        await save.click();
+        await expect(create).toBeVisible();
+        const oldInput = await input.elementHandle();
+        await create.click();
+        await expect.poll(() => requests).toBe(3);
+        await page.evaluate(() => {
+          location.hash = '#/surveys';
+        });
+        await expect(page.locator('#survey-library')).toBeVisible();
+        await held.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({ id: fixture.id, short_link: short }),
+        });
+        held = null;
+        // Await the callback's finally block on its detached form.
+        await expect
+          .poll(() => oldInput.evaluate((element) => element.disabled))
+          .toBe(false);
+        assert.equal(await oldInput.evaluate((element) => element.value), '');
+        await expect(
+          page.getByText(
+            'Short link created. Copy link and QR code now use it.',
+            {
+              exact: true,
+            },
+          ),
+        ).toHaveCount(0);
+      } finally {
+        if (held) await held.abort();
+        await page.unroute(pattern);
+        await fixture.db.query(
+          'UPDATE club_forms.custom_surveys SET short_link=NULL WHERE id=$1',
+          [fixture.id],
+        );
       }
     },
   );

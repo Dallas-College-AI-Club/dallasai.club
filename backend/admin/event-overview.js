@@ -9,6 +9,10 @@ export function eventOverview(row, status, startEditing) {
     node('p', status, 'hint'),
   );
   const edit = node('button', 'Edit event');
+  if (event.rsvpDeadline)
+    fragment.append(
+      node('p', 'Please reply by ' + event.rsvpDeadline, 'event-deadline'),
+    );
   edit.type = 'button';
   edit.id = 'edit-selected-event';
   edit.onclick = startEditing;
@@ -17,11 +21,24 @@ export function eventOverview(row, status, startEditing) {
   if (row.published) {
     const link = node('a', 'View published event ↗');
     link.href =
+      row.published.shortLink ||
       'https://dallasai.club/club.html?mode=events&event=' +
-      encodeURIComponent(row.id);
+        encodeURIComponent(row.id);
     link.target = '_blank';
     link.rel = 'noopener';
     actions.append(link);
+    if (row.published.shortLink) {
+      const address = node('a', row.published.shortLink);
+      address.href = row.published.shortLink;
+      address.target = '_blank';
+      address.rel = 'noopener';
+      const qr = node('a', 'Open event QR ↗');
+      qr.href = '/api/events?qr=' + encodeURIComponent(row.id);
+      qr.target = '_blank';
+      qr.rel = 'noopener';
+      fragment.append(address);
+      actions.append(qr);
+    }
   }
   fragment.append(
     actions,
@@ -84,6 +101,8 @@ export function eventOverview(row, status, startEditing) {
       );
       if (question.options.length)
         item.append(node('p', question.options.join(' · '), 'hint'));
+      if (question.type === 'availability')
+        item.append(node('p', question.dates.join(' · '), 'hint'));
       list.append(item);
     }
     fragment.append(list);

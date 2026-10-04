@@ -120,6 +120,214 @@ beforeEach(() =>
   db.exec('TRUNCATE club_forms.entries,club_forms.events CASCADE'),
 );
 after(() => db.close());
+test('availability is one optional answer with exclusive whole-list states and structured alternatives', async () => {
+  const q = {
+    id: randomUUID(),
+    label: 'When could you come?',
+    type: 'availability',
+    required: false,
+    allowOther: false,
+    options: ['Afternoon', 'Evening'],
+    dates: ['2026-10-16', '2026-10-17'],
+  };
+  const revised = publicContent(event.id, { ...game, surveyQuestions: [q] });
+  const available = {
+    status: 'available',
+    selections: [{ date: '2026-10-16', periods: ['Evening'] }],
+    alternatives: [],
+  };
+  const alternative = {
+    status: 'alternative',
+    selections: [],
+    alternatives: [
+      { date: '2026-11-03', time: '18:30' },
+      { date: '2026-11-04', time: '' },
+    ],
+  };
+  const variants = [
+    '',
+    available,
+    { status: 'unsure', selections: [], alternatives: [] },
+    {
+      status: 'unavailable',
+      selections: [],
+      alternatives: [{ date: '2026-11-02', time: '00:00' }],
+    },
+    alternative,
+  ];
+  const request = (value, n = 0) =>
+    body({
+      eventId: revised.id,
+      email: 'availability-' + n + '@example.edu',
+      surveyVersion: revised.surveyVersion,
+      answers: [{ questionId: q.id, value, other: '' }],
+    });
+  for (const value of [
+    null,
+    {},
+    [],
+    { ...available, extra: true },
+    { ...available, status: 'wrong' },
+    { ...available, selections: [] },
+    { ...available, status: 'unavailable' },
+    { ...available, status: 'unsure' },
+    { ...alternative, status: 'available' },
+    { ...alternative, status: 'unsure' },
+    { ...alternative, alternatives: [] },
+    {
+      ...available,
+      selections: [{ date: '2026-10-18', periods: ['Evening'] }],
+    },
+    {
+      ...available,
+      selections: [{ date: '2026-10-16', periods: ['Morning'] }],
+    },
+    { ...available, selections: [{ date: '2026-10-16', periods: [] }] },
+    {
+      ...available,
+      selections: [{ date: '2026-10-16', periods: ['Evening', 'Evening'] }],
+    },
+    {
+      ...available,
+      selections: [...available.selections, ...available.selections],
+    },
+    { ...alternative, alternatives: [{ date: '2026-02-30', time: '' }] },
+    { ...alternative, alternatives: [{ date: '2026-11-03', time: '24:00' }] },
+    {
+      ...alternative,
+      alternatives: [{ date: '2026-11-03', time: '18:30', extra: true }],
+    },
+    {
+      ...alternative,
+      alternatives: [alternative.alternatives[0], alternative.alternatives[0]],
+    },
+    {
+      ...alternative,
+      alternatives: Array.from({ length: 11 }, (_, i) => ({
+        date: '2026-11-03',
+        time: '18:' + String(i).padStart(2, '0'),
+      })),
+    },
+  ])
+    assert.throws(() => validateSurvey(request(value), revised), {
+      status: 400,
+    });
+  for (const dates of [
+    [],
+    ['2026-02-30'],
+    ['2026-10-16', '2026-10-16'],
+    [
+      ...Array.from(
+        { length: 31 },
+        (_, i) => '2026-10-' + String(i + 1).padStart(2, '0'),
+      ),
+      '2026-11-01',
+    ],
+  ])
+    assert.throws(() => surveyQuestions([{ ...q, dates }]), { status: 400 });
+  for (const options of [[], Array.from({ length: 13 }, (_, i) => String(i))])
+    assert.throws(() => surveyQuestions([{ ...q, options }]), { status: 400 });
+  assert.deepEqual(
+    surveyQuestions([{ ...q, dates: [...q.dates].reverse() }])[0].dates,
+    q.dates,
+  );
+  const required = publicContent(event.id, {
+    ...game,
+    surveyQuestions: [{ ...q, required: true }],
+  });
+  assert.deepEqual(
+    validateSurvey(
+      request({
+        status: 'available',
+        selections: [
+          { date: '2026-10-17', periods: ['Evening', 'Afternoon'] },
+          { date: '2026-10-16', periods: ['Afternoon'] },
+        ],
+        alternatives: [],
+      }),
+      revised,
+    ).answers[0].value.selections,
+    [
+      { date: '2026-10-16', periods: ['Afternoon'] },
+      { date: '2026-10-17', periods: ['Afternoon', 'Evening'] },
+    ],
+  );
+  assert.throws(
+    () =>
+      validateSurvey(
+        { ...request(''), surveyVersion: required.surveyVersion },
+        required,
+      ),
+    { status: 400 },
+  );
+  await saveEvent(
+    db,
+    { action: 'publish', id: event.id, revision: 0, event: game },
+    'officer@example.edu',
+    [],
+  );
+  const old = await submit(db, body(), await liveEvents(db, []));
+  const previous = (
+    await db.query(
+      'SELECT * FROM club_forms.survey_responses WHERE entry_id=$1',
+      [old.id],
+    )
+  ).rows[0];
+  await saveEvent(
+    db,
+    {
+      action: 'publish',
+      id: event.id,
+      revision: 1,
+      event: { ...game, surveyQuestions: [q] },
+    },
+    'officer@example.edu',
+    [],
+  );
+  const live = await liveEvents(db, []),
+    requests = variants.map((value, i) => request(value, i));
+  const receipts = await Promise.all(
+    requests.flatMap((body) =>
+      Array.from({ length: 3 }, () => submit(db, body, live)),
+    ),
+  );
+  assert.equal(new Set(receipts.map((r) => r.id)).size, 5);
+  const rows = await reportRows(db, { eventId: event.id });
+  assert.equal(rows.length, 6);
+  for (const [i, value] of variants.entries())
+    assert.deepEqual(
+      rows.find((r) => r.email === 'availability-' + i + '@example.edu')
+        .answers[0].value,
+      value,
+    );
+  assert.deepEqual(
+    (
+      await db.query(
+        'SELECT * FROM club_forms.survey_responses WHERE entry_id=$1',
+        [old.id],
+      )
+    ).rows[0],
+    previous,
+  );
+  const summary = summarizeResponses(rows).groups.find(
+    (g) => g.version === revised.surveyVersion,
+  ).questions[0];
+  assert.equal(summary.answered, 4);
+  assert.equal(summary.skipped, 1);
+  assert.equal(
+    summary.choices.find((c) => c.value === '2026-10-16 · Evening').count,
+    1,
+  );
+  assert.equal(
+    summary.choices.find((c) => c.value === 'Not available').count,
+    1,
+  );
+  const csv = responsesCSV(rows);
+  assert.match(csv, /When could you come\? — 2026-10-16 · Evening/);
+  assert.match(csv, /Suggested: 2026-11-03 · 18:30/);
+  assert.match(csv, /Suggested: 2026-11-04/);
+  assert.doesNotMatch(csv, /\[object Object\]/);
+});
 test('RSVP basic answer types validate, save, and retain zero and calendar values', async () => {
   const examples = [
     ['short', 'Brief answer', ['x'.repeat(301), []]],

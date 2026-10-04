@@ -11,6 +11,7 @@ import { dateTime, day, plural } from './format.js';
 import { submissionEditor } from './submission-editor.js';
 import { isPaused } from './session.js';
 import { mountFeedbackGroups } from './custom-surveys.js';
+import { availabilityValues } from '../surveys/availability-values.js';
 // onReset runs when the filters replace a single-response view, so the
 // address can drop the response. openContacts(email) shows the Contacts tab.
 export function mountSurveyResults(
@@ -524,11 +525,15 @@ export function mountSurveyResults(
     const answers = node('dl');
     for (const question of response.questions) {
       const answer = response.answers.find((a) => a.questionId === question.id);
-      const values = (
-        Array.isArray(answer?.value) ? answer.value : [answer?.value ?? '']
-      )
-        .filter((value) => value !== '')
-        .map((v) => (v === '__other__' ? 'Other: ' + answer.other : v));
+      const values =
+        question.type === 'availability'
+          ? availabilityValues(answer?.value)
+          : (Array.isArray(answer?.value)
+              ? answer.value
+              : [answer?.value ?? '']
+            )
+              .filter((value) => value !== '')
+              .map((v) => (v === '__other__' ? 'Other: ' + answer.other : v));
       answers.append(
         node(
           'dt',

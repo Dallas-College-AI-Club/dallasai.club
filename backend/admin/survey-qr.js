@@ -5,7 +5,7 @@ import { fileSlug } from '../surveys/results-ui.js';
 export function surveyQR(survey) {
   return button('QR code', () => {
     const qr = qrcode(0, 'M');
-    qr.addData(survey.privateLink);
+    qr.addData(survey.short_link || survey.privateLink);
     qr.make();
     const dialog = node('dialog', undefined, 'survey-qr');
     const title = node('h2', survey.title);

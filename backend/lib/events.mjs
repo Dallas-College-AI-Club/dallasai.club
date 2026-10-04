@@ -139,6 +139,13 @@ export async function saveEvent(db, body, actor, originals) {
       );
     const nextDraft = draft || normalizeEventType(current.draft);
     const nextLive = body.action === 'draft' ? current.published : published;
+    // Ignore a client-supplied URL and preserve the server-created link through
+    // edits, unpublishing and restoration. Duplicates receive their own link.
+    const shortLink = current.draft.shortLink || current.published?.shortLink;
+    if (shortLink) {
+      nextDraft.shortLink = shortLink;
+      if (nextLive) nextLive.shortLink = shortLink;
+    }
     const revision = current.revision + 1;
     const row = (
       await tx.query(

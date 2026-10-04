@@ -3,6 +3,10 @@ import { RequestError } from './errors.mjs';
 import { exclusiveSurveyChoice } from './event-format.mjs';
 import { uuid } from './validation.mjs';
 import {
+  availabilityValues,
+  availabilityColumns,
+} from '../surveys/availability-values.js';
+import {
   responseFilter,
   responseSelect,
   participationJoins,
@@ -17,9 +21,17 @@ const impliedChoice = (question, values, choice) =>
   values.some(anyChoice) &&
   ordinaryChoice(choice);
 export const answerValues = (answer) =>
-  (Array.isArray(answer?.value) ? answer.value : [answer?.value ?? ''])
-    .filter((value) => value !== '' && value !== null && value !== undefined)
-    .map((value) => (value === '__other__' ? 'Other: ' + answer.other : value));
+  answer?.value &&
+  typeof answer.value === 'object' &&
+  !Array.isArray(answer.value)
+    ? availabilityValues(answer.value)
+    : (Array.isArray(answer?.value) ? answer.value : [answer?.value ?? ''])
+        .filter(
+          (value) => value !== '' && value !== null && value !== undefined,
+        )
+        .map((value) =>
+          value === '__other__' ? 'Other: ' + answer.other : value,
+        );
 export async function reportRows(db, filter = {}) {
   const { where, values } = responseFilter(filter);
   const type = filter.type || 'rsvp';
@@ -69,7 +81,9 @@ export async function reportRows(db, filter = {}) {
         label: q.title,
         allowOther: false,
         expandAny: false,
-        type: ['single', 'multiple'].includes(q.type) ? q.type : 'text',
+        type: ['single', 'multiple', 'availability'].includes(q.type)
+          ? q.type
+          : 'text',
       }));
       const answers = row.responses.map((answer) => {
         const q = questions.find((q) => q.id === answer.id);
@@ -77,11 +91,13 @@ export async function reportRows(db, filter = {}) {
           questionId: answer.id,
           other: '',
           value:
-            q?.type === 'multiple'
-              ? answer.value.map((index) => q.options[index])
-              : q?.type === 'single'
-                ? q.options[answer.value]
-                : answer.text,
+            q?.type === 'availability'
+              ? answer.value
+              : q?.type === 'multiple'
+                ? answer.value.map((index) => q.options[index])
+                : q?.type === 'single'
+                  ? q.options[answer.value]
+                  : answer.text,
         };
       });
       const { definition, responses, content_version, ...metadata } = row;
@@ -118,13 +134,14 @@ export function summarizeResponses(rows) {
           ...q,
           answered: 0,
           skipped: 0,
-          choices: [...q.options, ...(q.allowOther ? ['__other__'] : [])].map(
-            (value) => ({
-              value,
-              label: value === '__other__' ? 'Other' : value,
-              count: 0,
-            }),
-          ),
+          choices: (q.type === 'availability'
+            ? availabilityColumns(q)
+            : [...q.options, ...(q.allowOther ? ['__other__'] : [])]
+          ).map((value) => ({
+            value,
+            label: value === '__other__' ? 'Other' : value,
+            count: 0,
+          })),
           written: [],
         })),
       });
@@ -132,9 +149,12 @@ export function summarizeResponses(rows) {
     group.count++;
     for (const q of group.questions) {
       const answer = row.answers.find((a) => a.questionId === q.id);
-      const values = Array.isArray(answer?.value)
-        ? answer.value
-        : [answer?.value ?? ''];
+      const values =
+        q.type === 'availability'
+          ? availabilityValues(answer?.value)
+          : Array.isArray(answer?.value)
+            ? answer.value
+            : [answer?.value ?? ''];
       if (!values.some((value) => value !== '')) {
         q.skipped++;
         continue;
@@ -146,7 +166,15 @@ export function summarizeResponses(rows) {
           impliedChoice(q, values, choice.value)
         )
           choice.count++;
-      if (!['single', 'multiple'].includes(q.type))
+      if (q.type === 'availability' && answer.value?.alternatives.length)
+        q.written.push({
+          name: row.name,
+          email: row.email,
+          value: availabilityValues({ ...answer.value, selections: [] }).join(
+            '\n',
+          ),
+        });
+      else if (!['single', 'multiple', 'availability'].includes(q.type))
         q.written.push({
           name: row.name,
           email: row.email,
@@ -178,8 +206,10 @@ export function responsesCSV(rows) {
       });
   const columns = [...questions.values()].flatMap((q) => [
     { question: q, option: null },
-    ...(q.type === 'multiple'
-      ? q.options.map((option) => ({ question: q, option }))
+    ...(['multiple', 'availability'].includes(q.type)
+      ? (q.type === 'availability' ? availabilityColumns(q) : q.options).map(
+          (option) => ({ question: q, option }),
+        )
       : []),
   ]);
   const header = [
@@ -225,6 +255,12 @@ export function responsesCSV(rows) {
       if (q.version !== row.survey_version) return '';
       const answer = row.answers.find((a) => a.questionId === q.id);
       if (option === null) return answerValues(answer).join('; ');
+      if (q.type === 'availability')
+        return answer?.value
+          ? availabilityValues(answer.value).includes(option)
+            ? 'Yes'
+            : 'No'
+          : '';
       if (!answer?.value?.length) return '';
       const selected = answer.value.includes(option);
       return selected

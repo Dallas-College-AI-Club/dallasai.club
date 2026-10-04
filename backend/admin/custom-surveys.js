@@ -1,4 +1,4 @@
-import { copyText, download as save, node } from './ui.js';
+import { copyText, download as save, lock, node } from './ui.js';
 import { actionLabel, actorLabel, dateTime, isoDay, plural } from './format.js';
 import { currentOfficer } from './session.js';
 import { mountRespondents } from './survey-respondents.js';
@@ -81,12 +81,14 @@ function surveySummary(survey) {
   const summary = node('summary', undefined, 'survey-library-summary');
   const title = node('div');
   title.append(node('strong', survey.title));
-  const dates = [];
   if (survey.published_at)
-    dates.push('Published ' + dateTime(survey.published_at));
+    title.append(
+      node('p', 'Published ' + dateTime(survey.published_at), 'hint'),
+    );
   if (survey.status !== 'draft' && survey.expires_at)
-    dates.push('Ends ' + dateTime(survey.expires_at));
-  if (dates.length) title.append(node('p', dates.join(' · '), 'hint'));
+    title.append(
+      node('p', 'Ends ' + dateTime(survey.expires_at), 'event-deadline'),
+    );
   const status = survey.expired
     ? 'Expired'
     : survey.status === 'open'
@@ -127,7 +129,7 @@ export function mountFeedbackGroups(
       'survey-library-row custom-survey-group',
     );
     const body = node('div', undefined, 'custom-survey-group-body');
-    const open = node('a', 'Open survey →', 'button-link');
+    const open = node('a', 'Manage survey →', 'button-link');
     open.href = '#/surveys/custom/' + survey.id;
     card.append(surveySummary(survey), open, body);
     root.append(card);
@@ -280,6 +282,10 @@ export function mountCustomSurveys(root, api, options = {}) {
           );
           if (current !== generation || request !== requestGeneration) return;
           const survey = surveys.find((s) => s.id === selected);
+          const isCurrent = () =>
+            current === generation &&
+            request === requestGeneration &&
+            options.isCurrent?.() !== false;
           content.replaceChildren(
             node(
               'p',
@@ -370,64 +376,149 @@ export function mountCustomSurveys(root, api, options = {}) {
               content.append(close, closeNote);
             }
           }
-          content.append(
-            node(
-              'p',
-              survey.status === 'draft'
-                ? 'Draft · the answering period begins when you publish.'
-                : survey.status === 'closed' || survey.status === 'archived'
-                  ? 'This survey is closed. Saved responses remain available.'
-                  : survey.expired
-                    ? 'This survey has expired. Saved responses remain available.'
-                    : 'Private link expires ' +
-                      dateTime(survey.expires_at) +
-                      '.',
-            ),
-          );
+          if (!options.inline || survey.status !== 'open' || survey.expired)
+            content.append(
+              node(
+                'p',
+                survey.status === 'draft'
+                  ? 'Draft · the answering period begins when you publish.'
+                  : survey.status === 'closed' || survey.status === 'archived'
+                    ? 'This survey is closed. Saved responses remain available.'
+                    : survey.expired
+                      ? 'This survey has expired. Saved responses remain available.'
+                      : 'Private link expires ' +
+                        dateTime(survey.expires_at) +
+                        '.',
+              ),
+            );
           if (survey.privateLink || survey.previewLink) {
-            const link = node('a', 'Open private survey ↗');
-            if (survey.privateLink) link.href = survey.privateLink;
-            link.target = '_blank';
-            link.rel = 'noopener noreferrer';
-            const copy = node('button', 'Copy private link', 'secondary'),
+            const actions = node('div', undefined, 'entry-actions'),
               notice = node('p');
             notice.setAttribute('role', 'status');
-            copy.onclick = async () => {
-              notice.textContent = (await copyText(survey.privateLink))
-                ? 'Answering link copied. Share it with the intended respondents.'
-                : 'Copy this private link: ' + survey.privateLink;
-            };
-            const preview = node('a', 'Preview questions ↗');
-            preview.href =
-              survey.previewLink || survey.privateLink + '&preview=1';
-            preview.target = '_blank';
-            preview.rel = 'noopener noreferrer';
-            const copyPreview = node(
-              'button',
-              'Copy preview link',
-              'secondary',
-            );
-            copyPreview.onclick = async () => {
-              notice.textContent = (await copyText(preview.href))
-                ? 'Preview link copied. Answer controls are disabled.'
-                : 'Copy this preview link: ' + preview.href;
-            };
-            const actions = node('div', undefined, 'entry-actions');
-            actions.append(preview, copyPreview);
+            if (survey.privateLink) {
+              const link = node('a', 'Open private survey ↗'),
+                copy = node('button', 'Copy link', 'secondary');
+              link.href = survey.privateLink;
+              link.target = '_blank';
+              link.rel = 'noopener noreferrer';
+              copy.onclick = async () => {
+                const shareLink = survey.short_link || survey.privateLink;
+                notice.textContent = (await copyText(shareLink))
+                  ? 'Answering link copied. Share it with the intended respondents.'
+                  : 'Copy this link: ' + shareLink;
+              };
+              actions.append(link, copy, surveyQR(survey));
+            } else {
+              const preview = node('a', 'Preview questions ↗'),
+                copyPreview = node('button', 'Copy preview link', 'secondary');
+              preview.href = survey.previewLink;
+              preview.target = '_blank';
+              preview.rel = 'noopener noreferrer';
+              copyPreview.onclick = async () => {
+                notice.textContent = (await copyText(preview.href))
+                  ? 'Preview link copied. Answer controls are disabled.'
+                  : 'Copy this preview link: ' + preview.href;
+              };
+              actions.append(preview, copyPreview);
+            }
             if (!survey.definition) {
-              const sample = node(
-                'a',
-                'Preview sample comparison',
-                'button-link',
-              );
+              const sample = node('a', 'Test sample', 'button-link');
               sample.href = '/surveys/#sample=sample-jordan&step=review';
               sample.target = '_blank';
               sample.rel = 'noopener noreferrer';
               actions.append(sample);
             }
-            if (survey.privateLink)
-              actions.append(link, copy, surveyQR(survey));
             content.append(actions, notice);
+            if (survey.privateLink) {
+              const sharing = node('details', undefined, 'entry'),
+                form = node('form'),
+                label = node('label', 'Short link (optional)'),
+                input = node('input'),
+                saveLink = node('button', 'Save short link', 'secondary'),
+                createLink = node('button', 'Create short link', 'secondary'),
+                status = node('p');
+              sharing.append(node('summary', 'Short link'));
+              input.type = 'url';
+              input.maxLength = 2048;
+              input.placeholder = 'https://tinyurl.com/…';
+              input.value = survey.short_link || '';
+              createLink.type = 'button';
+              const updateCreate = () => {
+                createLink.hidden = Boolean(
+                  survey.short_link || input.value.trim(),
+                );
+              };
+              input.oninput = updateCreate;
+              updateCreate();
+              label.append(input);
+              status.setAttribute('role', 'status');
+              form.append(
+                label,
+                node(
+                  'p',
+                  'Use a TinyURL or another HTTPS link that opens this survey. Copy link and QR code use it. Leave blank to use the original link.',
+                  'hint',
+                ),
+                saveLink,
+                createLink,
+                status,
+              );
+              createLink.onclick = async () => {
+                if (
+                  createLink.disabled ||
+                  survey.short_link ||
+                  input.value.trim()
+                )
+                  return;
+                const unlock = lock(form);
+                status.textContent = '';
+                try {
+                  const saved = await api(
+                    '/api/custom-surveys?action=generate-share-link',
+                    { id: survey.id },
+                  );
+                  if (!isCurrent()) return;
+                  survey.short_link = saved.short_link;
+                  input.value = saved.short_link;
+                  updateCreate();
+                  status.textContent =
+                    'Short link created. Copy link and QR code now use it.';
+                } catch (error) {
+                  if (isCurrent()) status.textContent = error.message;
+                } finally {
+                  unlock();
+                }
+              };
+              form.onsubmit = async (event) => {
+                event.preventDefault();
+                if (saveLink.disabled) return;
+                const unlock = lock(form);
+                status.textContent = '';
+                try {
+                  const saved = await api(
+                    '/api/custom-surveys?action=share-link',
+                    {
+                      id: survey.id,
+                      shortLink: input.value,
+                      expectedShortLink: survey.short_link || null,
+                    },
+                  );
+                  if (!isCurrent()) return;
+                  survey.short_link = saved.short_link;
+                  input.value = saved.short_link || '';
+                  updateCreate();
+                  status.textContent = saved.short_link
+                    ? 'Short link saved. Copy link and QR code now use it.'
+                    : 'Short link removed. Copy link and QR code use the original link.';
+                } catch (error) {
+                  if (isCurrent()) status.textContent = error.message;
+                } finally {
+                  unlock();
+                }
+              };
+              sharing.append(form);
+              content.append(sharing);
+            }
           }
           const respondents = node(
             'details',
@@ -460,10 +551,6 @@ export function mountCustomSurveys(root, api, options = {}) {
               );
             content.append(history);
           }
-          const isCurrent = () =>
-            current === generation &&
-            request === requestGeneration &&
-            options.isCurrent?.() !== false;
           // Each response downloads as a PDF made here from what is shown.
           const pdfActions = (result) => {
             const actions = node('div', undefined, 'entry-actions'),

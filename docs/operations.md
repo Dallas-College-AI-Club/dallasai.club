@@ -147,6 +147,15 @@ phone layouts were visually checked with no horizontal overflow. The production
 migration dry run rolled back successfully and confirmed runtime category-edit
 permissions; it found no existing officer topics to alter.
 
+Live release QA caught the game-night wording “None of these times” falling outside
+the initial exclusive-choice list. The public RSVP/preview, officer response editor,
+and server now also recognize that wording and “Not sure yet”, even when another
+choice is explicitly marked exclusive. The server regression failed before the fix
+and passed afterwards; public/editor mutation checks detected removal of the fix.
+The 58-scenario office browser suite now includes the real game-night availability
+question, with specific dates and Other cleared and disabled until the exclusive
+choice is unchecked. No test RSVP was submitted to production.
+
 Use `node backend/tests/serve-custom-survey.mjs` for the isolated survey UI at port
 4187 and `node backend/tests/serve-submission-management.mjs` for inbox editing at
 4194. Each fixture prints its test URLs. These fixtures are excluded from the build.

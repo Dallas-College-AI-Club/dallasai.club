@@ -26,7 +26,7 @@ const masthead = () =>
       <span>Student perspectives on AI, research & the world around us.</span>
       <div class="review-actions">
         <button data-open="contribute">Contribute an article ↗</button
-        ><button data-open="subscribe">Subscribe ↗</button>
+        ><button class="page-action" data-open="subscribe">Subscribe ↗</button>
       </div>
     </div>
   </div>`;

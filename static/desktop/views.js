@@ -246,7 +246,7 @@ export function renderViews(data) {
           Come learn, build, and explore AI with us.<br />Start with a question. Find your people.
         </p>
         <div>
-          ${buttonLink(data.links.join, 'Join us on Teams ↗')}
+          ${buttonLink(page('join'), 'Join the club')}
           ${link(page('about'), 'About the club', 'r95-button')}
         </div>
       </div>`,
@@ -349,7 +349,7 @@ function startMenuMarkup(data) {
       ${items}
       <hr />
       ${link(page('about'), /* HTML */ `${flagIcon}<span>About Club</span>`, 'r95-start-item')}
-      ${link(data.links.join, /* HTML */ `${icon('mail')}<span>Join us on Teams</span>`, 'r95-start-item')}
+      ${link(page('join'), /* HTML */ `${icon('mail')}<span>Join the club</span>`, 'r95-start-item')}
     </nav>
   </div>`;
 }

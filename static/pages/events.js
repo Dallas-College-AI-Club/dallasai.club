@@ -55,7 +55,7 @@ export function eventsMarkup() {
         </h2>
         <p>Workshops, conversations, and time to build together.</p>
       </div>
-      <button class="solid-link" id="workshop-request">
+      <button class="solid-link page-action" id="workshop-request">
         Request a workshop ↗
       </button>
     </div>
@@ -393,7 +393,7 @@ export function mountEvents(root) {
     ).filter((e) => e.potential && !eventIsPast(e));
     q('#potential-events').hidden = !potential.length;
     q('#potential-events').innerHTML =
-      '<span class="potential-eyebrow">HELP PLAN WHAT’S NEXT</span><h2>Potential events</h2><p>Explore an idea and share your interest.</p>' +
+      '<span class="potential-eyebrow">HELP PLAN WHAT’S NEXT</span><h2>Potential events</h2>' +
       potential
         .map(
           (e) =>
@@ -401,9 +401,9 @@ export function mountEvents(root) {
             e.id +
             '" aria-pressed="' +
             (selected?.id === e.id) +
-            '"><span>' +
-            eventDate(e) +
-            '</span><strong>' +
+            '">' +
+            (e.date ? '<span>' + eventDate(e) + '</span>' : '') +
+            '<strong>' +
             escapeHTML(e.title) +
             '</strong><b aria-hidden="true">↗</b></button>',
         )

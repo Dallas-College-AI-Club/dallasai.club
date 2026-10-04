@@ -148,6 +148,8 @@ test('search matches message text across statuses; total counts the whole filter
   assert.equal(many.entries.length, 50);
   assert.equal(many.hasMore, true);
   assert.equal(many.total, 62);
+  assert.equal(many.newInView, 60);
+  assert.equal((await list('?q=parking&offset=50')).newInView, 60);
   assert.equal((await list('')).total, 64);
   assert.ok(Number.isFinite(Date.parse(many.asOf)));
 });
@@ -177,6 +179,19 @@ test('rsvp-all lists past and upcoming RSVPs; status=all is the same as no statu
     '?counts=1&since=2025-12-31T00:00:00Z&kind=rsvp-all&status=all',
   );
   assert.equal(poll.arrivedInView, 2);
+  assert.equal(poll.newInView, 1);
+  for (const [query, expected] of [
+    ['kind=rsvp-all&status=active', 1],
+    ['kind=rsvp-all&eventId=past', 0],
+    ['kind=rsvp&eventId=next', 1],
+    ['kind=rsvp-past', 0],
+    ['status=reviewed', 0],
+    ['status=closed', 0],
+    ['kind=join', 0],
+  ]) {
+    assert.equal((await list('?' + query)).newInView, expected, query);
+    assert.equal((await list('?counts=1&' + query)).newInView, expected, query);
+  }
   for (const query of ['?status=everything', '?kind=rsvp-any'])
     assert.equal((await request('/api/admin' + query)).status, 400);
 });

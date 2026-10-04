@@ -96,11 +96,7 @@ function surveySummary(survey) {
       : survey.status[0].toUpperCase() + survey.status.slice(1);
   summary.append(
     title,
-    node(
-      'span',
-      status,
-      'chip' + (survey.status === 'draft' ? ' survey-draft' : ''),
-    ),
+    node('span', status, 'chip survey-' + status.toLowerCase()),
     node('span', plural(survey.response_count, 'response'), 'hint'),
   );
   return summary;

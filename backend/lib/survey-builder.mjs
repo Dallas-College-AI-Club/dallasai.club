@@ -1,6 +1,8 @@
 import { createHmac } from 'node:crypto';
 import { RequestError } from './errors.mjs';
 import { digest, privateSurveyToken } from './custom-surveys.mjs';
+import { editorEvents } from './events.mjs';
+import { eventIdPattern } from './event-content.mjs';
 export const FORM_VERSION = 'custom-form/1';
 const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const invalid = (message) => {
@@ -35,7 +37,10 @@ export function validateDefinition(input, publishing = false) {
     'permissions',
     'durationDays',
     'questions',
+    ...(Object.hasOwn(Object(input), 'eventId') ? ['eventId'] : []),
   ]);
+  if (input.eventId !== undefined && !eventIdPattern.test(input.eventId))
+    invalid('Choose a valid linked event.');
   if (!['blank', 'feedback'].includes(input.template))
     invalid('Choose a template.');
   if (
@@ -83,7 +88,9 @@ export function validateDefinition(input, publishing = false) {
       invalid('Each question needs a unique reference.');
     ids.add(q.id);
     if (
-      !['text', 'single', 'multiple', 'scale'].includes(q.type) ||
+      !['text', 'single', 'multiple', 'scale', 'date', 'number'].includes(
+        q.type,
+      ) ||
       typeof q.required !== 'boolean' ||
       !Array.isArray(q.options)
     )
@@ -129,6 +136,7 @@ export function validateDefinition(input, publishing = false) {
     permissions: { preview: p.preview, answer: p.answer, results: p.results },
     durationDays: input.durationDays,
     questions,
+    ...(input.eventId ? { eventId: input.eventId } : {}),
   };
 }
 export function previewToken(id) {
@@ -196,6 +204,12 @@ export async function changeDraft(db, actor, body) {
       actor.email,
     ]),
   );
+  if (
+    definition.eventId &&
+    body.action !== 'close' &&
+    !(await editorEvents(db)).some((event) => event.id === definition.eventId)
+  )
+    invalid('The linked event could not be found. Choose an event again.');
   return db.transaction(async (tx) => {
     // Lock by id even for a new draft, so a retry cannot create competing rows.
     await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [body.id]);
@@ -364,6 +378,23 @@ export function validateFormResponse(body, survey, member) {
     if (q.type === 'text') {
       value = text(value, 5000);
       answerText = value;
+    } else if (q.type === 'date') {
+      if (
+        typeof value !== 'string' ||
+        !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
+        !Number.isFinite(Date.parse(value)) ||
+        new Date(value).toISOString().slice(0, 10) !== value
+      )
+        invalid('Choose a valid calendar date: ' + q.title);
+      answerText = value;
+    } else if (q.type === 'number') {
+      if (
+        typeof value !== 'number' ||
+        !Number.isFinite(value) ||
+        Math.abs(value) > Number.MAX_SAFE_INTEGER
+      )
+        invalid('Enter a valid number: ' + q.title);
+      answerText = String(value);
     } else if (q.type === 'scale') {
       if (!Number.isInteger(value) || value < 1 || value > 5)
         invalid('Choose a rating from 1 to 5.');

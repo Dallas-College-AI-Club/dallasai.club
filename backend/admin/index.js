@@ -50,8 +50,7 @@ let offset = 0,
 let view = { status: 'new', kind: '', eventId: '', id: '' },
   loadedKey = null,
   listRequest = null,
-  homeRequest = null,
-  inboxList = '#/inbox';
+  homeRequest = null;
 const rsvpKinds = ['rsvp', 'rsvp-past', 'rsvp-all'];
 // The counts poll: arrivals are submissions created after `since` (the
 // newest one the list has shown); alerts fire when the newest submission
@@ -134,6 +133,7 @@ function clearOffice() {
   editor.clear();
   surveys.clear();
   customSurveys.clear();
+  q('#survey-library').replaceChildren();
   surveyArchive.clear();
   responses.clear();
 }
@@ -407,6 +407,7 @@ function updateCounts(data) {
   q('#configuration').hidden = !setup;
   q('#configuration').textContent = setup;
   q('#help-setup-status').textContent = setup || 'Everything is set up.';
+  q('#help-setup-status').hidden = !setup;
   q('#account-button').classList.toggle('needs-setup', Boolean(setup));
 }
 function setNewCount(count) {
@@ -806,7 +807,7 @@ async function fetchHome() {
         await router.go('#/events');
         if (router.route().section === 'events') q('#new-event').click();
       },
-      newSurvey: () => router.go('#/surveys/custom'),
+      newSurvey: () => router.go('#/surveys/new'),
       async findContact() {
         await router.go('#/contacts');
         q('#contacts-pane input[type="search"]')?.focus();
@@ -862,6 +863,10 @@ async function homeReview(entry, row) {
   }
 }
 const customSurveys = mountCustomSurveys(q('#custom-surveys-root'), api);
+const loadSurveyLibrary = () =>
+  customSurveys.library(q('#survey-library'), q('#survey-collection').value);
+q('#survey-collection').onchange = loadSurveyLibrary;
+q('#survey-library-refresh').onclick = loadSurveyLibrary;
 const surveyArchive = mountSurveyArchive(q('#archived-survey-questions'), api);
 // Surveys: the sub-section and what each one shows.
 let surveysSub = 'events',
@@ -885,7 +890,6 @@ const sections = {
       };
       if (JSON.stringify(next) !== JSON.stringify(view)) offset = 0;
       view = next;
-      if (!view.id) inboxList = router.build('inbox', route.query);
       selectInboxStatus(view.status);
       q('#filters [name="kind"]').value = view.kind;
       q('#filters [name="eventId"]').value = view.eventId;
@@ -914,25 +918,39 @@ const sections = {
   surveys: {
     pane: q('#surveys-pane'),
     enter(route) {
-      if (route.name === 'surveys')
-        return router.go('#/surveys/' + surveysSub, { replace: true });
-      const custom = route.name.startsWith('surveys/custom');
+      const hub = route.name === 'surveys',
+        creating = route.name === 'surveys/new';
+      q('#survey-hub').hidden = !hub;
+      q('#survey-groups').hidden = hub;
+      q('#create-survey').hidden = creating;
+      const custom = creating || route.name.startsWith('surveys/custom');
       surveysSub = custom ? 'custom' : 'events';
       q('#custom-surveys-root').hidden = !custom;
-      q('#event-surveys-root').hidden = custom;
+      q('#event-surveys-root').hidden = custom || hub;
       for (const [link, current] of [
         [q('#custom-surveys-group'), custom],
         [q('#event-surveys-group'), !custom],
+        [q('#all-surveys-group'), hub],
       ])
-        if (current) link.setAttribute('aria-current', 'page');
+        if (current && (link.id === 'all-surveys-group' || !hub))
+          link.setAttribute('aria-current', 'page');
         else link.removeAttribute('aria-current');
+      if (hub) {
+        customShown = null;
+        return loadSurveyLibrary();
+      }
+      if (creating) {
+        customShown = null;
+        return customSurveys.create(route.query.event, route.query.copy);
+      }
       if (custom) {
         const id = route.params.id || '';
-        if (customShown === id && q('#custom-surveys-root').childNodes.length)
+        const key = id + ':' + (route.query.event || '');
+        if (customShown === key && q('#custom-surveys-root').childNodes.length)
           return;
-        customShown = id;
+        customShown = key;
         if (id) customSurveys.show(id);
-        else customSurveys.load();
+        else customSurveys.load(route.query.event || '');
         return;
       }
       const entry = route.params.entryId || '';
@@ -941,9 +959,7 @@ const sections = {
       surveys.show(entry);
     },
     // Leaving a custom survey asks its unsaved builder first.
-    leave: () =>
-      !router.route().name.startsWith('surveys/custom') ||
-      customSurveys.leave(),
+    leave: () => customSurveys.leave(),
   },
   contacts: {
     pane: q('#contacts-pane'),
@@ -956,10 +972,9 @@ const sections = {
   help: {
     pane: q('#help-pane'),
     enter(route) {
-      helpEntries.load();
-      if (route.query.topic)
-        q('#help-' + route.query.topic)?.scrollIntoView({ block: 'start' });
+      return helpEntries.load(route);
     },
+    leave: () => helpEntries.leave(),
   },
   'not-found': {
     pane: q('#not-found'),
@@ -974,12 +989,16 @@ const titles = {
   'inbox/:id': 'Submission · Inbox',
   events: 'Events',
   surveys: 'Surveys',
-  'surveys/events': 'Event surveys · Surveys',
-  'surveys/events/:eventId/r/:entryId': 'Response · Event surveys',
+  'surveys/new': 'Create survey',
+  'surveys/events': 'RSVP answers · Surveys',
+  'surveys/events/:eventId/r/:entryId': 'Response · RSVP answers',
   'surveys/custom': 'Custom surveys · Surveys',
   'surveys/custom/:id': 'Custom survey · Surveys',
   contacts: 'Contacts',
   help: 'Help',
+  'help/:id': 'Help topic',
+  'help/archived': 'Archived · Help',
+  'help/activity': 'Activity · Help',
   'not-found': 'Page not found',
 };
 // Nav state for the route: aria-current, and each link's address. A link
@@ -991,11 +1010,9 @@ function onRender(route, from) {
   setTitle();
   const roots = {
     home: '#/home',
-    inbox: route.name === 'inbox' ? router.lastRoute('inbox') : inboxList,
+    inbox: '#/inbox',
     events: '#/events',
-    surveys:
-      '#/surveys/' +
-      (route.name.startsWith('surveys/custom') ? 'custom' : 'events'),
+    surveys: '#/surveys',
     contacts: '#/contacts',
     help: '#/help',
   };
@@ -1006,7 +1023,9 @@ function onRender(route, from) {
     else link.removeAttribute('aria-current');
     link.setAttribute(
       'href',
-      (current ? root : router.lastRoute(name)) || '#/' + name,
+      name === 'inbox' || name === 'surveys'
+        ? root
+        : (current ? root : router.lastRoute(name)) || '#/' + name,
     );
   }
 }
@@ -1035,6 +1054,7 @@ startSession({
     else if (route.section === 'help') helpEntries.load();
     else if (route.section === 'events') editor.show();
     else if (route.section !== 'surveys') return;
+    else if (route.name === 'surveys') loadSurveyLibrary();
     else if (surveysSub === 'events') surveys.reload();
     else customSurveys.refresh();
   },
@@ -1048,6 +1068,7 @@ startSession({
     editor.reset();
     surveys.reset();
     customSurveys.reset();
+    q('#survey-library').replaceChildren();
     surveyArchive.clear();
   },
   clear: clearOffice,

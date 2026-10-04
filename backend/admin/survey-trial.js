@@ -40,14 +40,13 @@ export function surveyTrial(definition) {
       const v = values[q.id];
       let answer = 'Not answered';
       if (v !== undefined && v !== '' && (!Array.isArray(v) || v.length))
-        answer =
-          q.type === 'text'
-            ? v
-            : q.type === 'scale'
-              ? v + ' / 5'
-              : (q.type === 'single' ? [v] : v)
-                  .map((i) => q.options[i])
-                  .join('\n');
+        answer = ['text', 'date', 'number'].includes(q.type)
+          ? v
+          : q.type === 'scale'
+            ? v + ' / 5'
+            : (q.type === 'single' ? [v] : v)
+                .map((i) => q.options[i])
+                .join('\n');
       const card = node('section');
       card.append(node('h4', q.title), node('p', answer));
       dialog.append(card);

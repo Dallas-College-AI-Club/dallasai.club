@@ -25,6 +25,7 @@
     "@playwright/test": "1.63.0",
     "esbuild": "0.28.2",
     "jspdf": "4.2.1",
-    "prettier": "3.9.8"
+    "prettier": "3.9.8",
+    "qrcode-generator": "2.0.4"
   }
 }

@@ -4,7 +4,7 @@ export async function surveyCatalog(db) {
   const { rows } = await db.query(`
     SELECT s.id,s.title,s.status,s.expires_at,s.content_version,s.link_digest,s.preview_digest,
       CASE WHEN s.definition IS NULL THEN NULL
-        ELSE jsonb_build_object('permissions',s.definition->'permissions') END AS definition,
+        ELSE jsonb_strip_nulls(jsonb_build_object('permissions',s.definition->'permissions','eventId',s.definition->'eventId')) END AS definition,
       count(r.advisor_id) FILTER (WHERE m.active AND jsonb_array_length(r.responses)>0)::int AS response_count,
       count(r.advisor_id) FILTER (WHERE NOT m.active AND jsonb_array_length(r.responses)>0)::int AS archived_response_count
     FROM club_forms.custom_surveys s

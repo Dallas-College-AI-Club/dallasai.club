@@ -3,12 +3,12 @@ import { uuid } from './validation.mjs';
 // Officers' own Help topics (migration 019), stored only in the database.
 // Until 019 is applied, the list is empty and every write says so.
 const columns =
-  'id,title,body,archived,created_by,updated_by,created_at,updated_at,revision';
-const notSetUp = (error) => error?.code === '42P01';
+  'id,title,body,category,archived,created_by,updated_by,created_at,updated_at,revision';
+const notSetUp = (error) => ['42P01', '42703'].includes(error?.code);
 const unavailable = () =>
   new RequestError(
     503,
-    'Officer Help topics aren’t set up on this deployment yet. Ask the site operator to apply database migration 019.',
+    'Help is not set up on this deployment yet. Ask the site operator to apply database migrations 019 and 020.',
     { code: 'help-not-set-up' },
   );
 const changed = () =>
@@ -27,6 +27,25 @@ export async function helpEntries(db) {
     if (notSetUp(error)) return { entries: [], ready: false };
     throw error;
   }
+}
+export async function helpHistory(db, topic, before) {
+  if (
+    (topic !== 'all' && !uuid.test(topic || '')) ||
+    (before && !/^[1-9][0-9]{0,17}$/.test(before))
+  )
+    throw new RequestError(400, 'Invalid history link.');
+  const { rows } = await db.query(
+    `SELECT id,actor,action,created_at,help_topic_id FROM club_forms.audit
+     WHERE action IN ('help-created','help-edited','help-archived','help-restored','help-deleted')
+       AND ($1::uuid IS NULL OR help_topic_id=$1::uuid)
+       AND ($2::bigint IS NULL OR id<$2::bigint)
+     ORDER BY id DESC LIMIT 101`,
+    [topic === 'all' ? null : topic, before || null],
+  );
+  return {
+    history: rows.slice(0, 100),
+    next: rows.length > 100 ? String(rows[99].id) : null,
+  };
 }
 // Plain text only: line breaks are kept, other control characters are not.
 function text(value, max, multiline) {
@@ -47,11 +66,11 @@ const revisionOf = (body) =>
     ? body.revision
     : null;
 // One audit row per change; it names the action, never the topic text.
-const audit = (tx, actor, action) =>
-  tx.query('INSERT INTO club_forms.audit(actor,action) VALUES($1,$2)', [
-    actor,
-    action,
-  ]);
+const audit = (tx, actor, action, id) =>
+  tx.query(
+    'INSERT INTO club_forms.audit(actor,action,help_topic_id) VALUES($1,$2,$3)',
+    [actor, action, id],
+  );
 async function write(db, run) {
   try {
     return await db.transaction(run);
@@ -65,7 +84,10 @@ async function write(db, run) {
 export async function saveHelpEntry(db, body, actor) {
   const title = text(body.title, 120, false),
     content = text(body.body, 8000, true),
+    category = body.category ?? 'everyday',
     revision = revisionOf(body);
+  if (!['everyday', 'essentials'].includes(category))
+    throw new RequestError(400, 'Choose a topic category.');
   if (!uuid.test(body.id || '') || (body.revision != null && !revision))
     throw new RequestError(400, 'Invalid update.');
   if (!title || !content)
@@ -82,12 +104,12 @@ export async function saveHelpEntry(db, body, actor) {
     if (!revision) {
       const created = (
         await tx.query(
-          `INSERT INTO club_forms.help_entries(id,title,body,created_by,updated_by) VALUES($1,$2,$3,$4,$4) ON CONFLICT (id) DO NOTHING RETURNING ${columns}`,
-          [id, title, content, actor],
+          `INSERT INTO club_forms.help_entries(id,title,body,created_by,updated_by,category) VALUES($1,$2,$3,$4,$4,$5) ON CONFLICT (id) DO NOTHING RETURNING ${columns}`,
+          [id, title, content, actor, category],
         )
       ).rows[0];
       if (created) {
-        await audit(tx, actor, 'help-created');
+        await audit(tx, actor, 'help-created', id);
         return { entry: created };
       }
       const existing = (
@@ -96,18 +118,22 @@ export async function saveHelpEntry(db, body, actor) {
           [id],
         )
       ).rows[0];
-      if (existing.title === title && existing.body === content)
+      if (
+        existing.title === title &&
+        existing.body === content &&
+        existing.category === category
+      )
         return { entry: existing };
       throw changed();
     }
     const entry = (
       await tx.query(
-        `UPDATE club_forms.help_entries SET title=$3,body=$4,updated_by=$5,updated_at=now(),revision=revision+1 WHERE id=$1 AND revision=$2 RETURNING ${columns}`,
-        [id, revision, title, content, actor],
+        `UPDATE club_forms.help_entries SET title=$3,body=$4,updated_by=$5,category=$6,updated_at=now(),revision=revision+1 WHERE id=$1 AND revision=$2 AND NOT archived RETURNING ${columns}`,
+        [id, revision, title, content, actor, category],
       )
     ).rows[0];
     if (!entry) throw await missingOrChanged(tx, id);
-    await audit(tx, actor, 'help-edited');
+    await audit(tx, actor, 'help-edited', id);
     return { entry };
   });
 }
@@ -129,12 +155,12 @@ export async function changeHelpEntry(db, body, actor) {
     if (body.action === 'help-delete') {
       const gone = (
         await tx.query(
-          'DELETE FROM club_forms.help_entries WHERE id=$1 AND revision=$2 RETURNING id',
+          'DELETE FROM club_forms.help_entries WHERE id=$1 AND revision=$2 AND archived RETURNING id',
           [id, revision],
         )
       ).rows[0];
       if (!gone) throw await missingOrChanged(tx, id);
-      await audit(tx, actor, 'help-deleted');
+      await audit(tx, actor, 'help-deleted', id);
       return { deleted: true, id };
     }
     const archived = body.action === 'help-archive';
@@ -145,7 +171,7 @@ export async function changeHelpEntry(db, body, actor) {
       )
     ).rows[0];
     if (!entry) throw await missingOrChanged(tx, id);
-    await audit(tx, actor, archived ? 'help-archived' : 'help-restored');
+    await audit(tx, actor, archived ? 'help-archived' : 'help-restored', id);
     return { entry };
   });
 }

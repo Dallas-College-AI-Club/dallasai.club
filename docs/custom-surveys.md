@@ -1,9 +1,47 @@
 # Private custom surveys
 
-Open **Club office → Surveys → Custom surveys**. Officers can read the latest
+Open **Club office → Surveys** and choose a survey from the list. Use **Collection**
+to show all surveys, event feedback, or standalone custom surveys. Officers can read the latest
 submitted summaries grouped by respondent and chapter, refresh results, open the survey, and copy the
 private or question-preview link. These controls do not edit advisor answers.
-Event RSVP surveys remain in the separate Event surveys group.
+Registration questions remain in the separate **RSVP answers** group.
+
+## Event feedback and creation
+
+The survey list offers **RSVP answers** and **Create survey**. From a saved event,
+**Create event feedback survey** starts a three-question
+feedback template linked to that event. It defaults to anyone with a verified email,
+with results visible only to admins; officers can restrict access before publishing.
+Save a new event draft before creating its feedback survey. Linked surveys appear in
+the event overview and in Custom surveys automatically.
+
+RSVP questions collect answers during registration and share the event's publication
+state. Feedback surveys have their own publication, expiration, answering link and QR
+code. Publishing feedback does not register anyone for the event. After publishing,
+use **QR code → Download QR** to save a scannable SVG. The QR is generated locally and
+contains the same private answering link; respondents still verify their email.
+
+Builder surveys support written answers, single choice, multiple choice, 1–5 rating,
+calendar date and number. A multiple-choice question can mark one answer exclusive;
+choosing it clears and blocks the other answers. RSVP questions support written,
+single and multiple choice, including an explicit exclusive answer and legacy
+“Any of these” / “None of these” labels. Uncheck the exclusive answer to choose others.
+
+Neon stores survey definitions and structured answers as JSON with stable question
+IDs, not a changing SQL column per question. CSV export turns question titles into
+column headings. Calendar answers retain `YYYY-MM-DD` without timezone conversion;
+event timestamps and submission timestamps use the existing Central Time rules.
+RSVP answers retain a snapshot of the questions at submission. Custom survey
+questions and permissions are fixed when published.
+
+## Duplicate a survey
+
+Open a builder survey and choose **Duplicate survey**. The new draft copies its
+questions, audience, access settings, duration and linked event. Rename it and check
+the event and access settings before publishing. Responses, invitations, activity
+and devices remain with the original. Publishing the copy starts a fresh answering
+period and creates its own link and QR code. The fixed Advisor Studio format is not
+a builder survey and does not offer this action.
 
 The selector counts active, nonempty responses and shows archived responses
 separately. Expired rounds are labeled expired; closed and expired links are not

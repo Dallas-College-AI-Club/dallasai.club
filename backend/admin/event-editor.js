@@ -282,6 +282,41 @@ export function mountEventEditor(api) {
         }),
       );
       overview.append(updatedNote, activityPanel);
+      const surveys = node('section', undefined, 'event-overview-section');
+      const create = node('a', 'Create event feedback survey', 'button-link');
+      create.href = '#/surveys/new?event=' + encodeURIComponent(row.id);
+      surveys.append(
+        node('h4', 'Event feedback surveys'),
+        node(
+          'p',
+          'Separate from registration. Each survey has its own answering link and QR code.',
+          'hint',
+        ),
+        create,
+      );
+      overview.append(surveys);
+      api('/api/custom-surveys?action=catalog')
+        .then(({ surveys: catalog }) => {
+          if (current !== row || editing) return;
+          for (const survey of catalog.filter(
+            (item) => item.definition?.eventId === row.id,
+          )) {
+            const link = node(
+              'a',
+              survey.title +
+                ' · ' +
+                (survey.expired ? 'expired' : survey.status),
+            );
+            link.href = '#/surveys/custom/' + survey.id;
+            const p = node('p');
+            p.append(link);
+            surveys.append(p);
+          }
+        })
+        .catch((error) => {
+          if (current === row && !editing)
+            surveys.append(node('p', error.message));
+        });
     }
     q('#event-empty').hidden = true;
     images = (row.draft.images || []).map((image) => ({ ...image }));

@@ -5,6 +5,7 @@ import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { adminHandler } from '../api/admin.mjs';
 import { RequestError } from '../lib/errors.mjs';
 let db, server, origin;
@@ -88,6 +89,19 @@ beforeEach(() =>
 after(async () => {
   await new Promise((resolve) => server.close(resolve));
   await db.close();
+});
+
+test('Home includes archived entries and deletion receipts without restoring deleted data', async () => {
+  await insert({ status: 'closed' });
+  await insert({ status: 'new' });
+  await db.query(
+    "INSERT INTO club_forms.audit(actor,action) VALUES($1,'submission-permanently-deleted'),($1,'contact-purged:entries=3:notes=2:files=0'),($1,'contact-purged:entries=0:notes=1:files=0')",
+    [officer],
+  );
+  const home = await get('?home=1');
+  assert.equal(home.counts.find((row) => row.kind === 'question').total, 2);
+  assert.equal(home.counts.find((row) => row.kind === 'question').closed, 1);
+  assert.equal(home.deletedSubmissions, 4);
 });
 
 test('Home groups new RSVPs by event with true counts, cancelled ones left out', async () => {
@@ -322,7 +336,12 @@ test('Help topics: add, retry, edit, archive, restore and delete, each audited w
     409,
   );
   assert.deepEqual(
-    (await post({ action: 'help-delete', id, revision: 4 })).body,
+    (await post({ action: 'help-delete', id, revision: 4 })).status,
+    409,
+  );
+  await post({ action: 'help-archive', id, revision: 4 });
+  assert.deepEqual(
+    (await post({ action: 'help-delete', id, revision: 5 })).body,
     {
       deleted: true,
       id,
@@ -336,7 +355,7 @@ test('Help topics: add, retry, edit, archive, restore and delete, each audited w
   );
   const audit = (
     await db.query(
-      'SELECT actor,entry_id,action FROM club_forms.audit ORDER BY id',
+      'SELECT actor,entry_id,action,help_topic_id FROM club_forms.audit ORDER BY id',
     )
   ).rows;
   assert.deepEqual(
@@ -346,10 +365,104 @@ test('Help topics: add, retry, edit, archive, restore and delete, each audited w
       'help-edited',
       'help-archived',
       'help-restored',
+      'help-archived',
       'help-deleted',
     ],
   );
   assert.ok(audit.every((row) => row.actor === officer && !row.entry_id));
+  assert.ok(audit.every((row) => row.help_topic_id === id));
+  const history = await get('?helpHistory=' + id);
+  assert.equal(history.history.length, 6);
+  assert.equal(history.history[0].action, 'help-deleted');
+  assert.ok(!JSON.stringify(history).includes('Room keys'));
+});
+
+test('Help history is scoped, paged and officer-only; categories and archive edits are validated', async () => {
+  const id = randomUUID(),
+    other = randomUUID();
+  const created = await post({
+    action: 'help-save',
+    id,
+    title: 'A topic',
+    body: 'Text',
+    category: 'essentials',
+  });
+  assert.equal(created.body.entry.category, 'essentials');
+  assert.equal(
+    (
+      await post({
+        action: 'help-save',
+        id: other,
+        title: 'B',
+        body: 'B',
+        category: 'invalid',
+      })
+    ).status,
+    400,
+  );
+  await post({ action: 'help-save', id: other, title: 'Other', body: 'B' });
+  await db.query(
+    "INSERT INTO club_forms.audit(actor,action,help_topic_id) SELECT 'other@example.com','help-edited',$1 FROM generate_series(1,104)",
+    [id],
+  );
+  const first = await get('?helpHistory=' + id);
+  assert.equal(first.history.length, 100);
+  assert.ok(first.history.every((row) => row.help_topic_id === id));
+  const second = await get('?helpHistory=' + id + '&before=' + first.next);
+  assert.equal(second.history.length, 5);
+  assert.equal(second.next, null);
+  assert.equal(
+    new Set([...first.history, ...second.history].map((row) => row.id)).size,
+    105,
+  );
+  assert.equal(
+    (await fetch(origin + '/api/admin?helpHistory=' + id)).status,
+    401,
+  );
+  assert.equal((await request('/api/admin?helpHistory=bad')).status, 400);
+  assert.equal(
+    (await request('/api/admin?helpHistory=all&before=bad')).status,
+    400,
+  );
+  await post({ action: 'help-archive', id, revision: 1 });
+  assert.equal(
+    (
+      await post({
+        action: 'help-save',
+        id,
+        revision: 2,
+        title: 'Changed',
+        body: 'B',
+      })
+    ).status,
+    409,
+  );
+});
+
+test('Guidebook migration preserves officer edits and deleted topics on repeat', async () => {
+  const migration = await readFile(
+    new URL('../020_help_guidebook.sql', import.meta.url),
+    'utf8',
+  );
+  await db.exec(migration);
+  const id = '00000000-0000-4000-8000-000000000101';
+  await post({
+    action: 'help-save',
+    id,
+    revision: 1,
+    title: 'Officer version',
+    body: 'Updated instructions',
+  });
+  await db.exec(migration);
+  assert.equal(
+    (await get('?help=1')).entries.find((entry) => entry.id === id).title,
+    'Officer version',
+  );
+  await post({ action: 'help-archive', id, revision: 2 });
+  await post({ action: 'help-delete', id, revision: 3 });
+  await db.exec(migration);
+  assert.equal((await get('?help=1')).entries.length, 8);
+  assert.ok(!(await get('?help=1')).entries.some((entry) => entry.id === id));
 });
 
 test('Help topics are validated as plain text', async () => {
@@ -411,7 +524,7 @@ test('before migration 019, Help lists nothing and writes say it is not set up',
     });
     assert.equal(result.status, 503);
     assert.equal(result.body.code, 'help-not-set-up');
-    assert.match(result.body.error, /migration 019/);
+    assert.match(result.body.error, /migrations 019 and 020/);
     assert.equal(
       (await post({ action: 'help-delete', id: randomUUID(), revision: 1 }))
         .status,

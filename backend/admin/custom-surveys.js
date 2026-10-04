@@ -9,6 +9,8 @@ import {
   responseSections,
 } from '../surveys/results-ui.js';
 import { closePrintView, downloadResponse } from './response-download.js';
+import { surveyQR } from './survey-qr.js';
+import { go } from './router.js';
 // Self-registered respondents may have no display name; officers see the
 // email instead. Respondent-facing pages keep their own masking.
 const named = (results) =>
@@ -19,18 +21,23 @@ const named = (results) =>
 export function mountCustomSurveys(root, api) {
   let generation = 0,
     selected = '',
-    builder;
+    builder,
+    eventFilter = '';
   function stopBuilder() {
     builder?.dispose();
     builder = null;
   }
-  async function load() {
+  async function load(filter) {
+    if (typeof filter === 'string') eventFilter = filter;
     stopBuilder();
     closePrintView();
     const current = ++generation;
     root.replaceChildren(node('p', 'Loading custom surveys…'));
     try {
-      const { surveys } = await api('/api/custom-surveys?action=catalog');
+      const catalog = await api('/api/custom-surveys?action=catalog');
+      const surveys = catalog.surveys.filter(
+        (survey) => !eventFilter || survey.definition?.eventId === eventFilter,
+      );
       if (current !== generation) return;
       root.replaceChildren(
         node('h2', 'Custom surveys'),
@@ -52,7 +59,8 @@ export function mountCustomSurveys(root, api) {
           id,
         );
       };
-      create.onclick = () => edit();
+      create.onclick = () =>
+        go('#/surveys/new' + (eventFilter ? '?event=' + eventFilter : ''));
       root.append(create);
       if (!surveys.length) {
         root.append(node('p', 'No custom surveys have been opened yet.'));
@@ -97,7 +105,18 @@ export function mountCustomSurveys(root, api) {
                 : 'Current shared responses · read-only. Each new submission replaces the advisor’s previous shared summary.',
             ),
           );
+          if (survey.definition?.eventId) {
+            const related = node(
+              'p',
+              'Linked event: ' + survey.definition.eventId,
+              'hint',
+            );
+            content.prepend(related);
+          }
           if (survey.definition) {
+            const duplicate = node('a', 'Duplicate survey', 'button-link');
+            duplicate.href = '#/surveys/new?copy=' + survey.id;
+            content.append(duplicate);
             if (survey.status === 'draft') {
               const resume = node('button', 'Continue editing draft');
               resume.onclick = () => edit(survey.id);
@@ -208,16 +227,20 @@ export function mountCustomSurveys(root, api) {
             };
             const actions = node('div', undefined, 'entry-actions');
             actions.append(preview, copyPreview);
-            if (survey.privateLink) actions.append(link, copy);
+            if (survey.privateLink)
+              actions.append(link, copy, surveyQR(survey));
             content.append(actions, notice);
           }
           const respondents = node(
-            'section',
+            'details',
             undefined,
             'entry respondent-management',
           );
+          respondents.append(node('summary', 'Respondents & access'));
+          const respondentContent = node('div');
+          respondents.append(respondentContent);
           content.append(respondents);
-          await mountRespondents(respondents, selected, api, load);
+          await mountRespondents(respondentContent, selected, api, load);
           if (current !== generation || request !== requestGeneration) return;
           if (survey.definition) {
             const { survey: detail } = await api(
@@ -362,6 +385,82 @@ export function mountCustomSurveys(root, api) {
   let dropped = false;
   return {
     load,
+    async library(target, collection = '') {
+      const request = ++generation;
+      target.replaceChildren(node('p', 'Loading surveys…', 'hint'));
+      try {
+        const [{ surveys }, { events }] = await Promise.all([
+          api('/api/custom-surveys?action=catalog'),
+          api('/api/events?admin=1'),
+        ]);
+        if (request !== generation) return;
+        const matching = surveys.filter(
+          (survey) =>
+            !collection ||
+            (collection === 'events'
+              ? Boolean(survey.definition?.eventId)
+              : !survey.definition?.eventId),
+        );
+        const list = node('div', undefined, 'survey-library-list');
+        for (const survey of matching) {
+          const row = node('article', undefined, 'survey-library-row');
+          const event = events.find(
+            (event) => event.id === survey.definition?.eventId,
+          );
+          const info = node('div');
+          info.append(
+            node('h2', survey.title),
+            node(
+              'p',
+              survey.definition?.eventId
+                ? 'Event feedback' + (event ? ' · ' + event.draft.title : '')
+                : 'Custom survey',
+              'hint',
+            ),
+          );
+          const status = node('div', undefined, 'survey-library-status');
+          status.append(
+            node(
+              'span',
+              survey.expired
+                ? 'Expired'
+                : survey.status[0].toUpperCase() + survey.status.slice(1),
+              'chip',
+            ),
+            node('span', plural(survey.response_count, 'response'), 'hint'),
+          );
+          const open = node('a', 'Open →', 'button-link');
+          open.href = '#/surveys/custom/' + survey.id;
+          open.setAttribute('aria-label', 'Open ' + survey.title);
+          row.append(info, status, open);
+          list.append(row);
+        }
+        target.replaceChildren(
+          matching.length
+            ? list
+            : node('p', 'No surveys in this collection yet.', 'empty-state'),
+        );
+      } catch (error) {
+        if (request !== generation) return;
+        target.replaceChildren(node('p', error.message));
+        const retry = node('button', 'Try loading surveys again');
+        retry.onclick = () => this.library(target, collection);
+        target.append(retry);
+      }
+    },
+    create(eventId, copyId) {
+      generation++;
+      stopBuilder();
+      closePrintView();
+      builder = mountSurveyBuilder(
+        root,
+        api,
+        (id) => go(id ? '#/surveys/custom/' + id : '#/surveys'),
+        undefined,
+        eventId,
+        copyId,
+      );
+    },
     // Ten minutes paused: drop shown results unless the builder is open.
     reset() {
       if (builder) return;
@@ -385,6 +484,7 @@ export function mountCustomSurveys(root, api) {
     },
     show(id) {
       selected = id;
+      eventFilter = '';
       return load();
     },
     clear() {

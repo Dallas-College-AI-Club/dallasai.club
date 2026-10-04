@@ -36,6 +36,24 @@ export function questionFields(
       input.required = q.required;
       input.oninput = () => onChange(q.id, input.value);
       group.append(input);
+    } else if (q.type === 'date' || q.type === 'number') {
+      const input = node('input');
+      input.type = q.type;
+      if (q.type === 'number') input.step = 'any';
+      input.value = values[q.id] ?? '';
+      input.required = q.required;
+      input.disabled = readOnly;
+      input.setAttribute('aria-labelledby', title.id);
+      input.oninput = () =>
+        onChange(
+          q.id,
+          input.value === ''
+            ? ''
+            : q.type === 'number'
+              ? input.valueAsNumber
+              : input.value,
+        );
+      group.append(input);
     } else if (q.type === 'scale') {
       const input = node('select');
       input.setAttribute('aria-labelledby', title.id);
@@ -361,7 +379,7 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
   function answerText(q) {
     const v = values[q.id];
     if (!hasAnswer(v)) return 'Not answered';
-    return q.type === 'text'
+    return ['text', 'date', 'number'].includes(q.type)
       ? v.trim()
       : q.type === 'scale'
         ? v + ' / 5'

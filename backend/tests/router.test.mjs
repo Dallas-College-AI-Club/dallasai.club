@@ -28,6 +28,12 @@ test('parse() reads routes, ids and allowed query values', () => {
   assert.deepEqual(parse('#/inbox/' + id.toUpperCase()).params, { id });
   assert.equal(parse('#/events').name, 'events');
   assert.equal(parse('#/surveys').name, 'surveys');
+  assert.equal(parse('#/surveys/new').name, 'surveys/new');
+  assert.deepEqual(parse('#/surveys/new?copy=' + id).query, { copy: id });
+  assert.deepEqual(
+    parse('#/surveys/new?copy=not-a-survey&event=fall-kickoff').query,
+    { event: 'fall-kickoff' },
+  );
   assert.equal(parse('#/surveys/events').name, 'surveys/events');
   assert.deepEqual(parse('#/surveys/events/fall-kickoff/r/' + id).params, {
     eventId: 'fall-kickoff',
@@ -36,6 +42,9 @@ test('parse() reads routes, ids and allowed query values', () => {
   assert.equal(parse('#/surveys/custom').name, 'surveys/custom');
   assert.deepEqual(parse('#/surveys/custom/' + id).params, { id });
   assert.deepEqual(parse('#/help?topic=exports').query, { topic: 'exports' });
+  assert.deepEqual(parse('#/help/' + id.toUpperCase()).params, { id });
+  assert.equal(parse('#/help/archived').name, 'help/archived');
+  assert.equal(parse('#/help/activity').name, 'help/activity');
 });
 test('Home is the landing page; Contacts and all-event RSVPs have routes', () => {
   for (const hash of ['', '#', '#/', '#/home'])
@@ -62,6 +71,7 @@ test('bad ids and unknown pages are not found, before any request', () => {
     ['#/surveys/events/Bad_Slug/r/' + id, 'surveys'],
     ['#/surveys/events/fall/r/abc', 'surveys'],
     ['#/people', 'people'],
+    ['#/help/private@example.com', 'help'],
     ['#/inbox/' + id + '/extra', 'inbox'],
     ['#main', 'main'],
   ]) {

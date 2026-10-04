@@ -83,7 +83,7 @@ export function plural(n, word, pluralWord = word + 's') {
 const kinds = {
   question: ['Question', 'Questions'],
   join: ['Signup', 'Signups'],
-  subscribe: ['Newsletter', 'Newsletter'],
+  subscribe: ['The AI Review subscription', 'The AI Review'],
   rsvp: ['RSVP', 'RSVPs'],
   'rsvp-past': ['RSVP', 'RSVPs for past events'],
   workshop: ['Workshop request', 'Workshops'],
@@ -174,7 +174,7 @@ const actions = {
   'survey-export-csv': 'Exported survey responses',
   'export-csv': 'Exported CSV',
   'state:cancelled': 'RSVP marked cancelled',
-  'state:unsubscribed': 'Newsletter request withdrawn',
+  'state:unsubscribed': 'The AI Review subscription withdrawn',
   'state:active': 'Restored as active',
   'contact-purged': 'Permanently deleted a test contact',
   draft: 'Draft saved',

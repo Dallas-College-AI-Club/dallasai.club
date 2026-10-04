@@ -559,7 +559,7 @@ try {
   await admin.locator('#inbox-tab').click();
   await admin
     .locator('#counts')
-    .getByText('Newsletter', { exact: true })
+    .getByText('The AI Review', { exact: true })
     .waitFor();
   await admin.locator('#entries .entry > summary').click();
   await admin.getByText('Received in club inbox', { exact: true }).waitFor();

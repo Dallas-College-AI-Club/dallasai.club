@@ -2145,30 +2145,19 @@ try {
             `${pane} overflows at ${width}px`,
           );
         }
-        // Help: in the nav from 768px, in the account menu on phones.
-        if (width < 768) {
-          await page.locator('#account-button').click();
-          await page.locator('#account-help').click();
-        } else await page.locator('#help-tab').click();
+        // The section tabs sit across the top at every width, Help included.
+        await page.locator('#help-tab').click();
         await expect(page.locator('#help-pane')).toBeVisible();
-        await expect(page.locator('#account-menu')).toBeHidden();
-        // Nothing hides under the bottom tabs: the page scrolls past them.
         await page.locator('#inbox-tab').click();
-        await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
-        const nav = await page.locator('#app-nav').boundingBox(),
-          last = await page.locator('#inbox-pane .pagination').boundingBox();
-        if (width < 768) {
-          assert.ok(last.y + last.height <= nav.y, `covered at ${width}px`);
-          // Focused controls scroll clear of the tab bar (WCAG 2.4.11).
-          const padding = await page.evaluate(
-            () =>
-              getComputedStyle(document.documentElement).scrollPaddingBottom,
-          );
-          assert.ok(
-            parseFloat(padding) >= nav.height + 16,
-            `scroll-padding ${padding} at ${width}px`,
-          );
-        }
+        await page.evaluate(() => scrollTo(0, 0));
+        const bar = await page.locator('#app-bar').boundingBox(),
+          nav = await page.locator('#app-nav').boundingBox(),
+          pane = await page.locator('#inbox-pane').boundingBox();
+        assert.ok(
+          bar.y + bar.height <= nav.y + 1 && nav.y + nav.height <= pane.y,
+          `tabs not between the header and the page at ${width}px`,
+        );
+        assert.ok(nav.width >= width - 1, `tabs not full width at ${width}px`);
       }
     },
   );

@@ -106,7 +106,7 @@ export function submissionsCSV(rows) {
           {
             active: 'Received in club inbox',
             cancelled: 'RSVP cancelled',
-            unsubscribed: 'Newsletter request withdrawn',
+            unsubscribed: 'The AI Review subscription withdrawn',
           }[row.state] || row.state,
           { new: 'New', reviewed: 'Reviewed', closed: 'Archived' }[
             row.review_status

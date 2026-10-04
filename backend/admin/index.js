@@ -759,13 +759,6 @@ const titles = {
   help: 'Help',
   'not-found': 'Page not found',
 };
-const sectionNames = {
-  inbox: 'Inbox',
-  events: 'Events',
-  surveys: 'Surveys',
-  help: 'Help',
-  'not-found': 'Not found',
-};
 // Nav state for the route: aria-current, and each link's address. A link
 // reopens its section's last page; the current section's link goes back to
 // its list with the filters kept.
@@ -773,7 +766,6 @@ function onRender(route, from) {
   if (from && from.section !== route.section) toast.dismissPassing();
   routeTitle = titles[route.name];
   setTitle();
-  q('#app-title').textContent = sectionNames[route.section];
   const roots = {
     inbox: route.name === 'inbox' ? router.lastRoute('inbox') : inboxList,
     events: '#/events',

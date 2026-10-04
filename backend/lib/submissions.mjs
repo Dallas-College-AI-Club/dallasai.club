@@ -62,7 +62,7 @@ async function reactivate(tx, row) {
       body:
         row.kind === 'rsvp'
           ? 'RSVPed again through the public website (unverified). The RSVP had been recorded as cancelled; it is active again.'
-          : 'Signed up again through the public website (unverified). The newsletter request had been recorded as withdrawn; it is active again.',
+          : 'Signed up again through the public website (unverified). The AI Review subscription had been recorded as withdrawn; it is active again.',
     },
     WEBSITE,
     'resubmitted',

@@ -176,6 +176,10 @@ body .content.arcade-page {
 .game-info {
   padding: 27px 23px 21px;
 }
+.community-cover .cover-type {
+  right: 78px;
+  line-height: 1.5;
+}
 .game-info .arcade-kicker {
   color: var(--game-accent);
 }
@@ -209,7 +213,8 @@ body .content.arcade-page {
   color: #839d9b;
   max-width: 145px;
 }
-.game-card-bottom > a {
+.game-card-bottom > a,
+.game-card-play {
   color: var(--game-accent);
   font:
     550 13px 'DM Sans',
@@ -219,6 +224,16 @@ body .content.arcade-page {
   min-height: 40px;
   display: flex;
   align-items: center;
+}
+.game-card-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.game-card-compact .game-card-bottom {
+  border-top: 0;
+  padding-top: 0;
 }
 .game-personal-best {
   display: block;
@@ -806,6 +821,30 @@ body .content.arcade-page {
 }
 .arcade-page .game-info h2 {
   margin-bottom: 12px !important;
+}
+@media (min-width: 761px) {
+  .game-library {
+    grid-template-rows: repeat(2, 1fr);
+  }
+  .game-card:not(.game-card-compact) {
+    grid-row: span 2;
+  }
+  .game-card-compact {
+    grid-column: 3;
+  }
+  .game-card-compact .game-cover {
+    aspect-ratio: 4;
+  }
+  .game-card-compact .game-info {
+    padding: 16px 20px 14px;
+  }
+  .arcade-page .game-card-compact h2 {
+    font-size: 23px !important;
+    margin: 7px 0 9px !important;
+  }
+  .game-card-compact .game-wip {
+    margin-bottom: 9px;
+  }
 }
 .game-telemetry {
   display: grid !important;

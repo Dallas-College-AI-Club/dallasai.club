@@ -315,7 +315,10 @@ try {
   );
   await page.goto(origin + '/club.html?mode=events&event=' + live.id);
   await page.locator('#potential-events button').waitFor();
-  assert.match(await page.locator('#potential-events').textContent(), /TBD/);
+  assert.doesNotMatch(
+    await page.locator('#potential-events').textContent(),
+    /TBD|Explore an idea/,
+  );
   assert.equal(await page.locator('#save-event').count(), 0);
   await page.locator('#open-rsvp').click();
   await page.locator('#event-rsvp [name=name]').fill('Browser survey test');

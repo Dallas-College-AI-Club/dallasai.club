@@ -532,9 +532,16 @@
     sans-serif;
   margin: 0 0 6px;
 }
-.content .potential-events > p {
-  margin: 0 0 8px;
-  color: #62745e;
+.potential-events button {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.potential-events button > span {
+  grid-column: 1 / -1;
+}
+.potential-events button strong {
+  font-size: 20px;
+  font-weight: 600;
+  line-height: 1.35;
 }
 .event-detail {
   overflow-wrap: anywhere;

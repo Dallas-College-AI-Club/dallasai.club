@@ -26,7 +26,7 @@ export function renderSpace(root, id, { open }) {
       spaceHeader(
         'Projects',
         /* HTML */ `<a
-          class="outline-link"
+          class="outline-link page-action"
           href="${JOIN_URL}"
           target="_blank"
           rel="noreferrer"

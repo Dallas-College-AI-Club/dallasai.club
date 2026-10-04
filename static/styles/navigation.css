@@ -946,43 +946,98 @@ body .club-utilities > a.join-effect:active {
     transition: none;
   }
 }
-body .club-utilities > a.join-effect {
-  --button: #185abd;
-  --accent: #7db7ff;
-  background:
-    radial-gradient(
-      ellipse at 100% 0,
-      color-mix(in srgb, var(--accent) 12%, transparent),
-      transparent 80%
-    ),
-    linear-gradient(
-      135deg,
-      color-mix(in srgb, var(--button) 83%, #172234),
-      color-mix(in srgb, var(--button) 75%, #0a1524)
-    );
-  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
-  color: #fff;
-  box-shadow:
-    inset 0 1px #ffffff24,
-    0 5px 14px color-mix(in srgb, var(--button) 13%, transparent);
+body[data-space='article'] {
+  --join-button: #ded2c2;
+  --join-accent: #806752;
 }
-body .club-utilities > a.join-effect:is(:hover, :focus-visible) {
+body[data-space='lab'] {
+  --join-button: #d1c9b3;
+  --join-accent: #75705b;
+}
+body[data-space='projects'] {
+  --join-button: #d4c4cf;
+  --join-accent: #786373;
+}
+body[data-space='events'] {
+  --join-button: #dbcec0;
+  --join-accent: #826a52;
+}
+body[data-space='about'] {
+  --join-button: #cfccd9;
+  --join-accent: #71687e;
+}
+body[data-space='join'] {
+  --join-button: #dbc9c6;
+  --join-accent: #826562;
+}
+body[data-space='subscribe'] {
+  --join-button: #ddd3b5;
+  --join-accent: #7e714c;
+}
+body[data-space='contribute'] {
+  --join-button: #d8c6cc;
+  --join-accent: #836974;
+}
+body[data-space='ethics'] {
+  --join-button: #d2beb5;
+  --join-accent: #876b61;
+}
+body[data-space='compare'] {
+  --join-button: #c6c6d7;
+  --join-accent: #6d6b85;
+}
+body[data-space='drift'] {
+  --join-button: #cbd1c1;
+  --join-accent: #6e795f;
+}
+body:is(
+  [data-space='lab'],
+  [data-space='ethics'],
+  [data-space='projects'],
+  [data-space='compare'],
+  [data-space='drift']
+) {
+  --join-surface: color-mix(in srgb, var(--join-button) 18%, var(--space));
+  --join-ink: var(--join-button);
+}
+body :is(.club-utilities > a.join-effect, .content .page-action) {
+  --button: var(--join-surface, var(--join-button, #ded5bb));
+  --accent: var(--join-accent, #7b6a44);
   background:
-    radial-gradient(
-      ellipse at 100% 0,
-      color-mix(in srgb, var(--accent) 18%, transparent),
-      transparent 80%
-    ),
+    radial-gradient(ellipse at 100% 0, #ffffff10, transparent 80%),
     linear-gradient(
       135deg,
-      color-mix(in srgb, var(--button) 75%, #172234),
-      color-mix(in srgb, var(--button) 70%, #0a1524)
+      color-mix(in srgb, var(--button) 97%, #fff),
+      color-mix(in srgb, var(--button) 93%, #101e27)
     );
-  border-color: var(--accent);
+  border-color: color-mix(
+    in srgb,
+    var(--join-ink, var(--accent)) 30%,
+    transparent
+  );
+  color: var(--join-ink, color-mix(in srgb, var(--accent) 45%, #192c26));
+  outline-color: currentColor;
+  box-shadow:
+    inset 0 1px #ffffff30,
+    0 4px 10px #18282012;
+}
+body
+  :is(.club-utilities > a.join-effect, .content .page-action):is(
+    :hover,
+    :focus-visible
+  ) {
+  background:
+    radial-gradient(ellipse at 100% 0, #ffffff14, transparent 80%),
+    linear-gradient(
+      135deg,
+      color-mix(in srgb, var(--button) 97%, #fff),
+      color-mix(in srgb, var(--button) 90%, #101e27)
+    );
+  border-color: currentColor;
 }
 .join-effect-icon {
-  color: #f5f8ff;
-  border-color: #ffffff60;
+  color: inherit;
+  border-color: color-mix(in srgb, currentColor 30%, transparent);
 }
 .section-switcher {
   box-sizing: border-box;

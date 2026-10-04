@@ -111,9 +111,11 @@ and unrelated surveys are never listed on the public event page.
 First publication creates a stable short link using the same provider as custom
 surveys. The public address, Share action and QR all use that saved link. Editing,
 archiving or restoring keeps it; duplicating an event creates a different link.
-New links use a concise event name and year, such as `dai-game-night-2026`;
-an occupied name gets a short suffix. For older links with a generated hexadecimal
-path, **Use readable short link** saves a descriptive replacement. The old link
+New links use a concise event name and year, such as `dai-game-night-2026`.
+Automatic names use a small approved vocabulary of club topics, retain whole
+words, and fall back to `dai-event-2026` when no topic matches. Custom names are
+kept as entered. An occupied automatic name gets a short suffix. For older links
+with a generated hexadecimal path, **Use readable short link** saves a descriptive replacement. The old link
 continues working; already readable links stay unchanged.
 In the published overview, **Custom short-link name (optional)** edits the last
 part of the address. Use 5–30 letters, numbers, hyphens or underscores; leave it

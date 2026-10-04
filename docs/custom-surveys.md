@@ -160,6 +160,11 @@ Only the already-authorized shared results are used; question previews contain n
 responses. A resource or concern added by an advisor stays separate from another
 advisor's independently added option.
 
+**Same choice** (or **Same choices**) marks identical original built-in choices.
+Multiple-choice order does not matter. Edited wording, unanswered questions,
+custom options and references to another answer do not receive a marker. Changing
+the answer or its wording updates the marker immediately.
+
 The review page has separate **Mark all wording reviewed** and **Include all in
 shared summary** buttons. Click either again to undo only the checks it added;
 choices checked individually before the bulk action are kept. Changing a checkbox

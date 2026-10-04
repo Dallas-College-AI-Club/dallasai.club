@@ -10,7 +10,7 @@ import {
 import { pdfLines } from './helpers/pdf-text.mjs';
 import { changeDraft } from '../lib/survey-builder.mjs';
 import { privateSurveyToken, digest } from '../lib/custom-surveys.mjs';
-import { definition } from '../lib/survey-contract.mjs';
+import { definition, canonicalResponse } from '../lib/survey-contract.mjs';
 import { randomUUID } from 'node:crypto';
 const fixture = await officeFixture();
 const browser = await chromium.launch({
@@ -3147,6 +3147,23 @@ try {
       const responses = advisorResponses();
       responses.find((r) => r.id === 'note-spark').text =
         '<img src=x onerror=alert(1)> Shared words only.';
+      for (const [questionId, value, text] of [
+        ['meeting_format', 'teams', 'Microsoft Teams'],
+        ['meeting_frequency', 'monthly', 'Once a month'],
+      ])
+        responses.push(
+          canonicalResponse({
+            id: 'q-' + questionId,
+            kind: 'question',
+            questionId,
+            mode: 'structured',
+            answer: { value },
+            text,
+            wordingReviewed: true,
+            included: true,
+            customOptions: [],
+          }),
+        );
       await fixture.db.query(
         "INSERT INTO club_forms.custom_survey_responses(survey_id,advisor_id,revision,responses,shared_with) VALUES($1,'bracewell',1,$2,ARRAY['pearlman'])",
         [id, JSON.stringify(responses)],
@@ -3182,6 +3199,58 @@ try {
       const ideal = page.locator('#review-card-q-ideal_responsibilities');
       const spark = page.locator('#review-card-q-spark');
       const comment = page.locator('#review-card-note-spark');
+      const route = page.locator('#review-card-q-busy_route');
+      const format = page.locator('#review-card-q-meeting_format');
+      const frequency = page.locator('#review-card-q-meeting_frequency');
+      await expect(page.locator('.choice-match')).toHaveCount(0);
+      await route
+        .getByRole('button', { name: 'Edit answer', exact: true })
+        .click();
+      await page.locator('#multi-busy_route-email').check();
+      await page.locator('#multi-busy_route-teams').check();
+      await page
+        .getByRole('button', {
+          name: '5 Your playbook, in your words',
+          exact: true,
+        })
+        .click();
+      await expect(route.locator('.choice-match')).toHaveText('Same choices');
+      await format
+        .getByRole('button', { name: 'Edit answer', exact: true })
+        .click();
+      await page.locator('#choice-meeting_format').selectOption('teams');
+      await page
+        .locator('#choice-meeting_frequency')
+        .selectOption('fortnightly');
+      await page
+        .getByRole('button', {
+          name: '5 Your playbook, in your words',
+          exact: true,
+        })
+        .click();
+      await expect(format.locator('.choice-match')).toHaveText('Same choice');
+      await expect(frequency.locator('.choice-match')).toHaveCount(0);
+      await format.locator('textarea').fill('Teams when my schedule allows.');
+      await expect(format.locator('.choice-match')).toHaveCount(0);
+      await expect(format.locator('.peer-wording')).toHaveText(
+        'Microsoft Teams',
+      );
+      await format
+        .getByRole('button', { name: 'Restore generated wording', exact: true })
+        .click();
+      await expect(format.locator('.choice-match')).toHaveText('Same choice');
+      await format
+        .getByRole('button', { name: 'Edit answer', exact: true })
+        .click();
+      await page.locator('#choice-meeting_format').selectOption('in_person');
+      await page
+        .getByRole('button', {
+          name: '5 Your playbook, in your words',
+          exact: true,
+        })
+        .click();
+      await expect(format.locator('.choice-match')).toHaveCount(0);
+      await expect(route.locator('.choice-match')).toHaveText('Same choices');
       await ideal
         .locator('textarea')
         .fill('I will mentor one student project.');
@@ -3243,7 +3312,10 @@ try {
       ).rows[0].responses;
       assert.deepEqual(saved.map((r) => r.id).sort(), [
         'note-spark',
+        'q-busy_route',
         'q-ideal_responsibilities',
+        'q-meeting_format',
+        'q-meeting_frequency',
         'q-spark',
       ]);
       assert.ok(!JSON.stringify(saved).includes('Shared words only'));
@@ -3273,6 +3345,7 @@ try {
         })
         .click();
       await expect(page.locator('.peer-responses')).toHaveCount(0);
+      await expect(page.locator('.choice-match')).toHaveCount(0);
       await expect(page.locator('#main')).not.toContainText(
         'Shared words only',
       );

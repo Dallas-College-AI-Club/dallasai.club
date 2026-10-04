@@ -1676,6 +1676,35 @@ input:invalid {
   color: var(--mint);
   margin: 34px 0 16px;
 }
+.match-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.match-heading h3 {
+  flex: 1 1 320px;
+  margin: 0;
+}
+.choice-match-slot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.choice-match-slot:empty {
+  display: none;
+}
+.choice-match {
+  color: var(--mint);
+  border: 1px solid var(--mint);
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
 .answer-comparison {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);

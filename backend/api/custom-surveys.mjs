@@ -285,13 +285,14 @@ export function customSurveysHandler({
             : await currentResponses(db, survey.id, member.advisor_id),
         });
       }
+      // 30 answers of 5,000 characters at up to 3 UTF-8 bytes each, plus JSON.
       if (action === 'submit' && req.method === 'POST')
         return send(res, 200, {
           receipt: await submitSurvey(
             db,
             req,
             link,
-            await jsonBody(req, 150000),
+            await jsonBody(req, 500000),
           ),
         });
       throw new RequestError(404, 'Survey action unavailable.');

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { formsHandler, confirmations } from '../api/forms.mjs';
+import { changeSubmission } from '../lib/submission-management.mjs';
 import { testDatabase } from './helpers/db.mjs';
 
 // The public forms post to this handler. These checks run it end to end and
@@ -117,4 +118,124 @@ test('the spam trap answers politely and saves nothing', async () => {
   );
   assert.equal(response.status, 200);
   assert.deepEqual(await rows(), []);
+});
+
+const resubmissions = async () =>
+  (
+    await db.query(
+      'SELECT a.action,a.actor,c.body FROM club_forms.audit a JOIN club_forms.entry_comments c ON c.id=a.comment_id ORDER BY a.id',
+    )
+  ).rows;
+test('a repeated signup with new details reaches the officers; an identical one changes nothing', async () => {
+  const signup = form('join', { interests: 'Robotics' });
+  assert.equal((await (await post(signup)).json()).message, confirmations.join);
+  await db.query("UPDATE club_forms.entries SET review_status='closed'");
+  const same = await post({
+    ...signup,
+    email: ' STUDENT@example.edu ',
+    requestId: randomUUID(),
+  });
+  assert.equal((await same.json()).message, confirmations.join);
+  assert.equal((await rows())[0].review_status, 'closed');
+  assert.deepEqual(await resubmissions(), []);
+  const changed = {
+    ...signup,
+    requestId: randomUUID(),
+    name: 'Test Student Jr',
+    campus: 'Eastfield',
+    interests: '',
+  };
+  const updated = await post(changed);
+  assert.equal(updated.status, 200);
+  // The usual reply: the form must not reveal that the address was known.
+  assert.equal((await updated.json()).message, confirmations.join);
+  const [saved, ...others] = await rows();
+  assert.equal(others.length, 0);
+  assert.equal(saved.review_status, 'new');
+  assert.equal(saved.name, 'Test Student');
+  assert.deepEqual(saved.data, { campus: 'Richland', interests: 'Robotics' });
+  // Anyone can type an address, so the note is the website's, not the member's.
+  assert.deepEqual(await resubmissions(), [
+    {
+      action: 'resubmitted',
+      actor: 'website',
+      body: 'Unverified details submitted through the public website:\nName: Test Student Jr\nCampus: Eastfield\nInterests: (blank)',
+    },
+  ]);
+  assert.deepEqual(
+    (
+      await db.query('SELECT author_email FROM club_forms.entry_comments')
+    ).rows.map((r) => r.author_email),
+    ['website'],
+  );
+  // Sending the same new details again adds nothing for officers to redo.
+  await db.query("UPDATE club_forms.entries SET review_status='reviewed'");
+  const again = await post({ ...changed, requestId: randomUUID() });
+  assert.equal((await again.json()).message, confirmations.join);
+  assert.equal((await rows())[0].review_status, 'reviewed');
+  assert.equal((await resubmissions()).length, 1);
+  // A newsletter signup has no details beyond the address.
+  const subscribe = form('subscribe');
+  for (const requestId of [subscribe.requestId, randomUUID()])
+    assert.equal(
+      (await (await post({ ...subscribe, requestId })).json()).message,
+      confirmations.subscribe,
+    );
+  assert.equal((await resubmissions()).length, 1);
+});
+
+test('after a resubmission and a permanent delete, no audit row names the member', async () => {
+  const signup = form('join', { interests: 'Robotics' });
+  await post(signup);
+  await post({ ...signup, requestId: randomUUID(), interests: 'Art' });
+  const entry = (
+    await db.query('SELECT id,edit_revision FROM club_forms.entries')
+  ).rows[0];
+  await db.query("UPDATE club_forms.entries SET review_status='closed'");
+  const deleted = await changeSubmission(
+    db,
+    {
+      action: 'delete-submission',
+      entryId: entry.id,
+      requestId: randomUUID(),
+      expectedRevision: entry.edit_revision,
+    },
+    'officer@example.com',
+  );
+  assert.equal(deleted.deleted, true);
+  const audit = (await db.query('SELECT * FROM club_forms.audit')).rows;
+  assert.deepEqual(audit.map((r) => r.action).sort(), [
+    'resubmitted',
+    'submission-permanently-deleted',
+  ]);
+  assert.ok(
+    !JSON.stringify(audit).toLowerCase().includes('student@example.edu'),
+    JSON.stringify(audit),
+  );
+});
+
+test('one address can send 60 public forms an hour before it is limited', async () => {
+  process.env.FORM_TOKEN_SECRET = 'forms-quota-test-' + 'x'.repeat(40);
+  const limited = http.createServer(
+    formsHandler({ getDatabase: () => db, getEvents: async () => events }),
+  );
+  await new Promise((resolve) => limited.listen(0, '127.0.0.1', resolve));
+  const url = `http://127.0.0.1:${limited.address().port}/api/forms`;
+  try {
+    const statuses = [];
+    // The spam trap answers without saving, so only the quota is exercised.
+    for (let i = 0; i < 61; i++)
+      statuses.push(
+        (
+          await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Origin: site },
+            body: JSON.stringify(form('join', { website: 'x' })),
+          })
+        ).status,
+      );
+    assert.deepEqual(statuses, [...Array(60).fill(200), 429]);
+  } finally {
+    await new Promise((resolve) => limited.close(resolve));
+  }
 });

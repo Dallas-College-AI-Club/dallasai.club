@@ -1,5 +1,6 @@
 import { node } from './ui.js';
 import { activityTime } from './event-activity.js';
+import { drafts } from './session.js';
 const actions = {
   'review:new': 'Marked new',
   'review:reviewed': 'Marked reviewed',
@@ -7,8 +8,24 @@ const actions = {
   'download-attachment': 'Downloaded an attachment',
   'comment-added': 'Added a comment',
   'submission-edited': 'Edited response',
+  resubmitted: 'Updated details from the website (unverified)',
+  'survey-summary': 'Compiled a survey summary',
+  'survey-export-csv': 'Exported survey responses',
+  'contact-purged': 'Permanently deleted a test contact',
 };
-export function submissionActivity(entry, api, drafts) {
+// Codes such as survey-export-csv:<event> carry details after the colon.
+const actionLabel = (action) =>
+  actions[action] || actions[action.split(':')[0]] || action;
+// The comment draft lives in the drafts store as note:<entryId>, so it
+// survives re-renders and re-authentication. onDraft runs when it changes.
+export function submissionActivity(entry, api, onDraft = () => {}) {
+  const key = 'note:' + entry.id,
+    remember = (draft) =>
+      drafts.set(
+        key,
+        { ...draft, email: entry.email },
+        'Comment on ' + (entry.name || entry.email) + '’s submission',
+      );
   const panel = node('details', undefined, 'submission-activity');
   panel.append(node('summary', 'Activity & comments'));
   panel.append(
@@ -48,16 +65,26 @@ export function submissionActivity(entry, api, drafts) {
       );
       if (!panel.isConnected) return;
       for (const item of data.activity) {
-        const row = node('li', undefined, 'activity-item');
-        const time = node('time', activityTime(item.created_at));
+        // New details sent through the website are a system event, not an
+        // officer's comment.
+        const system = item.action === 'resubmitted',
+          row = node('li', undefined, 'activity-item'),
+          time = node('time', activityTime(item.created_at));
         time.dateTime = item.created_at;
+        row.classList.toggle('system-event', system);
         row.append(
-          node('strong', actions[item.action] || item.action),
-          node('span', 'By ' + item.actor, 'activity-actor'),
+          node('strong', actionLabel(item.action)),
+          node(
+            'span',
+            system ? 'From the website' : 'By ' + item.actor,
+            'activity-actor',
+          ),
           time,
         );
         if (item.comment !== null && item.comment !== undefined)
-          row.append(node('p', item.comment, 'officer-comment'));
+          row.append(
+            node('p', item.comment, system ? 'system-note' : 'officer-comment'),
+          );
         list.append(row);
       }
       before = data.nextBefore;
@@ -91,11 +118,12 @@ export function submissionActivity(entry, api, drafts) {
   input.rows = 3;
   input.maxLength = 5000;
   input.required = true;
-  input.value = drafts.get(entry.id)?.text || '';
+  input.value = drafts.get(key)?.text || '';
   input.oninput = () => {
-    if (input.value)
-      drafts.set(entry.id, { text: input.value, id: crypto.randomUUID() });
-    else drafts.delete(entry.id);
+    if (input.value.trim())
+      remember({ text: input.value, id: crypto.randomUUID() });
+    else drafts.delete(key);
+    onDraft();
   };
   label.append(input);
   const button = node('button', 'Add comment');
@@ -106,11 +134,11 @@ export function submissionActivity(entry, api, drafts) {
   form.onsubmit = async (event) => {
     event.preventDefault();
     if (button.disabled || !form.reportValidity()) return;
-    const draft = drafts.get(entry.id) || {
+    const draft = drafts.get(key) || {
       text: input.value,
       id: crypto.randomUUID(),
     };
-    drafts.set(entry.id, draft);
+    remember(draft);
     button.disabled = true;
     input.disabled = true;
     saved.textContent = 'Saving comment…';
@@ -121,9 +149,10 @@ export function submissionActivity(entry, api, drafts) {
         commentId: draft.id,
         comment: draft.text,
       });
+      if (drafts.get(key)?.id === draft.id) drafts.delete(key);
       if (!panel.isConnected) return;
-      drafts.delete(entry.id);
       input.value = '';
+      onDraft();
       saved.textContent =
         'Comment saved with this entry. Visible to all authorized club admins.';
       await load(true);

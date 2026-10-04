@@ -4,6 +4,7 @@ import { eventOverview } from './event-overview.js';
 import { mountTextFormatting } from './text-formatting.js';
 import { surveyEditor } from './survey-editor.js';
 import { mountEventActivity, activityTime } from './event-activity.js';
+import { drafts, isPaused } from './session.js';
 const blank = () => ({
   potential: false,
   requireEduEmail: false,
@@ -94,6 +95,7 @@ export function mountEventEditor(api) {
   });
   q('#close-site-preview').onclick = () => dialog.close();
   dialog.addEventListener('close', () => {
+    if (isPaused()) return;
     frame.removeAttribute('src');
     previewData = null;
   });
@@ -441,6 +443,21 @@ export function mountEventEditor(api) {
     event.preventDefault();
     save(event.submitter?.value || 'draft');
   };
+  // Enter in a one-line field, checkbox or radio would submit the form, which
+  // saves the draft. Only the buttons save; Enter in the new type name adds
+  // the type.
+  form.addEventListener('keydown', (event) => {
+    if (
+      event.key !== 'Enter' ||
+      event.isComposing ||
+      !event.target.matches(
+        'input:not([type=file],[type=button],[type=submit],[type=reset],[type=image],[type=color],[type=range])',
+      )
+    )
+      return;
+    event.preventDefault();
+    if (event.target.id === 'new-type-name') q('#add-type').click();
+  });
   q('#new-event').onclick = () => {
     if (canLeave()) newEvent();
   };
@@ -558,15 +575,31 @@ export function mountEventEditor(api) {
       if (version === generation) renderImages();
     }
   };
-  window.addEventListener('beforeunload', (event) => {
-    if (dirty() || busy) {
-      event.preventDefault();
-      event.returnValue = '';
-    }
-  });
+  // The form holds the unsaved event; report it to the drafts store.
+  drafts.track(() =>
+    current && (dirty() || busy)
+      ? [
+          {
+            key:
+              'event:' +
+              (current.revision || current.published ? current.id : 'new'),
+            label:
+              'Event “' +
+              (form.elements.title.value.trim() || 'Untitled event') +
+              '”',
+          },
+        ]
+      : [],
+  );
   return {
     show: load,
     canLeave,
+    // Ten minutes paused: drop the event list, keep the editor.
+    reset() {
+      loadGeneration++;
+      rows = [];
+      q('#event-list').replaceChildren();
+    },
     leave() {
       if (!canLeave()) return false;
       discardEdits();
@@ -586,7 +619,10 @@ export function mountEventEditor(api) {
       rows = [];
       images = [];
       renderImages();
+      // A preview closed for re-authentication kept its content; drop it too.
       if (dialog.open) dialog.close();
+      frame.removeAttribute('src');
+      previewData = null;
       saved = '';
       form.reset();
       survey.set();

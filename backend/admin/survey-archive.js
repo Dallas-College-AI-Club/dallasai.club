@@ -51,9 +51,18 @@ export function mountSurveyArchive(root, api) {
             ),
           );
         section.append(
-          responseSections([{ ...response, active: true }], {
-            definition: response.definition,
-          }),
+          responseSections(
+            [
+              {
+                ...response,
+                display_name: response.display_name || response.email,
+                active: true,
+              },
+            ],
+            {
+              definition: response.definition,
+            },
+          ),
         );
         const link = node('a', 'Manage respondent access in Custom surveys');
         link.href = '#custom-survey=' + response.survey_id;

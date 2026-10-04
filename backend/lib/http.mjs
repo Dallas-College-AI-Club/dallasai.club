@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, randomBytes } from 'node:crypto';
 import { RequestError } from './errors.mjs';
 
 export function send(res, status, body) {
@@ -9,18 +9,27 @@ export function send(res, status, body) {
   res.end(status === 204 ? undefined : JSON.stringify(body));
 }
 export function fail(res, error) {
-  if (!(error instanceof RequestError))
+  const known = error instanceof RequestError;
+  // The reference lets an officer quote a failure; logs never get request data.
+  const reference = known ? undefined : randomBytes(4).toString('hex');
+  if (!known)
     console.error('Club forms request failed', {
+      reference,
       code: error.code || 'internal',
     });
   // A response that already started streaming cannot carry an error body.
   if (res.headersSent) return res.destroy();
-  return send(res, error instanceof RequestError ? error.status : 503, {
-    error:
-      error instanceof RequestError
-        ? error.message
-        : 'This service is temporarily unavailable. Your information has not been cleared; please try again.',
-  });
+  return send(
+    res,
+    known ? error.status : 503,
+    known
+      ? { error: error.message, ...error.details }
+      : {
+          error:
+            'This service is temporarily unavailable. Your information has not been cleared; please try again.',
+          reference,
+        },
+  );
 }
 export function cors(req, res) {
   const allowed = new Set([
@@ -51,7 +60,7 @@ export function cors(req, res) {
 }
 export async function rawBody(req, max = 3000000) {
   if (Number(req.headers['content-length']) > max)
-    throw new RequestError(413, 'Keep all attachments under 2 MB in total.');
+    throw new RequestError(413, 'This submission is too large.');
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {

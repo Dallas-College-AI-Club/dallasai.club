@@ -150,20 +150,12 @@ export async function changeSubmission(
         throw new RequestError(404, 'Survey response not found.');
       let contactRemoved = false;
       if (deleting) {
-        const state = (
-          await tx.query(
-            'SELECT archived_at FROM club_forms.survey_response_state WHERE entry_id=$1 FOR UPDATE',
-            [entry.id],
-          )
-        ).rows[0];
-        if (
-          surface === 'survey'
-            ? !state?.archived_at
-            : entry.review_status !== 'closed'
-        )
+        // One gate on both surfaces: only an entry archived in Inbox can be
+        // deleted. Archiving a survey response alone hides it from results.
+        if (entry.review_status !== 'closed')
           throw new RequestError(
             409,
-            'Archive this response before permanently deleting it.',
+            `Archive this ${entry.kind === 'rsvp' ? 'RSVP' : 'submission'} in Inbox before deleting it permanently.`,
           );
         await tx.query(
           'INSERT INTO club_forms.contact_file_deletions(pathname) SELECT pathname FROM club_forms.attachments WHERE entry_id=$1 ON CONFLICT DO NOTHING',

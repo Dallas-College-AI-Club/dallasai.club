@@ -317,18 +317,40 @@ test('archive-only deletion cascades response details, retries safely, removes o
     1,
   );
 });
-test('survey archive permits permanent deletion and removes the Inbox entry too', async () => {
+test('permanent deletion needs the Inbox archive on both surfaces; a survey archive alone is not enough', async () => {
   const id = await seed();
-  assert.equal((await request('/api/surveys', remove(id))).status, 409);
   await manageResponse(
     db,
     { action: 'archive', entryId: id, value: true },
     actor,
   );
+  for (const path of ['/api/surveys', '/api/admin']) {
+    const refused = await request(path, remove(id));
+    assert.equal(refused.status, 409, path);
+    assert.equal(
+      (await refused.json()).error,
+      'Archive this RSVP in Inbox before deleting it permanently.',
+    );
+  }
+  assert.equal((await request('/api/admin?edit=' + id)).status, 200);
+  await request('/api/admin', { action: 'review', id, status: 'closed' });
   const body = remove(id);
   assert.equal((await request('/api/surveys', body)).status, 200);
   assert.equal((await request('/api/surveys', body)).status, 200);
   assert.equal((await request('/api/admin?edit=' + id)).status, 404);
+  const question = await seed({ kind: 'question', survey: false });
+  const refused = await request('/api/admin', remove(question));
+  assert.equal(refused.status, 409);
+  assert.equal(
+    (await refused.json()).error,
+    'Archive this submission in Inbox before deleting it permanently.',
+  );
+  await request('/api/admin', {
+    action: 'review',
+    id: question,
+    status: 'closed',
+  });
+  assert.equal((await request('/api/admin', remove(question))).status, 200);
 });
 test('deletion retains identities with another alias submission or independent contact notes', async () => {
   const id = await seed({ archived: true, email: 'old@example.edu' });

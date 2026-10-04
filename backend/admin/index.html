@@ -45,7 +45,10 @@
       <section id="login" hidden>
         <p class="eyebrow">FOR CLUB OFFICERS</p>
         <h1>Good things start here.</h1>
-        <p>Enter your club officer email. We will send you a sign-in code.</p>
+        <p id="login-intro">
+          Enter your club officer email. We will send you a sign-in code.
+        </p>
+        <p id="reauth-note" hidden></p>
         <form id="login-form">
           <label
             >Email address<input
@@ -54,6 +57,11 @@
               autocomplete="username"
               required
           /></label>
+          <p id="reauth-email-hint" class="hint" hidden>
+            Locked to the account that was signed in. To switch, choose “Use a
+            different account”.
+          </p>
+          <p id="login-error" role="alert" hidden></p>
           <button type="submit">Send sign-in code</button>
         </form>
         <form id="code-form" hidden>
@@ -64,9 +72,6 @@
               type="text"
               inputmode="numeric"
               autocomplete="one-time-code"
-              pattern="[0-9]{6}"
-              minlength="6"
-              maxlength="6"
               required
           /></label>
           <button type="submit">Sign in</button>
@@ -81,16 +86,37 @@
             may expire.
           </p>
         </form>
+        <div class="login-links" hidden>
+          <button type="button" id="reauth-other" class="secondary">
+            Use a different account
+          </button>
+          <button type="button" id="reauth-signout" class="secondary danger">
+            Sign out and discard unsaved work
+          </button>
+        </div>
         <p class="hint">
           Access is limited to approved club officers. No password is needed.
           Stay signed in for 3 days on this browser.
         </p>
       </section>
+      <section id="load-error" aria-labelledby="load-error-heading" hidden>
+        <h1 id="load-error-heading" tabindex="-1">Club Office couldn’t load</h1>
+        <p id="load-error-message"></p>
+        <p id="load-error-identity" class="hint"></p>
+        <button type="button" id="load-error-retry">Try again</button>
+      </section>
+      <section id="not-officer" aria-labelledby="not-officer-heading" hidden>
+        <h1 id="not-officer-heading" tabindex="-1">
+          Not a club officer account
+        </h1>
+        <p id="not-officer-message"></p>
+        <button type="button" id="not-officer-signout">Sign out</button>
+      </section>
       <section id="office" hidden>
         <div class="office-intro">
           <div>
             <p class="eyebrow">THE OFFICER WORKSPACE</p>
-            <h1>Your club office</h1>
+            <h1 tabindex="-1">Your club office</h1>
             <p class="intro-copy">A little planning. A lot of possibility.</p>
           </div>
           <p id="identity"></p>
@@ -301,6 +327,9 @@
             This inbox refreshes every minute while open. Narrow the filters to
             10,000 matching records or fewer before exporting CSV.
           </p>
+          <h2 class="visually-hidden" tabindex="-1" data-focus-fallback>
+            Submissions
+          </h2>
           <div id="entries"></div>
           <section
             id="archived-survey-questions"
@@ -324,7 +353,7 @@
           <section id="custom-surveys-root" hidden></section>
           <section id="event-surveys-root">
             <div class="heading">
-              <h2>Surveys</h2>
+              <h2 tabindex="-1" data-focus-fallback>Surveys</h2>
               <button id="survey-reload">Refresh</button>
             </div>
             <p>

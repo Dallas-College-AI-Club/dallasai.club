@@ -180,7 +180,7 @@ try {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page
     .getByText(
-      'That code could not be verified. Check the latest email, or request a new code.',
+      'That code is wrong or has expired. Use the newest email, or send a new code.',
       { exact: true },
     )
     .waitFor();
@@ -198,14 +198,28 @@ try {
     else if (typeof value === 'boolean') await input.setChecked(value);
     else await input.fill(Array.isArray(value) ? value.join('\n') : value);
   }
+  // Enter in a one-line field must not save; Enter in the type name adds it.
+  const eventPosts = [];
+  const countPost = (request) => {
+    if (request.method() === 'POST' && request.url().endsWith('/api/events'))
+      eventPosts.push(request.postDataJSON().action);
+  };
+  page.on('request', countPost);
+  await page.locator('#event-form [name="title"]').press('Enter');
+  await page.locator('#event-form [name="location"]').press('Enter');
+  await page.locator('#event-form [name="registrationOpen"]').press('Enter');
+  await page.waitForTimeout(300);
+  assert.deepEqual(eventPosts, [], 'Enter in a one-line field saved the form');
   await page.getByText('Manage event types', { exact: true }).click();
   if (!(await page.locator('#event-form').isVisible()))
     await page.locator('#edit-selected-event').click();
   await page.locator('#new-type-name').fill('Study group');
-  await page.getByRole('button', { name: 'Add type', exact: true }).click();
+  await page.locator('#new-type-name').press('Enter');
   await page
     .getByText('Type is available to all admins.', { exact: true })
     .waitFor();
+  assert.deepEqual(eventPosts, ['add-type']);
+  page.off('request', countPost);
   assert.equal(
     await page.locator('[name="category"]').inputValue(),
     'Study group',

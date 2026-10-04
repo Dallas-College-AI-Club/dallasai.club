@@ -105,8 +105,9 @@ export async function rememberDevice(db, survey, user) {
       )
     ).rows[0];
     if (!member && current.definition?.permissions.answer === 'verified') {
+      // Other respondents may see this name, so it is never the email address.
       const id = randomUUID(),
-        name = (user.name || user.email).slice(0, 120),
+        name = (user.name || '').trim().slice(0, 120),
         email = user.email.toLowerCase();
       member = (
         await tx.query(

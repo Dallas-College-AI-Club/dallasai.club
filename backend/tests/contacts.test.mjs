@@ -211,7 +211,6 @@ test('permanent test deletion removes linked answers, comments, notes, audit and
     'contact_notes',
     'entry_comments',
     'attachments',
-    'audit',
     'contact_activity',
     'contact_file_deletions',
   ])
@@ -221,6 +220,19 @@ test('permanent test deletion removes linked answers, comments, notes, audit and
       0,
       table,
     );
+  // Only a receipt is left: who purged, a hash prefix and counts, no address.
+  const receipt = (
+    await db.query('SELECT actor,entry_id,action FROM club_forms.audit')
+  ).rows;
+  assert.deepEqual(receipt, [
+    {
+      actor,
+      entry_id: null,
+      action: 'contact-purged:entries=2:notes=1:files=1',
+    },
+  ]);
+  for (const text of [first, second, 'student', 'dallascollege', 'Member'])
+    assert.ok(!JSON.stringify(receipt).includes(text), text);
   await assert.rejects(contact(first), { status: 404 });
 });
 test('failed file cleanup remains queued and can be retried without retaining test contact data', async () => {

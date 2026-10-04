@@ -4,7 +4,13 @@ import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { fixture } from './helpers/custom-survey-fixture.mjs';
 import { definition, canonicalResponse } from '../lib/survey-contract.mjs';
-import { rememberDevice, submitSurvey } from '../lib/custom-surveys.mjs';
+import {
+  rememberDevice,
+  submitSurvey,
+  linkedSurvey,
+  privateSurveyToken,
+} from '../lib/custom-surveys.mjs';
+import { changeDraft, FORM_VERSION } from '../lib/survey-builder.mjs';
 let f, server, origin, cookie;
 const rank = () => ({
   id: 'q-spark',
@@ -422,4 +428,182 @@ test('officers can retrieve the expiring private link without being able to subm
       .status,
     401,
   );
+});
+
+// Builder surveys below are created last, so the catalog test above still sees
+// the Advisor Studio round first.
+const textQuestion = (title) => ({
+  id: randomUUID(),
+  title,
+  description: '',
+  type: 'text',
+  required: true,
+  options: [],
+});
+async function publicSurvey(results, questions) {
+  const id = randomUUID(),
+    definition = {
+      template: 'blank',
+      title: 'Open feedback',
+      intro: '',
+      audience: 'public',
+      permissions: { preview: 'link', answer: 'verified', results },
+      durationDays: 30,
+      questions,
+    };
+  for (const [expectedRevision, action] of [
+    [0, 'save'],
+    [1, 'publish'],
+  ])
+    await changeDraft(
+      f.db,
+      { email: 'officer@example.com' },
+      { id, requestId: randomUUID(), expectedRevision, action, definition },
+    );
+  return { id, link: privateSurveyToken(id) };
+}
+async function respondent(link, name) {
+  const device = await request(
+    'verify-device',
+    {},
+    { link, cookie: 'test-neon=' + name },
+  );
+  assert.equal(device.status, 200);
+  return device.headers.getSetCookie()[0].split(';')[0];
+}
+async function answer(link, cookie, consent, answers, expectedRevision = 0) {
+  const { advisorId } = await (
+    await request('bootstrap', undefined, { link, cookie })
+  ).json();
+  return request(
+    'submit',
+    {
+      requestId: randomUUID(),
+      expectedRevision,
+      contentVersion: FORM_VERSION,
+      advisorId,
+      consent,
+      answers,
+    },
+    { link, cookie },
+  );
+}
+test('respondents never see another respondent’s email address; officers still do', async () => {
+  const question = textQuestion('Comments');
+  const { id, link } = await publicSurvey('respondents', [question]);
+  // Joined before the fix, when an email address could be stored as the name.
+  await f.db.query(
+    "INSERT INTO club_forms.custom_survey_members(survey_id,advisor_id,display_name,email) VALUES($1,'legacy','legacy@example.com','legacy@example.com')",
+    [id],
+  );
+  const legacy = await respondent(link, 'legacy'),
+    newcomer = await respondent(link, 'newcomer');
+  const names = async () =>
+    (
+      await f.db.query(
+        'SELECT email,display_name FROM club_forms.custom_survey_members WHERE survey_id=$1 ORDER BY email',
+        [id],
+      )
+    ).rows.map((r) => [r.email, r.display_name]);
+  assert.deepEqual(await names(), [
+    ['legacy@example.com', 'legacy@example.com'],
+    ['newcomer@example.com', ''],
+  ]);
+  const survey = await linkedSurvey(f.db, link);
+  const named = await rememberDevice(f.db, survey, {
+    id: 'neon-named',
+    email: 'named@example.com',
+    name: '  Ana Lee  ',
+    emailVerified: true,
+  });
+  assert.equal(named.member.display_name, 'Ana Lee');
+  for (const [cookie, value] of [
+    [legacy, 'Thanks'],
+    [newcomer, 'Useful session'],
+  ])
+    assert.equal(
+      (await answer(link, cookie, 'respondents', [{ id: question.id, value }]))
+        .status,
+      200,
+    );
+  const read = async (action, cookie) =>
+    (await request(action, undefined, { link, cookie })).json();
+  const bootstrap = await read('bootstrap', newcomer),
+    shared = await read('shared-results', newcomer),
+    other = await read('shared-results', legacy);
+  for (const payload of [bootstrap, shared, other.results])
+    assert.ok(!JSON.stringify(payload).includes('@'), JSON.stringify(payload));
+  // Numbered by first submission, the same for every viewer.
+  assert.deepEqual(
+    shared.results.map((r) => r.display_name),
+    ['Respondent 1'],
+  );
+  assert.ok(bootstrap.results.some((r) => r.display_name === 'Respondent 1'));
+  assert.deepEqual(
+    other.results.map((r) => r.display_name),
+    ['Respondent 2'],
+  );
+  // An edit (which moves submitted_at) renumbers no one.
+  assert.equal(
+    (
+      await answer(
+        link,
+        legacy,
+        'respondents',
+        [{ id: question.id, value: 'Thanks again' }],
+        1,
+      )
+    ).status,
+    200,
+  );
+  assert.deepEqual(
+    (await read('shared-results', newcomer)).results.map((r) => [
+      r.display_name,
+      r.responses[0].text,
+    ]),
+    [['Respondent 1', 'Thanks again']],
+  );
+  assert.deepEqual(
+    (await read('shared-results', legacy)).results.map((r) => r.display_name),
+    ['Respondent 2'],
+  );
+  const officer = await (
+    await request('results', undefined, {
+      cookie: 'test-officer=yes',
+      params: { id },
+    })
+  ).json();
+  assert.deepEqual(
+    officer.results.map((r) => [r.email, r.display_name]).sort(),
+    [
+      ['legacy@example.com', 'legacy@example.com'],
+      ['newcomer@example.com', ''],
+    ],
+  );
+});
+test('the largest valid custom-form submission is accepted; a larger body gets a plain message', async () => {
+  const questions = Array.from({ length: 30 }, (_, i) =>
+    textQuestion('Question ' + (i + 1)),
+  );
+  const { link } = await publicSurvey('admins', questions);
+  const cookie = await respondent(link, 'writer');
+  // 5,000 characters per answer: quotes are escaped in JSON and each Hangul
+  // syllable is 3 bytes, the most a valid character costs.
+  const value = '"' + '한'.repeat(4998) + '"';
+  const answers = questions.map((q) => ({ id: q.id, value }));
+  const response = await answer(link, cookie, 'admins', answers);
+  assert.equal(response.status, 200);
+  const stored = (
+    await f.db.query(
+      "SELECT responses FROM club_forms.custom_survey_responses WHERE advisor_id IN (SELECT advisor_id FROM club_forms.custom_survey_members WHERE email='writer@example.com')",
+    )
+  ).rows[0].responses;
+  assert.equal(stored.length, 30);
+  assert.equal(stored[29].text, value);
+  const tooLarge = await answer(link, cookie, 'admins', [
+    ...answers,
+    { id: randomUUID(), value: 'x'.repeat(60000) },
+  ]);
+  assert.equal(tooLarge.status, 413);
+  assert.equal((await tooLarge.json()).error, 'This submission is too large.');
 });

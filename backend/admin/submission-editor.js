@@ -1,4 +1,5 @@
 import { lock, node } from './ui.js';
+import { drafts } from './session.js';
 const fields = {
   subscribe: [],
   rsvp: [],
@@ -37,6 +38,7 @@ export function submissionEditor(api, onSaved) {
   document.body.append(dialog);
   let generation = 0,
     busy = false,
+    entryId = '',
     dirty = () => false;
   function canClose() {
     return (
@@ -47,12 +49,13 @@ export function submissionEditor(api, onSaved) {
     event.preventDefault();
     if (canClose()) clear();
   });
-  window.addEventListener('beforeunload', (event) => {
-    if (dialog.open && (busy || dirty())) {
-      event.preventDefault();
-      event.returnValue = '';
-    }
-  });
+  // Unsaved edits stay in the dialog's form, also while it is closed for
+  // re-authentication; report them to the drafts store.
+  drafts.track(() =>
+    busy || dirty()
+      ? [{ key: 'response:' + entryId, label: 'Edits to a submission' }]
+      : [],
+  );
   function clear() {
     generation++;
     busy = false;
@@ -62,6 +65,7 @@ export function submissionEditor(api, onSaved) {
   }
   async function open(id, { surface = 'inbox', remove = false } = {}) {
     const version = ++generation;
+    entryId = id;
     const title = node(
       'h2',
       remove ? 'Permanently delete response?' : 'Edit response',

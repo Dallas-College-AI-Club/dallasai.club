@@ -2,6 +2,13 @@ import { node } from './ui.js';
 import { mountRespondents } from './survey-respondents.js';
 import { mountSurveyBuilder } from './survey-builder.js';
 import { responseSections } from '../surveys/results-ui.js';
+// Self-registered respondents may have no display name; officers see the
+// email instead. Respondent-facing pages keep their own masking.
+const named = (results) =>
+  results.map((result) => ({
+    ...result,
+    display_name: result.display_name || result.email,
+  }));
 export function mountCustomSurveys(root, api) {
   let generation = 0,
     selected = '',
@@ -234,7 +241,7 @@ export function mountCustomSurveys(root, api) {
           }
           content.append(
             node('h3', 'Submitted responses'),
-            responseSections(data.results, {
+            responseSections(named(data.results), {
               definition: data.resultsDefinition,
             }),
           );
@@ -257,7 +264,7 @@ export function mountCustomSurveys(root, api) {
               if (current !== generation || request !== requestGeneration)
                 return;
               content.insertBefore(
-                responseSections(page.results, {
+                responseSections(named(page.results), {
                   definition: data.resultsDefinition,
                 }),
                 more,
@@ -301,10 +308,19 @@ export function mountCustomSurveys(root, api) {
       }
     }
   }
+  let dropped = false;
   return {
     load,
-    canLeave() {
-      return builder?.canLeave() !== false;
+    // Ten minutes paused: drop shown results unless the builder is open.
+    reset() {
+      if (builder) return;
+      generation++;
+      dropped = true;
+      root.replaceChildren();
+    },
+    refresh() {
+      if (dropped) load();
+      dropped = false;
     },
     leave() {
       if (builder?.canLeave() === false) return false;

@@ -135,8 +135,8 @@ the review session's code-quality plan and redesign spec, saved outside the repo
 - **Vercel settings.** `AUTH_DATABASE_URL` and `BETTER_AUTH_SECRET` are no longer read and are
   still set in production. Remove them after the next deploy.
 - **Email-queue schema.** A future migration 019 can drop `outbox`, `webhook_events`,
-  `queue_new_entry()` and `entries.email_verified`. The daily maintenance `DELETE` on
-  `webhook_events` has nothing to delete after 2026-10-20.
+  `queue_new_entry()` and `entries.email_verified`. The daily maintenance no longer
+  touches `webhook_events`; nothing has written to it since 2026-09-20.
 - **Advisor Studio.** The round `advisor-studio-2026` is open until 2026-11-02 UTC. Moving its
   questions into Neon was approved, in this order:
   1. Replace the `definition IS NULL` checks with an explicit Advisor round check.

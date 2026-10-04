@@ -25,6 +25,7 @@
   --notice: #fff6df;
   --notice-text: #79520a;
   --success: #187055;
+  --danger: #b42335;
   --shadow: 0 4px 24px #1b173b05;
   --radius: 16px;
   background: var(--page);
@@ -63,7 +64,7 @@ button {
   cursor: pointer;
   transition: box-shadow 0.15s;
 }
-button:hover:not(:disabled) {
+button:hover:not(:disabled, [aria-disabled='true']) {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 14%, transparent);
 }
 button.secondary,
@@ -72,9 +73,22 @@ button.secondary,
   background: var(--surface);
   border-color: var(--line);
 }
-button:disabled {
+button:disabled,
+button[aria-disabled='true'] {
   opacity: 0.5;
   cursor: wait;
+}
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+[aria-invalid='true'] {
+  border-color: var(--danger);
 }
 input,
 select,
@@ -693,7 +707,9 @@ input::file-selector-button {
   margin-top: 24px;
   font-size: 12px;
 }
-#login {
+#login,
+#load-error,
+#not-officer {
   max-width: 500px;
   margin: 6vh auto;
   padding: 36px;
@@ -702,7 +718,9 @@ input::file-selector-button {
   border-radius: 24px;
   box-shadow: var(--shadow);
 }
-#login h1 {
+#login h1,
+#load-error h1,
+#not-officer h1 {
   font-size: 38px;
 }
 #login > p:not(.eyebrow) {
@@ -713,8 +731,42 @@ input::file-selector-button {
   gap: 16px;
   margin: 24px 0;
 }
-#code-instructions {
+#code-instructions,
+#reauth-note,
+#load-error p,
+#not-officer p {
   overflow-wrap: anywhere;
+}
+#login-error {
+  margin: 0;
+  color: var(--danger);
+  font-weight: 600;
+}
+#login-error::before {
+  content: '!' / '';
+  display: inline-block;
+  width: 1.4em;
+  margin-right: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+  color: var(--surface);
+  text-align: center;
+}
+.login-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+#login .danger {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+/* The re-auth email is locked to the signed-in account. */
+#login input[readonly] {
+  background: var(--subtle);
+  color: var(--muted);
+  border-style: dashed;
+  cursor: not-allowed;
 }
 #site-preview-dialog {
   width: min(1400px, 98vw);
@@ -815,7 +867,9 @@ input::file-selector-button {
   .primary-actions {
     bottom: 6px;
   }
-  #login {
+  #login,
+  #load-error,
+  #not-officer {
     margin: 3vh auto;
     padding: 26px;
   }
@@ -881,6 +935,7 @@ input::file-selector-button {
     --notice: #382d18;
     --notice-text: #ebc77f;
     --success: #80d5b3;
+    --danger: #ff9aa5;
     --shadow: 0 4px 24px #0002;
   }
 }
@@ -904,6 +959,15 @@ input::file-selector-button {
   border-radius: 8px;
   background: var(--subtle);
   color: var(--text);
+  margin: 6px 0 0;
+}
+/* Details sent again through the website: a system event, not a comment. */
+.system-note {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  padding: 8px 12px;
+  border-left: 3px solid var(--line);
+  color: var(--muted);
   margin: 6px 0 0;
 }
 .comment-form {

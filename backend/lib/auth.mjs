@@ -9,8 +9,14 @@ const isAdmin = (email) =>
 // address in ADMIN_EMAILS and the Neon "admin" role.
 export async function requireAdmin(req) {
   const session = await neonSession(req);
+  if (!session?.user)
+    throw new RequestError(
+      401,
+      'Sign in with an authorized club email address.',
+    );
+  // A valid sign-in without officer access gets a code, so the page can say so
+  // instead of asking for the same sign-in again.
   if (
-    !session?.user ||
     !isAdmin(session.user.email) ||
     !String(session.user.role || '')
       .split(',')
@@ -19,7 +25,10 @@ export async function requireAdmin(req) {
   )
     throw new RequestError(
       401,
-      'Sign in with an authorized club email address.',
+      "This account isn't set up as a club officer.",
+      {
+        code: 'not-officer',
+      },
     );
   return session.user;
 }

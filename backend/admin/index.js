@@ -1,16 +1,23 @@
-import { node } from './ui.js';
+import { busy, focusFallback, lock, node } from './ui.js';
 import { mountSurveyResults } from './survey-results.js';
-import { createAuthClient } from 'better-auth/client';
 import { mountCustomSurveys } from './custom-surveys.js';
 import { mountSurveyArchive } from './survey-archive.js';
-import { emailOTPClient } from 'better-auth/client/plugins';
 import { mountEventEditor } from './event-editor.js';
 import { mountBrowserAlerts } from './browser-alerts.js';
 import { submissionActivity } from './submission-activity.js';
 import { activityTime } from './event-activity.js';
 import { submissionEditor } from './submission-editor.js';
-const auth = createAuthClient({ plugins: [emailOTPClient()] }),
-  q = (s) => document.querySelector(s);
+import {
+  accountChanged,
+  api,
+  drafts,
+  isPaused,
+  loadFailed,
+  ready,
+  signedInAgain,
+  startSession,
+} from './session.js';
+const q = (s) => document.querySelector(s);
 const labels = {
   join: 'Club signups',
   subscribe: 'The AI Review subscription',
@@ -26,7 +33,6 @@ let offset = 0,
   sessionGeneration = 0;
 let lastNewCount = null,
   lastReceived = 0;
-const commentDrafts = new Map();
 const alerts = mountBrowserAlerts(
   q('#enable-alerts'),
   q('#notification-status'),
@@ -39,18 +45,25 @@ q('#export').onclick = async (event) => {
   event.preventDefault();
   if (exporting) return;
   exporting = true;
-  const generation = sessionGeneration;
+  const generation = sessionGeneration,
+    href = q('#export').href,
+    get = () =>
+      fetch(href, {
+        credentials: 'same-origin',
+        cache: 'no-store',
+        signal: AbortSignal.timeout(30000),
+      });
   q('#export').setAttribute('aria-disabled', 'true');
   status('Preparing CSV…');
   try {
-    const response = await fetch(q('#export').href, {
-      credentials: 'same-origin',
-      cache: 'no-store',
-      signal: AbortSignal.timeout(30000),
-    });
+    let response = await get();
+    // The session ended: download once the officer has signed in again.
+    if (response.status === 401) {
+      await signedInAgain();
+      response = await get();
+    }
     if (generation !== sessionGeneration) return;
     if (!response.ok) {
-      if (response.status === 401) showLogin();
       const result = await response.json().catch(() => null);
       throw new Error(
         result?.error ||
@@ -71,7 +84,7 @@ q('#export').onclick = async (event) => {
     setTimeout(() => URL.revokeObjectURL(url), 60000);
     status('CSV download started.');
   } catch (error) {
-    if (generation === sessionGeneration || !signedIn)
+    if (generation === sessionGeneration)
       status(
         error.name === 'TypeError' || error.name === 'TimeoutError'
           ? 'Could not download the CSV. Check your connection and try again.'
@@ -82,63 +95,22 @@ q('#export').onclick = async (event) => {
     q('#export').removeAttribute('aria-disabled');
   }
 };
-async function api(path = '/api/admin', body) {
-  const requestSession = sessionGeneration;
-  let response;
-  try {
-    response = await fetch(path, {
-      signal: AbortSignal.timeout(20000),
-      credentials: 'same-origin',
-      ...(body
-        ? {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(body),
-          }
-        : {}),
-    });
-  } catch {
-    throw new Error(
-      'Could not connect to Club Office. Check your connection and try again.',
-    );
-  }
-  const data = await response.json().catch(() => null);
-  if (response.status === 401 && requestSession === sessionGeneration) {
-    showLogin();
-    status('Your session ended. Sign in again to continue.');
-  }
-  if (!data || typeof data !== 'object') {
-    const error = new Error(
-      response.status === 401
-        ? 'Your session ended. Sign in again to continue.'
-        : 'Club Office is temporarily unavailable. Please try again; unsaved text has been kept.',
-    );
-    error.status = response.status >= 400 ? response.status : 503;
-    throw error;
-  }
-  if (!response.ok) {
-    const error = new Error(data.error || 'Please try again.');
-    error.status = response.status;
-    throw error;
-  }
-  return data;
-}
-function showLogin() {
-  q('#session-loading').hidden = true;
+// Runs only on sign-out or when a different account signs in.
+function clearOffice() {
   sessionGeneration++;
   signedIn = false;
   lastNewCount = null;
   lastReceived = 0;
   q('#inbox-alert').textContent = '';
   document.title = 'Club office · Dallas AI Club';
-  q('#login').hidden = false;
-  q('#office').hidden = true;
-  q('#signout').hidden = true;
   q('#entries').replaceChildren();
-  commentDrafts.clear();
-  emailStep();
   q('#events-pane').hidden = true;
   q('#inbox-pane').hidden = false;
+  for (const pane of ['inbox', 'events', 'surveys'])
+    q('#' + pane + '-tab').setAttribute(
+      'aria-pressed',
+      String(pane === 'inbox'),
+    );
   editor.clear();
   surveys.clear();
   customSurveys.clear();
@@ -164,6 +136,7 @@ function renderEntry(entry) {
   const card = node('details', undefined, 'entry survey-response');
   card.id = 'entry-' + entry.id;
   const heading = node('summary');
+  heading.dataset.focus = '';
   heading.append(
     node('strong', entry.name || entry.email),
     node('span', entry.email),
@@ -244,41 +217,88 @@ function renderEntry(entry) {
     remove.onclick = () => responses.open(entry.id, { remove: true });
     actions.append(remove);
   }
-  for (const [value, label] of [
-    ['reviewed', 'Mark reviewed'],
-    ['closed', 'Archive submission'],
-    ['new', 'Mark new'],
+  // While the comment box has text, a status button also saves the note.
+  const statusButtons = [];
+  for (const [value, label, withNote] of [
+    ['reviewed', 'Mark reviewed', 'Save note & mark reviewed'],
+    ['closed', 'Archive submission', 'Save note & archive'],
+    ['new', 'Mark new', 'Save note & mark new'],
   ])
     if (value !== entry.review_status) {
       const b = node('button', label);
-      b.onclick = async () => {
-        b.disabled = true;
-        const version = sessionGeneration;
-        try {
-          await api('/api/admin', {
-            action: 'review',
-            id: entry.id,
-            status: value,
-          });
-          if (version !== sessionGeneration) return;
-          await load();
-          if (version !== sessionGeneration) return;
-          status(
-            value === 'closed'
-              ? 'Submission moved to Archived. Comments and history are kept.'
-              : 'Submission moved to ' +
-                  (value === 'new' ? 'New.' : 'Reviewed.'),
-          );
-        } catch (e) {
-          if (version !== sessionGeneration) return;
-          status(e.message);
-          b.disabled = false;
-        }
-      };
+      b.onclick = () => review(card, entry, value);
+      statusButtons.push([b, label, withNote]);
       actions.append(b);
     }
-  card.append(actions, submissionActivity(entry, api, commentDrafts));
+  const relabel = () => {
+    const note = drafts.get('note:' + entry.id);
+    for (const [b, label, withNote] of statusButtons)
+      b.textContent = note ? withNote : label;
+  };
+  card.append(actions, submissionActivity(entry, api, relabel));
+  relabel();
   return card;
+}
+// One request saves the typed note and the new status together. The note
+// box is locked meanwhile, so the sent text is the whole draft.
+async function review(card, entry, value) {
+  const key = 'note:' + entry.id,
+    note = drafts.get(key),
+    version = sessionGeneration,
+    release = busy(card),
+    unlock = lock(card, 'textarea');
+  try {
+    await api('/api/admin', {
+      action: 'review',
+      id: entry.id,
+      status: value,
+      from: entry.review_status,
+      ...(note ? { comment: { id: note.id, body: note.text.trim() } } : {}),
+    });
+    if (note) drafts.delete(key);
+    if (version !== sessionGeneration) return;
+    // A card dropped while the session was paused just reports the result.
+    if (card.isConnected) removeEntry(card);
+    status(
+      (value === 'closed'
+        ? 'Submission moved to Archived. Comments and history are kept.'
+        : 'Submission moved to ' + (value === 'new' ? 'New.' : 'Reviewed.')) +
+        (note ? ' Your note was saved with it.' : ''),
+    );
+  } catch (error) {
+    if (version !== sessionGeneration) return;
+    release();
+    unlock();
+    if (
+      card.isConnected &&
+      error.code === 'stale-status' &&
+      error.current?.status
+    ) {
+      // Someone else changed it first: show the current status on this card.
+      entry.review_status = error.current.status;
+      const fresh = renderEntry(entry),
+        open = [card, ...card.querySelectorAll('details')].map((d) => d.open);
+      [fresh, ...fresh.querySelectorAll('details')].forEach((d, index) => {
+        d.open = open[index] || false;
+      });
+      card.replaceWith(fresh);
+      fresh.querySelector('summary').focus();
+    }
+    status(error.message);
+  }
+}
+// Removes a card in place; focus moves to the next card, never to <body>.
+function removeEntry(card) {
+  const group = card.closest('.inbox-group');
+  focusFallback(card, q('#entries'));
+  card.remove();
+  const left = group?.querySelectorAll('.entry').length;
+  if (group && !left) group.remove();
+  else if (group)
+    group.querySelector(':scope > summary').textContent =
+      group.dataset.label + ' · ' + left + ' on this page';
+  if (!q('#entries').children.length)
+    q('#entries').append(node('p', 'No submissions match these filters.'));
 }
 function groupedEntries(entries) {
   const groups = new Map();
@@ -292,14 +312,12 @@ function groupedEntries(entries) {
   return [...groups].map(([key, rows]) => {
     const group = node('details', undefined, 'survey-event-group inbox-group');
     group.dataset.group = key;
+    group.dataset.label = rows[0].data.eventTitle || labels[rows[0].kind];
     group.open = true;
     group.append(
       node(
         'summary',
-        (rows[0].data.eventTitle || labels[rows[0].kind]) +
-          ' · ' +
-          rows.length +
-          ' on this page',
+        group.dataset.label + ' · ' + rows.length + ' on this page',
       ),
       ...rows.map(renderEntry),
     );
@@ -320,6 +338,8 @@ async function load({ background = false } = {}) {
   try {
     const data = await api('/api/admin?' + requestedFilters);
     if (generation !== sessionGeneration) return;
+    // Another tab signed in as someone else: never show their data here.
+    if (signedIn && accountChanged(data.user)) return;
     if (filters().toString() !== requestedFilters) {
       reloadPending = true;
       return;
@@ -333,11 +353,10 @@ async function load({ background = false } = {}) {
     const linkedEntry =
       linkedId && data.entries.find((entry) => entry.id === linkedId);
     if (linkedEntry) selectInboxStatus(linkedEntry.review_status);
-    signedIn = true;
-    q('#session-loading').hidden = true;
-    q('#login').hidden = true;
-    q('#office').hidden = false;
-    q('#signout').hidden = false;
+    if (!signedIn) {
+      signedIn = true;
+      ready(data.user);
+    }
     q('#identity').textContent = 'Signed in as ' + data.user;
     const newCount = data.counts.reduce((sum, row) => sum + row.new, 0);
     document.title =
@@ -404,7 +423,8 @@ async function load({ background = false } = {}) {
       'Setup still needed: ' + missing.join(', ') + '.';
     if (
       !background ||
-      (!commentDrafts.size && !q('#entries').contains(document.activeElement))
+      (!drafts.list().some((draft) => draft.key.startsWith('note:')) &&
+        !q('#entries').contains(document.activeElement))
     ) {
       const expanded = new Map(
         [...q('#entries').querySelectorAll('[id^="entry-"]')].map((card) => [
@@ -453,8 +473,8 @@ async function load({ background = false } = {}) {
     }
   } catch (error) {
     if (generation !== sessionGeneration) return;
-    if (!signedIn) showLogin();
-    status(error.message);
+    if (!signedIn) loadFailed(error);
+    else status(error.message);
   } finally {
     loading = false;
     q('#refresh').disabled = false;
@@ -492,123 +512,9 @@ for (const button of document.querySelectorAll('[data-inbox-status]')) {
     load();
   };
 }
-let pendingEmail = '',
-  resendAt = 0,
-  resendTimer = null;
-function emailStep() {
-  pendingEmail = '';
-  resendAt = 0;
-  clearTimeout(resendTimer);
-  q('#login-form').hidden = false;
-  q('#code-form').hidden = true;
-  q('#code-form').reset();
-  q('#code-instructions').textContent = '';
-}
-function loginBusy(busy) {
-  q('#login')
-    .querySelectorAll('button')
-    .forEach((button) => {
-      button.disabled = busy;
-    });
-  if (Date.now() < resendAt) q('#resend-code').disabled = true;
-}
-async function sendCode(email) {
-  const result = await auth.emailOtp.sendVerificationOtp({
-    email,
-    type: 'sign-in',
-  });
-  if (result.error)
-    throw new Error(
-      result.error.status === 429
-        ? 'Please wait a few minutes before requesting another code.'
-        : 'The sign-in code could not be sent. Please try again shortly.',
-    );
-  pendingEmail = email;
-  q('#login-form').hidden = true;
-  q('#code-form').hidden = false;
-  q('#code-form').reset();
-  q('#code-instructions').textContent =
-    'If this is an approved admin address, a code will arrive at ' +
-    email +
-    '.';
-  resendAt = Date.now() + 60000;
-  q('#resend-code').textContent = 'Send a new code (wait 1 minute)';
-  clearTimeout(resendTimer);
-  resendTimer = setTimeout(() => {
-    q('#resend-code').disabled = false;
-    q('#resend-code').textContent = 'Send a new code';
-  }, 60000);
-  q('#code-form [name="otp"]').focus();
-}
-q('#login-form').onsubmit = async (event) => {
-  event.preventDefault();
-  const email = new FormData(event.target).get('email').trim().toLowerCase();
-  loginBusy(true);
-  status();
-  try {
-    await sendCode(email);
-  } catch (error) {
-    status(error.message);
-  } finally {
-    loginBusy(false);
-  }
-};
-q('#code-form').onsubmit = async (event) => {
-  event.preventDefault();
-  loginBusy(true);
-  status();
-  try {
-    const result = await auth.signIn.emailOtp({
-      email: pendingEmail,
-      otp: new FormData(event.target).get('otp').trim(),
-    });
-    if (result.error)
-      throw new Error(
-        'That code could not be verified. Check the latest email, or request a new code.',
-      );
-    await load();
-    if (signedIn) emailStep();
-  } catch (error) {
-    status(error.message);
-  } finally {
-    loginBusy(false);
-  }
-};
-q('#resend-code').onclick = async () => {
-  if (Date.now() < resendAt) return;
-  loginBusy(true);
-  status();
-  try {
-    await sendCode(pendingEmail);
-    status('A new sign-in code was requested. Use the latest email.');
-  } catch (error) {
-    status(error.message);
-  } finally {
-    loginBusy(false);
-  }
-};
-q('#change-email').onclick = () => {
-  emailStep();
-  status();
-  q('#login-form [name="email"]').focus();
-};
-q('#signout').onclick = async () => {
-  if (!editor.canLeave() || !customSurveys.canLeave() || !surveys.canLeave())
-    return;
-  sessionGeneration++;
-  try {
-    const result = await auth.signOut();
-    if (result.error) throw new Error('Could not sign out. Please try again.');
-    showLogin();
-    q('#login-form').reset();
-    status('Signed out.');
-  } catch (e) {
-    status(e.message);
-  }
-};
 const editor = mountEventEditor(api);
 const responses = submissionEditor(api, async (result) => {
-  commentDrafts.delete(result.entryId);
+  if (result.removed) drafts.delete('note:' + result.entryId);
   await load();
   status(
     result.removed
@@ -618,10 +524,11 @@ const responses = submissionEditor(api, async (result) => {
       : 'Response updated.',
   );
 });
+// A deleted response or a purged contact changed the inbox. Contact purge
+// removes that person's drafts itself; other drafts stay.
 const surveys = mountSurveyResults(api, (result) => {
   offset = 0;
-  if (result?.entryId) commentDrafts.delete(result.entryId);
-  else commentDrafts.clear();
+  if (result?.removed) drafts.delete('note:' + result.entryId);
   load();
 });
 const customSurveys = mountCustomSurveys(q('#custom-surveys-root'), api);
@@ -764,19 +671,29 @@ q('#next').onclick = () => {
   load();
 };
 setInterval(() => {
-  if (signedIn && (!document.hidden || alerts.enabled))
+  if (signedIn && !isPaused() && (!document.hidden || alerts.enabled))
     load({ background: true });
 }, 60000);
-auth
-  .getSession()
-  .then(({ data, error }) => {
-    if (data?.user) load();
-    else {
-      showLogin();
-      if (error) status('Could not verify your sign-in. Please try again.');
-    }
-  })
-  .catch(() => {
-    showLogin();
-    status('Could not connect. Please try again.');
-  });
+startSession({
+  load,
+  // After signing in again: refresh the inbox in the background, which
+  // keeps cards, drafts and focus. Lists rebuild only when their records were
+  // dropped, so open cards, reports and status messages stay as they were.
+  refresh(dropped) {
+    load({ background: !dropped });
+    if (!dropped) return;
+    if (!q('#events-pane').hidden) editor.show();
+    else if (q('#surveys-pane').hidden) return;
+    else if (q('#custom-surveys-root').hidden) surveys.reload();
+    else customSurveys.refresh();
+  },
+  // Ten minutes paused: drop member records, keep editors and drafts.
+  reset() {
+    q('#entries').replaceChildren();
+    editor.reset();
+    surveys.reset();
+    customSurveys.reset();
+    surveyArchive.clear();
+  },
+  clear: clearOffice,
+});

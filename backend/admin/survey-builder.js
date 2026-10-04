@@ -2,6 +2,7 @@ import { button, node } from './ui.js';
 import { mountRespondents } from './survey-respondents.js';
 import { surveyTrial } from './survey-trial.js';
 import { choiceEditor } from './survey-choices.js';
+import { drafts } from './session.js';
 const audienceNames = {
   students: 'Dallas College students',
   staff: 'Dallas College staff',
@@ -529,13 +530,16 @@ export function mountSurveyBuilder(root, api, onDone, id) {
     );
     root.append(actions, status, retry);
   }
-  const beforeUnload = (e) => {
-    if (active && (busy || pending || (!saved && !published))) {
-      e.preventDefault();
-      e.returnValue = '';
-    }
-  };
-  window.addEventListener('beforeunload', beforeUnload);
+  const untrack = drafts.track(() =>
+    active && (busy || pending || (!saved && !published))
+      ? [
+          {
+            key: 'survey:' + (id || 'new'),
+            label: 'Custom survey “' + definition.title + '”',
+          },
+        ]
+      : [],
+  );
   const originalDone = onDone;
   onDone = async (selected) => {
     if (!active) return;
@@ -544,7 +548,7 @@ export function mountSurveyBuilder(root, api, onDone, id) {
   };
   function dispose() {
     active = false;
-    window.removeEventListener('beforeunload', beforeUnload);
+    untrack();
     for (const dialog of root.querySelectorAll('dialog[open]')) dialog.close();
   }
   initialize();

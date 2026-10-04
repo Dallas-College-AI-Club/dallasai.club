@@ -84,6 +84,14 @@ export function surveysHandler({
       };
       if (params.has('summary') || params.has('export')) {
         const rows = await reportRows(db, filter);
+        // Like the Inbox export, record who read the full response set.
+        await db.query(
+          'INSERT INTO club_forms.audit(actor,action) VALUES($1,$2)',
+          [
+            user.email,
+            `${params.has('export') ? 'survey-export-csv' : 'survey-summary'}:${filter.eventId || 'all'}`,
+          ],
+        );
         if (params.has('export')) {
           res.statusCode = 200;
           res.setHeader('Content-Type', 'text/csv; charset=utf-8');

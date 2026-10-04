@@ -46,6 +46,49 @@ async function check(name, fn) {
     await context.close();
   }
 }
+// Session-expiry helpers: a routed 401 ends the session for the page only.
+async function expireRoute(page, pattern, method) {
+  await page.route(pattern, (route) =>
+    method && route.request().method() !== method
+      ? route.continue()
+      : route.fulfill({
+          status: 401,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Session expired' }),
+        }),
+  );
+}
+async function expectPaused(page) {
+  await expect(page.locator('#login')).toBeVisible();
+  await expect(page.locator('#office')).toBeHidden();
+  await expect(page.locator('#office')).toHaveAttribute('inert', '');
+  await expect(page.locator('dialog[open]')).toHaveCount(0);
+  await expect(page.locator('#status')).toContainText('Your session ended');
+}
+async function signInAgain(page, email) {
+  if (email) await page.locator('#login-form [name="email"]').fill(email);
+  await page
+    .getByRole('button', { name: 'Send sign-in code', exact: true })
+    .click();
+  await page.getByLabel('Sign-in code', { exact: true }).fill('123456');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+}
+async function openContact(page) {
+  await page
+    .locator('#inbox-pane')
+    .getByRole('button', { name: 'Contacts & follow-up', exact: true })
+    .click();
+  const dialog = page.locator('.contact-dialog:not(.submission-dialog)');
+  await dialog.getByRole('button', { name: /rsvp@example.edu/ }).click();
+  return dialog;
+}
+async function typeContactNote(page, text) {
+  const dialog = await openContact(page);
+  await dialog
+    .getByLabel('Record a follow-up note', { exact: true })
+    .fill(text);
+  return dialog;
+}
 try {
   await check(
     'Response edits require discard confirmation and lock during saves',
@@ -111,25 +154,49 @@ try {
     },
   );
   await check(
-    'Expired session closes private dialogs and clears records',
+    'Expired session pauses the office and keeps drafts',
     async (page) => {
-      await page
-        .locator('#inbox-pane')
-        .getByRole('button', { name: 'Contacts & follow-up', exact: true })
-        .click();
-      await page.locator('.contact-choice').first().waitFor();
-      await page.route('**/api/surveys?**', (route) =>
-        route.fulfill({
-          status: 401,
-          contentType: 'application/json',
-          body: JSON.stringify({ error: 'Session expired' }),
-        }),
+      const dialog = await typeContactNote(
+        page,
+        'Unsaved note kept through sign-in',
       );
-      await page.locator('.contact-choice').first().click();
-      await expect(page.locator('#login')).toBeVisible();
-      await expect(page.locator('dialog[open]')).toHaveCount(0);
-      await expect(page.locator('#entries')).toBeEmpty();
-      await expect(page.locator('#status')).toContainText('Your session ended');
+      await expireRoute(page, '**/api/surveys?**');
+      await dialog
+        .getByRole('button', { name: '← All contacts', exact: true })
+        .click();
+      await expectPaused(page);
+      await expect(page.locator('#login-form [name="email"]')).toHaveValue(
+        'officer@example.com',
+      );
+      await expect(page.locator('#login-form [name="email"]')).toHaveAttribute(
+        'readonly',
+        '',
+      );
+      // The card already says the session ended; the banner only announces.
+      await expect(page.locator('#status')).toHaveClass(/visually-hidden/);
+      await expect(page.locator('#reauth-email-hint')).toBeVisible();
+      await page.unroute('**/api/surveys?**');
+      await page
+        .getByRole('button', { name: 'Send sign-in code', exact: true })
+        .click();
+      await expect(
+        page.getByLabel('Sign-in code', { exact: true }),
+      ).toBeVisible();
+      await expect(page.locator('#change-email')).toBeHidden();
+      await page.getByLabel('Sign-in code', { exact: true }).fill('123456');
+      await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+      await expect(page.locator('#office')).toBeVisible();
+      await expect(page.locator('#office')).not.toHaveAttribute('inert');
+      await expect(dialog).toBeVisible();
+      await dialog.getByRole('button', { name: /rsvp@example.edu/ }).click();
+      await expect(
+        dialog.getByLabel('Record a follow-up note', { exact: true }),
+      ).toHaveValue('Unsaved note kept through sign-in');
+      // The reopened dialog still returns focus to the button that opened it.
+      await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+      await expect
+        .poll(() => page.evaluate(() => document.activeElement.textContent))
+        .toBe('Contacts & follow-up');
     },
   );
   await check(
@@ -357,6 +424,18 @@ try {
     await requested;
     await page.locator('#signout').click();
     await page.locator('#login').waitFor();
+    // Signed out: focus is on the email field, the tabs are reset and the
+    // re-auth links take no space.
+    await expect(page.locator('#login-form [name="email"]')).toBeFocused();
+    await expect(page.locator('#inbox-tab')).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    await expect(page.locator('#surveys-tab')).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    );
+    await expect(page.locator('.login-links')).toHaveAttribute('hidden', '');
     const response = page.waitForResponse(
       '**/api/custom-surveys?action=draft&id=' + id,
     );
@@ -943,6 +1022,523 @@ try {
             exact: true,
           }),
       ).toBeEnabled();
+    },
+  );
+  await check(
+    'A poll 401 keeps drafts and drops records after ten minutes',
+    async (page) => {
+      await page.clock.install();
+      await page.reload();
+      await page.locator('#office').waitFor();
+      const comment = page.locator('#entries .entry textarea').first();
+      await page.locator('#entries .entry > summary').first().click();
+      await page
+        .locator('#entries .entry')
+        .first()
+        .getByText('Activity & comments', { exact: true })
+        .click();
+      await comment.fill('Comment kept through sign-in');
+      await page.locator('#events-tab').click();
+      await page.locator('#new-event').click();
+      await page
+        .locator('#event-form [name="title"]')
+        .fill('Typed before the poll');
+      await expireRoute(page, '**/api/admin?**');
+      await page.clock.runFor(61000);
+      await expectPaused(page);
+      await expect(page.locator('#entries .entry')).not.toHaveCount(0);
+      await page.clock.runFor(600000);
+      await expect(page.locator('#entries .entry')).toHaveCount(0);
+      await page.unroute('**/api/admin?**');
+      await signInAgain(page);
+      await expect(page.locator('#events-pane')).toBeVisible();
+      await expect(page.locator('#event-form [name="title"]')).toHaveValue(
+        'Typed before the poll',
+      );
+      await expect(page.locator('#entries .entry')).not.toHaveCount(0);
+      await expect(comment).toHaveValue('Comment kept through sign-in');
+      await expect(page.locator('#event-list .event-choice')).not.toHaveCount(
+        0,
+      );
+    },
+  );
+  await check(
+    'Save draft that met a 401 is saved once after signing in again',
+    async (page) => {
+      await page.locator('#events-tab').click();
+      await page.locator('#new-event').click();
+      await page
+        .locator('#event-form [name="title"]')
+        .fill('Saved once after re-auth');
+      let refused = 0;
+      await page.route('**/api/events', (route) =>
+        route.request().method() !== 'POST' || refused++
+          ? route.continue()
+          : route.fulfill({
+              status: 401,
+              contentType: 'application/json',
+              body: JSON.stringify({ error: 'Session expired' }),
+            }),
+      );
+      await page
+        .getByRole('button', { name: 'Save draft', exact: true })
+        .click();
+      await expectPaused(page);
+      await signInAgain(page);
+      await page
+        .locator('#event-status')
+        .getByText(/^Draft saved successfully/)
+        .waitFor();
+      assert.equal(refused, 2);
+      assert.equal(
+        (
+          await fixture.db.query(
+            "SELECT count(*)::int n FROM club_forms.events WHERE draft->>'title'=$1",
+            ['Saved once after re-auth'],
+          )
+        ).rows[0].n,
+        1,
+      );
+    },
+  );
+  await check(
+    'A different account discards drafts and waiting requests',
+    async (page, dialogs) => {
+      const dialog = await typeContactNote(
+        page,
+        'Discarded with the other account',
+      );
+      await expireRoute(page, '**/api/surveys?**');
+      await dialog
+        .getByRole('button', { name: '← All contacts', exact: true })
+        .click();
+      await expectPaused(page);
+      await page
+        .getByRole('button', { name: 'Use a different account', exact: true })
+        .click();
+      assert.equal(dialogs.length, 1);
+      assert.match(dialogs[0], /Follow-up note for rsvp@example.edu/);
+      await expect(page.locator('#status')).toHaveText(
+        'Not saved — signed in as a different account.',
+      );
+      await expect(page.locator('#login-form [name="email"]')).toHaveValue('');
+      await page.unroute('**/api/surveys?**');
+      await signInAgain(page, 'second-officer@example.com');
+      await expect(page.locator('#identity')).toHaveText(
+        'Signed in as second-officer@example.com',
+      );
+      await expect(page.locator('dialog[open]')).toHaveCount(0);
+      await openContact(page);
+      await expect(
+        dialog.getByLabel('Record a follow-up note', { exact: true }),
+      ).toHaveValue('');
+      assert.equal(dialogs.length, 1);
+    },
+  );
+  await check(
+    'Save note & mark reviewed saves both and focuses the next card',
+    async (page) => {
+      const [first, second] = await page
+        .locator('#entries .entry')
+        .evaluateAll((cards) => cards.map((card) => card.id));
+      const card = page.locator('#' + first),
+        id = first.replace('entry-', '');
+      await page.locator('#' + first + ' > summary').click();
+      await card.getByText('Activity & comments', { exact: true }).click();
+      // Spaces alone are not a note.
+      await card.getByLabel('Add a comment', { exact: true }).fill('   ');
+      await expect(
+        card.getByRole('button', { name: 'Mark reviewed', exact: true }),
+      ).toBeVisible();
+      await card
+        .getByLabel('Add a comment', { exact: true })
+        .fill('Called them back.');
+      let release;
+      const held = new Promise((resolve) => (release = resolve));
+      await page.route('**/api/admin', async (route) => {
+        if (route.request().method() === 'POST') await held;
+        await route.continue();
+      });
+      await card
+        .getByRole('button', { name: 'Save note & mark reviewed', exact: true })
+        .click();
+      // Every button on the card is busy and the note is locked until the
+      // request finishes.
+      await expect(
+        card.locator('button:not([aria-disabled="true"])'),
+      ).toHaveCount(0);
+      await expect(
+        card.getByLabel('Add a comment', { exact: true }),
+      ).toBeDisabled();
+      release();
+      await expect(card).toHaveCount(0);
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () =>
+              document.activeElement.tagName +
+              ' ' +
+              document.activeElement.parentElement?.id,
+          ),
+        )
+        .toBe('SUMMARY ' + second);
+      const saved = (
+        await fixture.db.query(
+          `SELECT review_status,(SELECT count(*)::int FROM club_forms.entry_comments c WHERE c.entry_id=e.id AND c.body=$2) AS comments FROM club_forms.entries e WHERE id=$1`,
+          [id, 'Called them back.'],
+        )
+      ).rows[0];
+      assert.deepEqual(saved, { review_status: 'reviewed', comments: 1 });
+      await fixture.db.query(
+        "UPDATE club_forms.entries SET review_status='new' WHERE id=$1",
+        [id],
+      );
+    },
+  );
+  await check(
+    'A stale status names who changed it and refreshes the card',
+    async (page) => {
+      const { id } = fixture.entries.find((row) => row.kind === 'workshop'),
+        card = page.locator('#entry-' + id);
+      await page.locator('#entry-' + id + ' > summary').click();
+      await fixture.db.query(
+        "UPDATE club_forms.entries SET review_status='closed' WHERE id=$1",
+        [id],
+      );
+      await fixture.db.query(
+        "INSERT INTO club_forms.audit(actor,entry_id,action) VALUES('other-officer@example.com',$1,'review:closed')",
+        [id],
+      );
+      await card
+        .getByRole('button', { name: 'Mark reviewed', exact: true })
+        .click();
+      await expect(page.locator('#status')).toContainText(
+        'other-officer@example.com already',
+      );
+      await expect(card.locator('.badge')).toHaveText('archived');
+      await expect(card).toHaveAttribute('open', '');
+      await expect(
+        card.getByRole('button', { name: 'Delete permanently', exact: true }),
+      ).toBeVisible();
+      await fixture.db.query(
+        "UPDATE club_forms.entries SET review_status='new' WHERE id=$1",
+        [id],
+      );
+    },
+  );
+  await check('Editing a response keeps its comment draft', async (page) => {
+    const { id } = fixture.entries.find((row) => row.kind === 'subscribe'),
+      card = page.locator('#entry-' + id);
+    await page.locator('#entry-' + id + ' > summary').click();
+    await card.getByText('Activity & comments', { exact: true }).click();
+    await card
+      .getByLabel('Add a comment', { exact: true })
+      .fill('Draft kept through an edit');
+    await card
+      .getByRole('button', { name: 'Edit response', exact: true })
+      .click();
+    const dialog = page.locator('.submission-dialog[open]');
+    await dialog
+      .getByLabel('Full name', { exact: true })
+      .fill('Office subscriber edited');
+    await dialog
+      .getByRole('button', { name: 'Save changes', exact: true })
+      .click();
+    await expect(page.locator('#status')).toHaveText('Response updated.');
+    await expect(card.getByLabel('Add a comment', { exact: true })).toHaveValue(
+      'Draft kept through an edit',
+    );
+  });
+  await check(
+    'A failed first load shows the load error, not the sign-in form',
+    async (page) => {
+      await page.route('**/api/admin?**', (route) =>
+        route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: 'This service is temporarily unavailable.',
+            reference: '0a1b2c3d',
+          }),
+        }),
+      );
+      await page.reload();
+      await expect(page.locator('#load-error')).toBeVisible();
+      await expect(page.locator('#load-error h1')).toBeFocused();
+      assert.match(
+        await page.locator('#load-error-message').textContent(),
+        /Retrying in 2 s/,
+      );
+      await expect(page.locator('#login')).toBeHidden();
+      await expect(page.locator('#office')).toBeHidden();
+      await page.unroute('**/api/admin?**');
+      await page
+        .getByRole('button', { name: 'Try again', exact: true })
+        .click();
+      await expect(page.locator('#office')).toBeVisible();
+      await expect(page.locator('#load-error')).toBeHidden();
+      await expect(page.locator('#office h1')).toBeFocused();
+    },
+  );
+  await check('A malformed entry link opens the plain inbox', async (page) => {
+    await page.goto(fixture.origin + '/admin/?link#entry=not-a-submission');
+    await expect(page.locator('#office')).toBeVisible();
+    await expect(page.locator('#load-error')).toBeHidden();
+    await expect(page.locator('#entries .entry')).not.toHaveCount(0);
+    assert.equal(new URL(page.url()).hash, '');
+  });
+  await check(
+    'A non-officer account sees an explanation instead of the sign-in form',
+    async (page) => {
+      await page.route('**/api/admin?**', (route) =>
+        route.fulfill({
+          status: 401,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            error: 'This account isn’t set up as a club officer.',
+            code: 'not-officer',
+          }),
+        }),
+      );
+      await page.reload();
+      await expect(page.locator('#not-officer')).toContainText(
+        'signed in as officer@example.com',
+      );
+      await expect(page.locator('#not-officer h1')).toBeFocused();
+      await expect(page.locator('#login')).toBeHidden();
+      await expect(page.locator('#office')).toBeHidden();
+      await page.unroute('**/api/admin?**');
+      await page
+        .locator('#not-officer')
+        .getByRole('button', { name: 'Sign out', exact: true })
+        .click();
+      await expect(page.locator('#login')).toBeVisible();
+      await expect(page.locator('#not-officer')).toBeHidden();
+      await expect(page.locator('#login-form [name="email"]')).toBeFocused();
+    },
+  );
+  await check(
+    'Focus stays in the inbox after signing in again',
+    async (page) => {
+      await page.clock.install();
+      await page.reload();
+      await page.locator('#office').waitFor();
+      const [first, second, third] = await page
+        .locator('#entries .entry')
+        .evaluateAll((cards) => cards.map((card) => card.id));
+      const settled = async () => {
+        await page.waitForTimeout(300);
+        await expect(page.locator('#entries')).toHaveAttribute(
+          'aria-busy',
+          'false',
+        );
+      };
+      // A poll meets a 401 while a comment is being typed.
+      const firstCard = page.locator('#' + first),
+        comment = firstCard.getByLabel('Add a comment', { exact: true });
+      await page.locator('#' + first + ' > summary').click();
+      await firstCard.getByText('Activity & comments', { exact: true }).click();
+      await comment.fill('Typing when the poll ran');
+      await expireRoute(page, '**/api/admin?**');
+      await page.clock.runFor(61000);
+      await expectPaused(page);
+      await page.unroute('**/api/admin?**');
+      await signInAgain(page);
+      await settled();
+      await expect(comment).toBeFocused();
+      // "Save note & mark reviewed" meets a 401.
+      const secondCard = page.locator('#' + second);
+      await page.locator('#' + second + ' > summary').click();
+      await secondCard
+        .getByText('Activity & comments', { exact: true })
+        .click();
+      await secondCard
+        .getByLabel('Add a comment', { exact: true })
+        .fill('Saved after signing in again');
+      await expireRoute(page, '**/api/admin', 'POST');
+      await secondCard
+        .getByRole('button', { name: 'Save note & mark reviewed', exact: true })
+        .click();
+      await expectPaused(page);
+      await page.unroute('**/api/admin');
+      await signInAgain(page);
+      await expect(secondCard).toHaveCount(0);
+      await settled();
+      assert.equal(
+        await page.evaluate(
+          () =>
+            document.activeElement.tagName +
+            ' ' +
+            document.activeElement.parentElement?.id,
+        ),
+        'SUMMARY ' + third,
+      );
+      await fixture.db.query(
+        "UPDATE club_forms.entries SET review_status='new' WHERE id=$1",
+        [second.replace('entry-', '')],
+      );
+    },
+  );
+  await check(
+    'Downloads that met a 401 run after signing in again',
+    async (page) => {
+      const refuse = (count) => (route) =>
+        count.n++
+          ? route.continue()
+          : route.fulfill({
+              status: 401,
+              contentType: 'application/json',
+              body: JSON.stringify({ error: 'Session expired' }),
+            });
+      const inbox = { n: 0 },
+        survey = { n: 0 };
+      await page.route('**/api/admin?*export=csv', refuse(inbox));
+      let download = page.waitForEvent('download', { timeout: 15000 });
+      await page
+        .getByRole('link', { name: 'Export filtered CSV', exact: true })
+        .click();
+      await expectPaused(page);
+      await signInAgain(page);
+      assert.equal(
+        (await download).suggestedFilename(),
+        'club-submissions.csv',
+      );
+      await expect(page.locator('#status')).toHaveText('CSV download started.');
+      await page.locator('#surveys-tab').click();
+      await page.locator('#survey-results .survey-response').first().waitFor();
+      await page.route(
+        (url) =>
+          url.pathname === '/api/surveys' && url.searchParams.has('export'),
+        refuse(survey),
+      );
+      download = page.waitForEvent('download', { timeout: 15000 });
+      await page
+        .getByRole('button', { name: 'Export matching CSV', exact: true })
+        .click();
+      await expectPaused(page);
+      await signInAgain(page);
+      await download;
+      await expect(page.locator('#survey-status')).toHaveText(
+        'CSV downloaded. It includes all matching responses across every page.',
+      );
+      assert.deepEqual([inbox.n, survey.n], [2, 2]);
+    },
+  );
+  await check(
+    'Sign out and discard asks first and lists the drafts',
+    async (page, dialogs, setAccept) => {
+      const dialog = await typeContactNote(page, 'Kept unless discarded');
+      await expireRoute(page, '**/api/surveys?**');
+      await dialog
+        .getByRole('button', { name: '← All contacts', exact: true })
+        .click();
+      await expectPaused(page);
+      const discard = page.getByRole('button', {
+        name: 'Sign out and discard unsaved work',
+        exact: true,
+      });
+      setAccept(false);
+      await discard.click();
+      assert.equal(dialogs.length, 1);
+      assert.match(dialogs[0], /Follow-up note for rsvp@example.edu/);
+      await expect(page.locator('#reauth-note')).toBeVisible();
+      setAccept(true);
+      await discard.click();
+      await expect(page.locator('#reauth-note')).toBeHidden();
+      await expect(page.locator('#login-form [name="email"]')).toBeFocused();
+      await expect(page.locator('#login-form [name="email"]')).toHaveValue('');
+      await page.unroute('**/api/surveys?**');
+    },
+  );
+  await check(
+    'A contact edit draft survives a change to the contact',
+    async (page) => {
+      const dialog = page.locator('.contact-dialog:not(.submission-dialog)'),
+        open = async () => {
+          await page
+            .locator('#inbox-pane')
+            .getByRole('button', { name: 'Contacts & follow-up', exact: true })
+            .click();
+          await dialog
+            .getByRole('button', { name: /workshop@example.edu/ })
+            .click();
+          await dialog
+            .getByRole('button', { name: 'Edit contact', exact: true })
+            .click();
+        };
+      await open();
+      await dialog
+        .getByLabel('Contact name', { exact: true })
+        .fill('Draft contact name');
+      await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+      const bumped = await fixture.db.query(
+        "UPDATE club_forms.contacts SET revision=revision+1 WHERE email='workshop@example.edu'",
+      );
+      assert.equal(bumped.affectedRows, 1);
+      await open();
+      await expect(
+        dialog.getByLabel('Contact name', { exact: true }),
+      ).toHaveValue('Draft contact name');
+      await expect(dialog).toContainText(
+        'This contact changed after you started editing.',
+      );
+    },
+  );
+  await check(
+    'Details sent again through the website show as a system event',
+    async (page) => {
+      const { id } = fixture.entries.find((row) => row.kind === 'contribution'),
+        commentId = randomUUID(),
+        card = page.locator('#entry-' + id);
+      await fixture.db.query(
+        "INSERT INTO club_forms.entry_comments(id,entry_id,author_email,body) VALUES($1,$2,'website',$3)",
+        [
+          commentId,
+          id,
+          'Unverified details submitted through the public website:\nTitle: Revised',
+        ],
+      );
+      await fixture.db.query(
+        "INSERT INTO club_forms.audit(actor,entry_id,action,comment_id) VALUES('website',$1,'resubmitted',$2)",
+        [id, commentId],
+      );
+      await page.locator('#entry-' + id + ' > summary').click();
+      await card.getByText('Activity & comments', { exact: true }).click();
+      const row = card.locator('.activity-item.system-event');
+      await expect(row).toContainText(
+        'Updated details from the website (unverified)',
+      );
+      await expect(row.locator('.system-note')).toContainText('Title: Revised');
+      await expect(row.locator('.officer-comment')).toHaveCount(0);
+    },
+  );
+  await check(
+    'A sign-in as someone else in another tab discards this page’s drafts',
+    async (page, dialogs) => {
+      const dialog = await typeContactNote(
+        page,
+        'Written before the other tab signed in',
+      );
+      await dialog.getByRole('button', { name: 'Close', exact: true }).click();
+      await fetch(fixture.origin + '/api/auth/sign-in/email-otp', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          email: 'third-officer@example.com',
+          otp: '123456',
+        }),
+      });
+      await page.locator('#refresh').click();
+      await expect(page.locator('#identity')).toHaveText(
+        'Signed in as third-officer@example.com',
+      );
+      assert.equal(dialogs.length, 1);
+      assert.match(dialogs[0], /now signed in as third-officer@example.com/);
+      assert.match(dialogs[0], /Follow-up note for rsvp@example.edu/);
+      await openContact(page);
+      await expect(
+        dialog.getByLabel('Record a follow-up note', { exact: true }),
+      ).toHaveValue('');
     },
   );
 } finally {

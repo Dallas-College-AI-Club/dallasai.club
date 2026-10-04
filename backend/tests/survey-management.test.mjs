@@ -325,3 +325,32 @@ test('all result/contact/report endpoints require admin; mutations reject foreig
     assert.ok(!r.body.includes('person0'));
   }
 });
+test('event-survey summaries and CSV exports are audited once they are compiled', async () => {
+  await seed();
+  const handler = surveysHandler({
+    authorize: () => ({ email: actor }),
+    getDatabase: () => db,
+  });
+  const statuses = [];
+  for (const url of [
+    '/api/surveys?summary=1',
+    '/api/surveys?export=csv&eventId=game-night',
+    '/api/surveys?summary=1&eventId=Not%20an%20event',
+  ]) {
+    const res = { setHeader() {}, end() {} };
+    await handler({ method: 'GET', url }, res);
+    statuses.push(res.statusCode);
+  }
+  assert.deepEqual(statuses, [200, 200, 400]);
+  assert.deepEqual(
+    (
+      await db.query(
+        'SELECT actor,entry_id,action FROM club_forms.audit ORDER BY id',
+      )
+    ).rows,
+    [
+      { actor, entry_id: null, action: 'survey-summary:all' },
+      { actor, entry_id: null, action: 'survey-export-csv:game-night' },
+    ],
+  );
+});

@@ -1,5 +1,5 @@
 import { testDatabase } from './helpers/db.mjs';
-import test, { before, after, beforeEach } from 'node:test';
+import test, { before, after, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
@@ -821,6 +821,261 @@ test('comments are shared between authorized admins with each author preserved',
   );
 });
 
+const reviewActions = async (id) =>
+  (
+    await db.query(
+      'SELECT action,actor FROM club_forms.audit WHERE entry_id=$1 ORDER BY id',
+      [id],
+    )
+  ).rows;
+test('a review from a stale status is refused with who changed it; the plain body is unchanged', async () => {
+  const row = await submit(
+    db,
+    entry('question', { subject: 'Stale', message: 'Hello' }),
+    events,
+  );
+  const plain = await request(
+    '/api/admin',
+    { action: 'review', id: row.id, status: 'reviewed' },
+    'second',
+  );
+  assert.equal(plain.status, 200);
+  assert.deepEqual(await plain.json(), { saved: true });
+  const stale = await request('/api/admin', {
+    action: 'review',
+    id: row.id,
+    status: 'closed',
+    from: 'new',
+  });
+  assert.equal(stale.status, 409);
+  const body = await stale.json();
+  assert.equal(body.code, 'stale-status');
+  assert.match(
+    body.error,
+    /^second-admin@example\.com already reviewed this at .+\d:\d\d [AP]M\.$/,
+  );
+  assert.equal(body.current.status, 'reviewed');
+  assert.equal(body.current.actor, 'second-admin@example.com');
+  assert.ok(Date.parse(body.current.at));
+  const current = async () =>
+    (
+      await db.query(
+        'SELECT review_status FROM club_forms.entries WHERE id=$1',
+        [row.id],
+      )
+    ).rows[0].review_status;
+  assert.equal(await current(), 'reviewed');
+  assert.deepEqual(
+    (await reviewActions(row.id)).map((r) => r.action),
+    ['review:reviewed'],
+  );
+  const fresh = await request('/api/admin', {
+    action: 'review',
+    id: row.id,
+    status: 'closed',
+    from: 'reviewed',
+  });
+  assert.deepEqual(await fresh.json(), { saved: true });
+  assert.equal(await current(), 'closed');
+  for (const invalid of [
+    { id: row.id, status: 'new', from: 'archived' },
+    { id: row.id, status: 'new', from: 1 },
+  ])
+    assert.equal(
+      (await request('/api/admin', { action: 'review', ...invalid })).status,
+      400,
+    );
+  assert.equal(
+    (
+      await request('/api/admin', {
+        action: 'review',
+        id: randomUUID(),
+        status: 'new',
+        from: 'closed',
+      })
+    ).status,
+    404,
+  );
+  // Without a review history (e.g. changed outside Club Office) the message is plain.
+  await db.exec('TRUNCATE club_forms.audit');
+  const unknown = await (
+    await request('/api/admin', {
+      action: 'review',
+      id: row.id,
+      status: 'new',
+      from: 'reviewed',
+    })
+  ).json();
+  assert.equal(unknown.code, 'stale-status');
+  assert.match(unknown.error, /Reload to see its current status/);
+  assert.deepEqual(unknown.current, {
+    status: 'closed',
+    actor: null,
+    at: null,
+  });
+});
+test('a stale review after a resubmission names the new details, not the older archive', async () => {
+  const signup = entry('join', { interests: 'Robotics' });
+  const row = await submit(db, signup, events);
+  await request(
+    '/api/admin',
+    { action: 'review', id: row.id, status: 'closed' },
+    'second',
+  );
+  await submit(
+    db,
+    { ...signup, requestId: randomUUID(), interests: 'Robotics and art' },
+    events,
+  );
+  const stale = await request('/api/admin', {
+    action: 'review',
+    id: row.id,
+    status: 'reviewed',
+    from: 'closed',
+  });
+  assert.equal(stale.status, 409);
+  const body = await stale.json();
+  assert.match(
+    body.error,
+    /^Updated details arrived through the website at .+, so this is New again\.$/,
+  );
+  assert.equal(body.current.status, 'new');
+  assert.equal(body.current.actor, 'website');
+});
+test('a review note and the status change commit together, or neither does', async () => {
+  const row = await submit(
+    db,
+    entry('question', { subject: 'Noted', message: 'Hello' }),
+    events,
+  );
+  const note = { id: randomUUID(), body: '  Called them back.  ' };
+  const saved = await request('/api/admin', {
+    action: 'review',
+    id: row.id,
+    status: 'reviewed',
+    from: 'new',
+    comment: note,
+  });
+  assert.equal(saved.status, 200);
+  const result = await saved.json();
+  assert.equal(result.saved, true);
+  assert.equal(result.comment.body, 'Called them back.');
+  assert.equal(result.comment.author_email, 'admin@example.com');
+  assert.deepEqual(await reviewActions(row.id), [
+    { action: 'comment-added', actor: 'admin@example.com' },
+    { action: 'review:reviewed', actor: 'admin@example.com' },
+  ]);
+  const comments = async (id) =>
+    (
+      await db.query(
+        'SELECT body FROM club_forms.entry_comments WHERE entry_id=$1',
+        [id],
+      )
+    ).rows.map((r) => r.body);
+  // A stale status discards the note with it, so the officer can decide again.
+  const other = await submit(
+    db,
+    entry('question', { subject: 'Raced', message: 'Hello' }),
+    events,
+  );
+  await request(
+    '/api/admin',
+    { action: 'review', id: other.id, status: 'closed' },
+    'second',
+  );
+  const stale = await request('/api/admin', {
+    action: 'review',
+    id: other.id,
+    status: 'reviewed',
+    from: 'new',
+    comment: { id: randomUUID(), body: 'Do not keep me' },
+  });
+  assert.equal(stale.status, 409);
+  assert.deepEqual(await comments(other.id), []);
+  for (const comment of [
+    { id: randomUUID(), body: ' ' },
+    { id: 'not-a-uuid', body: 'Hello' },
+    'Just text',
+  ])
+    assert.equal(
+      (
+        await request('/api/admin', {
+          action: 'review',
+          id: other.id,
+          status: 'new',
+          comment,
+        })
+      ).status,
+      400,
+    );
+  assert.equal(
+    (
+      await db.query(
+        'SELECT review_status FROM club_forms.entries WHERE id=$1',
+        [other.id],
+      )
+    ).rows[0].review_status,
+    'closed',
+  );
+  // A failed status write rolls back the note that was inserted before it.
+  const failingDb = {
+    query: (sql, values) => db.query(sql, values),
+    transaction: (run) =>
+      db.transaction((tx) =>
+        run({
+          query: (sql, values) =>
+            sql.startsWith('UPDATE club_forms.entries')
+              ? Promise.reject(new Error('status write failed'))
+              : tx.query(sql, values),
+        }),
+      ),
+  };
+  const handler = adminHandler({
+    getDatabase: () => failingDb,
+    authorize,
+    getEvents: async () => events,
+    storage,
+  });
+  const res = {
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name] = value;
+    },
+    end(text) {
+      this.body = JSON.parse(text);
+    },
+  };
+  const logged = mock.method(console, 'error', () => {});
+  try {
+    await handler(
+      {
+        method: 'POST',
+        url: '/api/admin',
+        headers: {
+          'x-test-admin': 'yes',
+          'content-type': 'application/json',
+          origin,
+        },
+        body: {
+          action: 'review',
+          id: other.id,
+          status: 'new',
+          from: 'closed',
+          comment: { id: randomUUID(), body: 'Roll me back' },
+        },
+      },
+      res,
+    );
+  } finally {
+    logged.mock.restore();
+  }
+  assert.equal(res.statusCode, 503);
+  assert.deepEqual(await comments(other.id), []);
+  assert.deepEqual(
+    (await reviewActions(other.id)).map((r) => r.action),
+    ['review:closed'],
+  );
+});
 test('status sections and their exports isolate archived submissions and allow restoration', async () => {
   const records = {};
   for (const state of ['new', 'reviewed', 'closed']) {

@@ -280,14 +280,15 @@ export async function manageContact(db, body, actor, storage = { del }) {
         'DELETE FROM club_forms.audit WHERE entry_id IN (SELECT id FROM club_forms.entries WHERE email=ANY($1::text[]))',
         [aliases],
       );
-      await tx.query(
-        'DELETE FROM club_forms.entries WHERE email=ANY($1::text[])',
-        [aliases],
-      );
-      await tx.query(
-        'DELETE FROM club_forms.contact_notes WHERE email=ANY($1::text[])',
-        [aliases],
-      );
+      const removed = async (table) =>
+        (
+          await tx.query(
+            `WITH gone AS (DELETE FROM club_forms.${table} WHERE email=ANY($1::text[]) RETURNING 1) SELECT count(*)::int AS n FROM gone`,
+            [aliases],
+          )
+        ).rows[0].n;
+      const entries = await removed('entries'),
+        notes = await removed('contact_notes');
       await tx.query(
         'DELETE FROM club_forms.contact_activity WHERE email=ANY($1::text[])',
         [aliases],
@@ -299,6 +300,15 @@ export async function manageContact(db, body, actor, storage = { del }) {
       await tx.query(
         'DELETE FROM club_forms.contacts WHERE email=ANY($1::text[])',
         [aliases],
+      );
+      // A receipt with no trace of the address: who purged, when, and how much
+      // was removed.
+      await tx.query(
+        'INSERT INTO club_forms.audit(actor,action) VALUES($1,$2)',
+        [
+          actor,
+          `contact-purged:entries=${entries}:notes=${notes}:files=${files.length}`,
+        ],
       );
       return { purged: true, files };
     }

@@ -344,7 +344,7 @@ try {
   );
   await page
     .locator('#event-rsvp [name=email]')
-    .fill('MKim23@Student.DallasCollege.edu');
+    .fill('Member23@Student.DallasCollege.edu');
   await page.evaluate(async () => {
     await (await import('/content/events.js')).refreshEvents();
   });
@@ -400,7 +400,7 @@ try {
   );
   assert.match(
     await admin.locator('#survey-results').textContent(),
-    /mkim23@student.dallascollege.edu/,
+    /member23@student.dallascollege.edu/,
   );
   assert.match(
     await admin.locator('#survey-results').textContent(),
@@ -433,8 +433,24 @@ try {
     null,
   );
   await admin.locator('#survey-results .survey-response > summary').click();
-  await admin.getByRole('button', { name: '☆ Star', exact: true }).click();
+  // Starring patches the card in place: scroll, open card and focus stay.
+  const starButton = admin.getByRole('button', { name: '☆ Star', exact: true });
+  await starButton.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+  const scrolled = await admin.evaluate(() => scrollY);
+  assert.ok(scrolled > 0);
+  await starButton.click();
   await admin.getByText('Response starred.', { exact: true }).waitFor();
+  assert.equal(
+    await admin.evaluate(() => document.activeElement.textContent),
+    '★ Unstar',
+  );
+  assert.equal(await admin.evaluate(() => scrollY), scrolled);
+  assert.equal(
+    await admin
+      .locator('#survey-results .survey-response')
+      .evaluate((el) => el.open),
+    true,
+  );
   await admin.locator('#survey-starred').check();
   await admin.locator('#survey-results .survey-response').waitFor();
   await admin.locator('#survey-results .survey-response > summary').click();
@@ -455,7 +471,7 @@ try {
     .getByText('Response restored to Active.', { exact: true })
     .waitFor();
   await admin.locator('#survey-view').selectOption('active');
-  await admin.locator('#survey-search').fill('MKim23@Student');
+  await admin.locator('#survey-search').fill('Member23@Student');
   await admin.locator('#survey-results .survey-response').waitFor();
   await admin
     .getByRole('button', { name: 'Compile event summary', exact: true })
@@ -512,7 +528,7 @@ try {
     .click();
   const download = await downloading;
   const csv = await readFile(await download.path(), 'utf8');
-  assert.match(csv, /mkim23@student.dallascollege.edu/);
+  assert.match(csv, /member23@student.dallascollege.edu/);
   assert.match(csv, /Other: Chess/);
   await reportDialog
     .getByText(
@@ -639,7 +655,7 @@ try {
     .waitFor();
   assert.match(
     await contacts.textContent(),
-    /mkim23@student.dallascollege.edu/,
+    /member23@student.dallascollege.edu/,
   );
   assert.match(await contacts.textContent(), /e0000001@student.dcccd.edu/);
   for (const [width, height] of [

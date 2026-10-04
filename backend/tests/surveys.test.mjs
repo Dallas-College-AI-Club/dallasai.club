@@ -21,7 +21,7 @@ const event = publicContent('game-night', game);
 const body = (extra = {}) => ({
   kind: 'rsvp',
   name: 'Survey test',
-  email: 'MKim23@Student.DallasCollege.edu',
+  email: 'Member23@Student.DallasCollege.edu',
   consent: true,
   eventId: event.id,
   requestId: randomUUID(),
@@ -94,7 +94,7 @@ test('per-event edu policy accepts college subdomains and alumni, and rejects lo
     'member@dcccd.edu',
     'member@student.dcccd.edu',
     'member@alumni.utexas.edu',
-    ' MKim23@Student.DallasCollege.edu ',
+    ' Member23@Student.DallasCollege.edu ',
   ])
     assert.ok(validate(body({ email }), [event]));
   for (const email of [
@@ -196,7 +196,7 @@ test('RSVP and all answers commit together, retries preserve the original and sn
   const results = await surveyResults(db);
   assert.equal(results.responses.length, 1);
   const stored = results.responses[0];
-  assert.equal(stored.email, 'mkim23@student.dallascollege.edu');
+  assert.equal(stored.email, 'member23@student.dallascollege.edu');
   assert.equal(stored.name, 'Survey test');
   assert.equal(stored.event_date, '');
   assert.deepEqual(stored.questions, event.surveyQuestions);

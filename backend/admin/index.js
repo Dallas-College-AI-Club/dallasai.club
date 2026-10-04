@@ -32,7 +32,10 @@ let offset = 0,
   reloadPending = false,
   sessionGeneration = 0;
 let lastNewCount = null,
-  lastReceived = 0;
+  lastReceived = 0,
+  // This officer's status changes being saved, and saved so far (see load).
+  reviewsSaving = 0,
+  reviewsSaved = 0;
 const alerts = mountBrowserAlerts(
   q('#enable-alerts'),
   q('#notification-status'),
@@ -247,6 +250,8 @@ async function review(card, entry, value) {
     version = sessionGeneration,
     release = busy(card),
     unlock = lock(card, 'textarea');
+  let saved = false;
+  reviewsSaving++;
   try {
     await api('/api/admin', {
       action: 'review',
@@ -255,6 +260,7 @@ async function review(card, entry, value) {
       from: entry.review_status,
       ...(note ? { comment: { id: note.id, body: note.text.trim() } } : {}),
     });
+    saved = true;
     if (note) drafts.delete(key);
     if (version !== sessionGeneration) return;
     // This officer's own change moves the New count; it is not an arrival.
@@ -268,7 +274,6 @@ async function review(card, entry, value) {
         : 'Submission moved to ' + (value === 'new' ? 'New.' : 'Reviewed.')) +
         (note ? ' Your note was saved with it.' : ''),
     );
-    load({ background: true });
   } catch (error) {
     if (version !== sessionGeneration) return;
     release();
@@ -289,6 +294,11 @@ async function review(card, entry, value) {
       fresh.querySelector('summary').focus();
     }
     status(error.message);
+  } finally {
+    reviewsSaving--;
+    reviewsSaved++;
+    // Counts and the title follow the change without waiting for the poll.
+    if (saved && version === sessionGeneration) load({ background: true });
   }
 }
 // Removes a card in place; focus moves to the next card, never to <body>.
@@ -336,7 +346,9 @@ async function load({ background = false } = {}) {
   loading = true;
   if (location.hash === '#archived-survey-questions') selectSurveyArchive();
   const generation = sessionGeneration,
-    requestedFilters = filters().toString();
+    requestedFilters = filters().toString(),
+    savedBefore = reviewsSaved;
+  let overlapped = false;
   q('#entries').setAttribute('aria-busy', 'true');
   q('#refresh').disabled = true;
   try {
@@ -369,16 +381,21 @@ async function load({ background = false } = {}) {
       0,
       ...data.counts.map((row) => Date.parse(row.latest) || 0),
     );
-    if (
-      lastNewCount !== null &&
-      (newCount > lastNewCount || latest > lastReceived)
-    ) {
-      q('#inbox-alert').textContent =
-        'New submissions arrived. Review the inbox below.';
-      alerts.notify();
+    // Counts that overlap an officer's own save are read again after it, and
+    // that load does the arrival check.
+    overlapped = reviewsSaving > 0 || reviewsSaved !== savedBefore;
+    if (!overlapped) {
+      if (
+        lastNewCount !== null &&
+        (newCount > lastNewCount || latest > lastReceived)
+      ) {
+        q('#inbox-alert').textContent =
+          'New submissions arrived. Review the inbox below.';
+        alerts.notify();
+      }
+      lastNewCount = newCount;
+      lastReceived = latest;
     }
-    lastNewCount = newCount;
-    lastReceived = latest;
     const eventSelect = q('#filters [name="eventId"]'),
       selectedEvent = eventSelect.value,
       past = q('#filters [name="kind"]').value === 'rsvp-past';
@@ -486,7 +503,7 @@ async function load({ background = false } = {}) {
     if (reloadPending) {
       reloadPending = false;
       load();
-    }
+    } else if (overlapped && !reviewsSaving) load({ background: true });
   }
 }
 function selectInboxStatus(value) {

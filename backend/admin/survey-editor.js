@@ -1,4 +1,5 @@
 import { node } from './ui.js';
+import { choiceEditor } from './survey-choices.js';
 export function surveyEditor(root, addButton) {
   let questions = [];
   function render() {
@@ -31,6 +32,7 @@ export function surveyEditor(root, addButton) {
         type.value = question.type;
         type.onchange = () => {
           question.type = type.value;
+          if (type.value !== 'multiple') delete question.exclusiveOption;
           render();
         };
         typeLabel.append(type);
@@ -56,92 +58,30 @@ export function surveyEditor(root, addButton) {
           input.maxLength = 6029;
           input.value = question.options.join('\n');
           const choices = node('div');
-          choices.className = 'survey-choice-editor';
-          function renderChoices(focusIndex) {
+          const refreshChoices = () =>
             choices.replaceChildren(
-              ...question.options.map((choice, i) => {
-                const row = node('div');
-                row.className = 'survey-option-row';
-                row.dataset.index = i;
-                const handle = node('button', '↕');
-                handle.type = 'button';
-                handle.className = 'secondary choice-drag';
-                handle.setAttribute(
-                  'aria-label',
-                  'Drag choice ' + (i + 1) + ' to reorder',
-                );
-                let dragging = false;
-                handle.onpointerdown = (event) => {
-                  if (event.button !== 0) return;
-                  dragging = true;
-                  handle.setPointerCapture(event.pointerId);
-                  row.classList.add('dragging');
-                };
-                handle.onpointercancel = () => {
-                  dragging = false;
-                  row.classList.remove('dragging');
-                };
-                handle.onpointerup = (event) => {
-                  if (!dragging) return;
-                  dragging = false;
-                  row.classList.remove('dragging');
-                  const target = document
-                    .elementFromPoint(event.clientX, event.clientY)
-                    ?.closest('.survey-option-row');
-                  if (target && choices.contains(target))
-                    move(i, Number(target.dataset.index));
-                };
-                const answer = node('input');
-                answer.value = choice;
-                answer.maxLength = 200;
-                answer.setAttribute('aria-label', 'Answer choice ' + (i + 1));
-                answer.oninput = () => {
-                  question.options[i] = answer.value;
+              choiceEditor(
+                question,
+                () => {
                   input.value = question.options.join('\n');
-                };
-                row.append(handle, answer);
-                for (const [text, delta] of [
-                  ['↑', -1],
-                  ['↓', 1],
-                ]) {
-                  const button = node('button', text);
-                  button.type = 'button';
-                  button.className = 'secondary';
-                  button.setAttribute(
-                    'aria-label',
-                    'Move choice ' + (i + 1) + (delta < 0 ? ' up' : ' down'),
-                  );
-                  button.disabled =
-                    i + delta < 0 || i + delta >= question.options.length;
-                  button.onclick = () => move(i, i + delta);
-                  row.append(button);
-                }
-                return row;
-              }),
+                },
+                { limit: 30, maxLength: 200 },
+              ),
             );
-            if (focusIndex !== undefined)
-              choices.children[focusIndex]?.querySelector('input').focus();
-          }
-          function move(from, to) {
-            if (from === to || to < 0 || to >= question.options.length) return;
-            question.options.splice(to, 0, question.options.splice(from, 1)[0]);
-            input.value = question.options.join('\n');
-            renderChoices(to);
-          }
           input.oninput = () => {
+            const exclusive = question.options[question.exclusiveOption];
             question.options = input.value.split('\n');
-            renderChoices();
+            const index =
+              exclusive === undefined
+                ? -1
+                : question.options.indexOf(exclusive);
+            if (index < 0) delete question.exclusiveOption;
+            else question.exclusiveOption = index;
+            refreshChoices();
           };
-          renderChoices();
+          refreshChoices();
           wrapper.append(input);
-          box.append(
-            wrapper,
-            node(
-              'p',
-              'Edit choices below. Drag ↕ to reorder, or use the arrow buttons.',
-            ),
-            choices,
-          );
+          box.append(wrapper, choices);
           check('Allow an Other answer', 'allowOther');
         }
         const actions = node('div');
@@ -197,14 +137,24 @@ export function surveyEditor(root, addButton) {
       render();
     },
     value() {
-      return questions.map((question) => ({
-        ...question,
-        options:
+      return questions.map(({ exclusiveOption, ...question }) => {
+        const options =
           question.type === 'text'
             ? []
-            : question.options.map((x) => x.trim()).filter(Boolean),
-        allowOther: question.type !== 'text' && question.allowOther,
-      }));
+            : question.options.map((x) => x.trim()).filter(Boolean);
+        const exclusive =
+          exclusiveOption === undefined
+            ? -1
+            : options.indexOf(question.options[exclusiveOption]?.trim());
+        return {
+          ...question,
+          options,
+          allowOther: question.type !== 'text' && question.allowOther,
+          ...(exclusive >= 0 && question.type === 'multiple'
+            ? { exclusiveOption: exclusive }
+            : {}),
+        };
+      });
     },
   };
 }

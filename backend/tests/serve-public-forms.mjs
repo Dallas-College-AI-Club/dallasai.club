@@ -74,6 +74,13 @@ http
         if (action === 'future') cutoff = null;
         if (action === 'questions')
           event.surveyQuestions[0].label += ' Updated question.';
+        if (action === 'exclusive') {
+          const question = event.surveyQuestions.find(
+            (q) => q.type === 'multiple',
+          );
+          question.options = ['Tuesday', 'Thursday', 'Contact me'];
+          question.exclusiveOption = 2;
+        }
         res.writeHead(303, { Location: '/test-controls' });
         return res.end();
       }
@@ -86,7 +93,15 @@ http
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         return res.end(
           '<!doctype html><title>Public form test controls</title><h1>Isolated test controls</h1>' +
-            ['fail', 'recover', 'drop', 'expire', 'future', 'questions']
+            [
+              'fail',
+              'recover',
+              'drop',
+              'expire',
+              'future',
+              'questions',
+              'exclusive',
+            ]
               .map(
                 (action) =>
                   '<form method="post" action="/control?action=' +

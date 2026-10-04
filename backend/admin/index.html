@@ -9,6 +9,7 @@
     <meta name="robots" content="noindex,nofollow" />
     <meta name="referrer" content="no-referrer" />
     <title>Club Office</title>
+    <script src="/admin/theme.js"></script>
     <link rel="stylesheet" href="/admin/style.css" />
     <link
       rel="icon"
@@ -38,6 +39,17 @@
         ><span class="crumb">/ Club office</span></a
       >
       <span id="offline-chip" class="chip" hidden>Offline</span>
+      <div class="appearance-control" role="group" aria-label="Appearance">
+        <button type="button" data-appearance="light" aria-pressed="false">
+          Light
+        </button>
+        <button type="button" data-appearance="dark" aria-pressed="false">
+          Dark
+        </button>
+        <button type="button" data-appearance="system" aria-pressed="true">
+          System
+        </button>
+      </div>
       <button
         id="account-button"
         type="button"
@@ -495,17 +507,49 @@
         <section id="surveys-pane" aria-labelledby="surveys-heading" hidden>
           <div class="heading view-header">
             <h1 id="surveys-heading" tabindex="-1">Surveys</h1>
+            <a
+              id="create-survey"
+              class="button-link primary"
+              href="#/surveys/new"
+              >Create survey</a
+            >
           </div>
-          <nav class="sub-nav" aria-label="Survey groups">
-            <a id="event-surveys-group" href="#/surveys/events">Event surveys</a
+          <nav id="survey-groups" class="sub-nav" aria-label="Survey groups">
+            <a id="all-surveys-group" href="#/surveys">All surveys</a>
+            <a id="event-surveys-group" href="#/surveys/events">RSVP answers</a
             ><a id="custom-surveys-group" href="#/surveys/custom"
               >Custom surveys</a
             >
           </nav>
+          <section id="survey-hub">
+            <p class="hint">Every survey, in one place.</p>
+            <div class="survey-library-toolbar">
+              <label
+                >Collection<select id="survey-collection">
+                  <option value="">All surveys</option>
+                  <option value="events">Event feedback</option>
+                  <option value="custom">Custom surveys</option>
+                </select></label
+              >
+              <a class="button-link" href="#/surveys/events">RSVP answers</a>
+              <button
+                id="survey-library-refresh"
+                type="button"
+                class="btn-quiet"
+              >
+                Refresh
+              </button>
+            </div>
+            <div id="survey-library" aria-live="polite"></div>
+            <p class="hint">
+              Event feedback has its own link. RSVP answers are collected during
+              registration.
+            </p>
+          </section>
           <section id="custom-surveys-root" hidden></section>
           <section id="event-surveys-root">
             <div class="heading">
-              <h2 tabindex="-1" data-focus-fallback>Event surveys</h2>
+              <h2 tabindex="-1" data-focus-fallback>RSVP answers</h2>
               <button id="survey-reload" type="button" class="btn-quiet">
                 Refresh
               </button>
@@ -542,220 +586,79 @@
           aria-labelledby="help-heading"
           hidden
         >
-          <h1 id="help-heading" tabindex="-1">Help</h1>
-          <section id="help-officer" aria-labelledby="help-officer-h">
-            <h2 id="help-officer-h">Officer topics</h2>
-            <p class="hint">
-              Notes officers write for each other. Only signed-in officers see
-              them.
-            </p>
-            <p id="help-officer-status" role="status"></p>
-            <div id="help-officer-list"></div>
-            <details id="help-archived" hidden>
-              <summary>Archived topics</summary>
-              <div id="help-archived-list"></div>
-            </details>
-            <button id="help-add" type="button" class="secondary" hidden>
-              Add a topic
+          <div class="help-heading-row">
+            <div>
+              <h1 id="help-heading" tabindex="-1">Help</h1>
+              <p class="hint">One guide, kept up to date by your officers.</p>
+            </div>
+            <button id="help-add" type="button" class="btn-primary" hidden>
+              Add topic
             </button>
-            <form id="help-form" class="help-form" hidden>
-              <h3 id="help-form-heading" tabindex="-1">New topic</h3>
-              <label
-                >Title<input name="help-title" maxlength="120" required
+          </div>
+          <nav id="help-views" class="help-views" aria-label="Help views">
+            <a href="#/help">Topics</a>
+            <a href="#/help/archived">Archived</a>
+            <a href="#/help/activity">Activity</a>
+          </nav>
+          <p id="help-officer-status" role="status"></p>
+          <p id="help-setup-status" class="hint" hidden></p>
+          <div class="help-columns">
+            <aside id="help-sidebar" aria-label="Help topics">
+              <label class="help-search"
+                >Find a topic<input
+                  id="help-search"
+                  type="search"
+                  placeholder="Search this guide"
               /></label>
-              <label
-                >Text<textarea
-                  name="help-body"
-                  rows="8"
-                  maxlength="8000"
-                  required
-                ></textarea>
-              </label>
-              <p class="hint">
-                Plain text. Leave a blank line between paragraphs.
-              </p>
-              <div class="dialog-actions">
-                <button type="button" class="secondary" data-cancel>
-                  Cancel
-                </button>
-                <button type="submit" class="btn-primary">Save topic</button>
-              </div>
-            </form>
-          </section>
-          <section id="help-submissions" aria-labelledby="help-submissions-h">
-            <h2 id="help-submissions-h">How people reach the inbox</h2>
-            <ul class="submission-sources">
-              <li>
-                <a
-                  href="https://dallasai.club/club.html?mode=join"
-                  target="_blank"
-                  >Club signup ↗<span class="visually-hidden">
-                    (opens in a new tab)</span
-                  ></a
-                >
-                <p>
-                  “Join the club” in the website menu opens the registration
-                  form. Entries appear under Signups.
+              <div id="help-topic-list"></div>
+            </aside>
+            <div class="help-reading">
+              <form id="help-form" class="help-form" hidden>
+                <h2 id="help-form-heading">New topic</h2>
+                <label
+                  >Title<input name="help-title" maxlength="120" required
+                /></label>
+                <fieldset class="help-categories">
+                  <legend>Category</legend>
+                  <button
+                    type="button"
+                    class="secondary"
+                    data-category="everyday"
+                    aria-pressed="true"
+                  >
+                    Everyday tasks
+                  </button>
+                  <button
+                    type="button"
+                    class="secondary"
+                    data-category="essentials"
+                    aria-pressed="false"
+                  >
+                    Office essentials
+                  </button>
+                </fieldset>
+                <label
+                  >Text<textarea
+                    name="help-body"
+                    rows="10"
+                    maxlength="8000"
+                    required
+                  ></textarea>
+                </label>
+                <p class="hint">
+                  Leave a blank line between paragraphs. Start steps with 1.,
+                  2., 3.
                 </p>
-              </li>
-              <li>
-                <a
-                  href="https://dallasai.club/club.html?mode=subscribe"
-                  target="_blank"
-                  >The AI Review subscription ↗<span class="visually-hidden">
-                    (opens in a new tab)</span
-                  ></a
-                >
-                <p>
-                  Subscribe links in the menu, The AI Review, and the signup
-                  page open the email form. Entries appear under The AI Review.
-                </p>
-              </li>
-              <li>
-                <a
-                  href="https://dallasai.club/club.html?mode=contribute"
-                  target="_blank"
-                  >Submit to The AI Review ↗<span class="visually-hidden">
-                    (opens in a new tab)</span
-                  ></a
-                >
-                <p>
-                  “Contribute an article,” “Start a draft,” and “Develop an
-                  article of your own” open the contribution form. Text and
-                  attachments appear under Articles for an editor to review.
-                </p>
-              </li>
-              <li>
-                <a
-                  href="https://dallasai.club/club.html?mode=events"
-                  target="_blank"
-                  >Event RSVP ↗<span class="visually-hidden">
-                    (opens in a new tab)</span
-                  ></a
-                >
-                <p>
-                  Select an upcoming or potential event and click RSVP. The
-                  popup asks for name, email, and any questions defined for that
-                  event. Basic details appear under RSVPs; full answers appear
-                  in Surveys.
-                </p>
-              </li>
-              <li>
-                <a
-                  href="https://dallasai.club/club.html?mode=events"
-                  target="_blank"
-                  >Request a workshop ↗<span class="visually-hidden">
-                    (opens in a new tab)</span
-                  ></a
-                >
-                <p>
-                  “Request a workshop” on Events opens a popup form. Entries
-                  appear under Workshops.
-                </p>
-              </li>
-              <li>
-                <a
-                  href="https://dallasai.club/club.html?mode=events"
-                  target="_blank"
-                  >Ask about an event ↗<span class="visually-hidden">
-                    (opens in a new tab)</span
-                  ></a
-                >
-                <p>
-                  Select an event, then “Ask about this event.” The popup sends
-                  a question linked to that event to Questions.
-                </p>
-              </li>
-              <li>
-                <a
-                  href="https://dallasai.club/club.html?mode=about"
-                  target="_blank"
-                  >Ask the club ↗<span class="visually-hidden">
-                    (opens in a new tab)</span
-                  ></a
-                >
-                <p>
-                  “Ask the club” in the public website footer opens the general
-                  question popup. Entries appear under Questions.
-                </p>
-              </li>
-            </ul>
-            <p>
-              Successful submissions open a confirmation screen with a Close or
-              Done button. Use the sender’s email link in the inbox to reply.
-              Subscription requests are saved for future updates; email
-              broadcasts are not enabled.
-            </p>
-            <p>
-              Other website actions: game scores go to
-              <a
-                href="https://dallasai.club/club.html?mode=rankings"
-                target="_blank"
-                >Rankings ↗<span class="visually-hidden">
-                  (opens in a new tab)</span
-                ></a
-              >. Teams links open the club community. Saving a writing draft
-              keeps it on the visitor’s device; it does not submit an inbox
-              entry.
-            </p>
-          </section>
-          <section id="help-statuses" aria-labelledby="help-statuses-h">
-            <h2 id="help-statuses-h">What New, Reviewed and Archived mean</h2>
-            <p>
-              Every submission is stored in the club’s Neon database, not just
-              on this device.
-            </p>
-            <p>
-              <strong>New:</strong> waiting for an officer to review.
-              <strong>Reviewed:</strong> an officer has looked at it; follow-up
-              may still be needed. <strong>Archived:</strong> no further action
-              is planned. Comments and history are kept, and you can mark an
-              archived submission new or reviewed again.
-            </p>
-            <p>
-              Mark reviewed and Archive move submissions between these views.
-              Neither sends a reply, deletes a record, unsubscribes anyone, or
-              publishes a contribution. Use the sender’s email link to reply.
-            </p>
-          </section>
-          <section id="help-sessions" aria-labelledby="help-sessions-h">
-            <h2 id="help-sessions-h">Sessions</h2>
-            <p>
-              You stay signed in for 3 days on this browser. If your session
-              ends while you work, Club Office pauses and asks you to sign in
-              again; your unsaved work stays on the page.
-            </p>
-          </section>
-          <section id="help-exports" aria-labelledby="help-exports-h">
-            <h2 id="help-exports-h">Exports</h2>
-            <p>
-              Export filtered CSV downloads the submissions that match the
-              current status, type and event. Narrow the filters to 10,000
-              matching records or fewer first. Every export is logged.
-            </p>
-          </section>
-          <section id="help-alerts" aria-labelledby="help-alerts-h">
-            <h2 id="help-alerts-h">New submissions and browser alerts</h2>
-            <p>
-              While Club Office is open, it checks for new submissions every
-              minute and when you return to the tab. The list never changes by
-              itself: a “new submissions” button appears instead, and the Inbox
-              count updates. Turn on Browser alerts in the account menu for
-              pop-ups while this tab is open. Email alerts aren’t available.
-            </p>
-          </section>
-          <section id="help-setup" aria-labelledby="help-setup-h">
-            <h2 id="help-setup-h">Setup status</h2>
-            <p id="help-setup-status">Everything is set up.</p>
-          </section>
-          <section id="help-privacy" aria-labelledby="help-privacy-h">
-            <h2 id="help-privacy-h">Privacy</h2>
-            <p>
-              Unsaved notes stay in this tab’s memory only. Addresses and page
-              titles never include a person’s name or email. Signing out clears
-              the page, and signs out other Club Office tabs in this browser.
-            </p>
-          </section>
+                <div class="dialog-actions">
+                  <button type="button" class="secondary" data-cancel>
+                    Cancel
+                  </button>
+                  <button type="submit" class="btn-primary">Save topic</button>
+                </div>
+              </form>
+              <div id="help-article"></div>
+            </div>
+          </div>
         </section>
         <section id="not-found" aria-labelledby="not-found-heading" hidden>
           <h1 id="not-found-heading" tabindex="-1">Page not found</h1>

@@ -68,16 +68,24 @@ Keep runtime connections restricted. The original leaderboard setup is retained 
 | 014–017 | Response management, contact identities, submission and profile editing |
 | 018 | Custom-survey history/device indexes and permission to clean obsolete devices |
 | 019 | Officer Help topics (`club_forms.help_entries`) |
+| 020 | Help guidebook categories, editable starter topics, and topic-linked audit receipts |
 
 Apply `018_survey_maintenance.sql` before deploying the new maintenance handler.
 It grants deletion only for device tokens, not survey responses. The migration is
 repeatable. Cleanup is bounded and retries on later daily runs if there is a backlog.
 
 Apply `019_help_entries.sql` to let officers add their own Help topics. Until it is
-applied, Help shows the built-in topics with “Officer topics are not set up yet.”, and
-saving a topic answers 503 with a message naming migration 019. The topics are stored
+applied with migration 020, Help reports that topics are not set up, and
+saving a topic answers 503 naming the required migrations. The topics are stored
 only in Neon, never in this public repository. The migration is repeatable and grants
 the runtime role select, insert, delete and updates of the editable columns.
+
+Apply `020_help_guidebook.sql` before deploying the guidebook. It adds categories
+and a stable topic ID to audit receipts, then inserts nine editable starter topics.
+Reruns preserve officer edits and do not recreate deleted starter topics. Receipts
+survive topic deletion without retaining the title or body. Older unlinked receipts
+remain in Activity; their original topic cannot be reconstructed. Keep this additive
+migration on a code rollback.
 
 The original `provision.mjs` bootstraps only part of the current schema and refuses
 to overwrite existing credentials. Never treat rerunning it as an upgrade; review
@@ -107,6 +115,37 @@ Browser fixtures use synthetic data and local databases. Test public routes, for
 validation and retries, mobile layouts, sign-in/sign-out, event changes, and custom
 survey creation, preview, submission, replacement, access removal, and result paging.
 The CI office workflow runs `node tests/browser-office.mjs`.
+
+Admin-refinement verification (2026-10-04, local worktree): the 189-test backend
+suite passed, including linked event feedback, calendar/number answers, deletion
+totals and exclusive RSVP choices. Three additional appearance tests passed.
+Thirteen deliberately removed protections caused
+the matching regression assertions to fail. A local PGlite fixture with 10,006
+submissions completed 120 concurrent reads successfully (about 1.6 seconds total);
+32 duplicate submissions returned successfully and saved exactly one record.
+These measurements exercise local correctness, not Vercel or Neon capacity.
+
+The subsequent survey-list and appearance-button revision passed all 192 backend
+tests and all 57 office browser scenarios. Five theme/router mutations failed as
+expected. In the built
+local office, manual browser checks confirmed persisted theme selection, collection
+filtering, event-feedback creation, QR display, duplication with copied questions
+and no copied invitations, publication with a distinct link, and separate list rows.
+The survey list was visually checked at 320px and 1280px, with no horizontal
+overflow.
+
+The accepted Guidebook Help implementation passed the 193-test backend suite and
+all 57 office browser scenarios. An additional migration-repeat test passed with
+the targeted 17-test Help/router run (194 backend tests total). Nine in-memory
+mutations verified active-delete and archived-edit rejection, topic attribution,
+history isolation and pagination, direct-link identity, and migration preservation
+of edits and deletions. The Help browser scenario checks plain-text rendering,
+numbered steps, category buttons, draft navigation, copied links and reloads,
+Inline history, archive/restore/delete, retained deletion receipts, and legacy
+export links. Session-expiry recovery also passed. Dark desktop and light 390px
+phone layouts were visually checked with no horizontal overflow. The production
+migration dry run rolled back successfully and confirmed runtime category-edit
+permissions; it found no existing officer topics to alter.
 
 Use `node backend/tests/serve-custom-survey.mjs` for the isolated survey UI at port
 4187 and `node backend/tests/serve-submission-management.mjs` for inbox editing at

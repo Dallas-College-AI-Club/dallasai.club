@@ -4,7 +4,12 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
 import { draftContent, publicContent } from '../lib/event-content.mjs';
-import { surveyResults, surveyQuestions } from '../lib/surveys.mjs';
+import {
+  surveyResults,
+  surveyQuestions,
+  surveyVersion,
+  validateSurvey,
+} from '../lib/surveys.mjs';
 import { saveEvent, liveEvents } from '../lib/events.mjs';
 import { upcomingEvents, inboxFilter } from '../lib/inbox.mjs';
 import { validate } from '../lib/validation.mjs';
@@ -18,6 +23,43 @@ const game = JSON.parse(
   ),
 );
 const event = publicContent('game-night', game);
+test('RSVP exclusive None and custom choices reject mixed answers without changing old snapshots', () => {
+  for (const [label, explicit] of [
+    ['None of these', false],
+    ['Any of the above', false],
+    ['Not available', true],
+  ]) {
+    const q = {
+      id: randomUUID(),
+      label: 'Availability',
+      type: 'multiple',
+      required: true,
+      allowOther: true,
+      options: ['Tuesday', 'Thursday', label],
+      ...(explicit ? { exclusiveOption: 2 } : {}),
+    };
+    const questions = surveyQuestions([q]);
+    const event = { surveyQuestions: questions };
+    const answer = (value) =>
+      validateSurvey(
+        {
+          surveyVersion: surveyVersion(questions),
+          answers: [{ questionId: q.id, value, other: '' }],
+        },
+        event,
+      );
+    assert.equal(answer([label]).answers[0].value[0], label);
+    assert.throws(() => answer(['Tuesday', label]), { status: 400 });
+    assert.equal(answer(['Tuesday', 'Thursday']).answers[0].value.length, 2);
+    assert.throws(() => surveyQuestions([{ ...q, exclusiveOption: 9 }]), {
+      status: 400,
+    });
+    assert.throws(
+      () => surveyQuestions([{ ...q, type: 'single', exclusiveOption: 2 }]),
+      { status: 400 },
+    );
+  }
+});
 const body = (extra = {}) => ({
   kind: 'rsvp',
   name: 'Survey test',

@@ -51,6 +51,14 @@ export function surveyQuestions(input = []) {
     const options = question.options.map((option) =>
       text(option, 'the answer option', 200, true),
     );
+    if (
+      question.exclusiveOption !== undefined &&
+      (question.type !== 'multiple' ||
+        !Number.isInteger(question.exclusiveOption) ||
+        question.exclusiveOption < 0 ||
+        question.exclusiveOption >= options.length)
+    )
+      throw new RequestError(400, 'Choose a listed exclusive option.');
     if (options.includes('__other__'))
       throw new RequestError(400, 'Use a different answer option.');
     if (
@@ -68,6 +76,9 @@ export function surveyQuestions(input = []) {
       required: question.required,
       options,
       allowOther: choices && question.allowOther,
+      ...(question.exclusiveOption !== undefined
+        ? { exclusiveOption: question.exclusiveOption }
+        : {}),
     };
   });
 }
@@ -139,12 +150,12 @@ export function validateSurvey(body, event) {
       if (
         question.type === 'multiple' &&
         values.length > 1 &&
-        values.some(exclusiveSurveyChoice)
+        values.some((choice) => exclusiveSurveyChoice(choice, question))
       )
         throw new RequestError(
           400,
           'Choose “' +
-            values.find(exclusiveSurveyChoice) +
+            values.find((choice) => exclusiveSurveyChoice(choice, question)) +
             '” by itself for: ' +
             question.label,
         );

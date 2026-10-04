@@ -12,6 +12,8 @@ import {
   FORM_VERSION,
 } from '../lib/survey-builder.mjs';
 import { changeRespondent } from '../lib/survey-respondents.mjs';
+import { surveyCatalog } from '../lib/survey-catalog.mjs';
+import { surveyResultsCSV } from '../lib/survey-results.mjs';
 import {
   privateSurveyToken,
   linkedSurvey,
@@ -55,6 +57,99 @@ const action = (id, definition, expectedRevision = 0, action = 'save') => ({
   expectedRevision,
   action,
   requestId: randomUUID(),
+});
+test('calendar and numeric answers validate strictly and export under their question headings', () => {
+  const d = draft();
+  d.questions[0].type = 'date';
+  d.questions[0].title = 'Preferred date';
+  d.questions[1].type = 'number';
+  d.questions[1].title = 'Guests';
+  validateDefinition(d, true);
+  const answer = (date, number) =>
+    validateFormResponse(
+      {
+        requestId: randomUUID(),
+        expectedRevision: 0,
+        contentVersion: FORM_VERSION,
+        advisorId: 'member',
+        consent: 'admins',
+        answers: [
+          { id: d.questions[0].id, value: date },
+          { id: d.questions[1].id, value: number },
+        ],
+      },
+      { definition: d },
+      { advisor_id: 'member' },
+    );
+  const responses = answer('2028-02-29', 0);
+  assert.deepEqual(
+    responses.map((r) => r.text),
+    ['2028-02-29', '0'],
+  );
+  assert.equal(answer('2026-10-04', -1.5)[1].value, -1.5);
+  for (const invalid of [
+    '2026-02-29',
+    '2026-02-31',
+    '2026-13-01',
+    '10/04/2026',
+    '',
+    20261004,
+  ])
+    assert.throws(() => answer(invalid, 0), { status: 400 });
+  for (const invalid of [NaN, Infinity, '3', {}, Number.MAX_SAFE_INTEGER + 1])
+    assert.throws(() => answer('2026-10-04', invalid), { status: 400 });
+  const csv = surveyResultsCSV(
+    [
+      {
+        display_name: 'Example',
+        email: 'example@example.com',
+        active: true,
+        submitted_at: '2026-10-04T12:00:00Z',
+        responses,
+      },
+    ],
+    d,
+  );
+  assert.match(csv.split('\r\n')[0], /Preferred date.*Guests/);
+  assert.match(csv, /2028-02-29/);
+});
+
+test('linked event surveys persist in the catalog and keep a separate answer link', async () => {
+  const f = await fixture();
+  process.env.AUTH_BASE_URL = 'https://club.example';
+  try {
+    const d = draft();
+    d.eventId = 'feedback-event';
+    assert.throws(() => validateDefinition({ ...d, eventId: '../event' }), {
+      status: 400,
+    });
+    await assert.rejects(
+      () => changeDraft(f.db, actor, action(randomUUID(), d)),
+      { status: 400 },
+    );
+    await f.db.query(
+      'INSERT INTO club_forms.events(id,draft,updated_by) VALUES($1,$2,$3)',
+      [
+        d.eventId,
+        JSON.stringify({ title: 'Feedback event', category: 'Workshop' }),
+        actor.email,
+      ],
+    );
+    const { id } = await create(f, d);
+    await add(f, id);
+    await changeDraft(f.db, actor, action(id, d, 1, 'publish'));
+    const catalog = (await surveyCatalog(f.db)).find((s) => s.id === id);
+    assert.equal(catalog.definition.eventId, d.eventId);
+    assert.match(catalog.privateLink, /\/surveys\/#invite=/);
+    assert.equal((await getDraft(f.db, id)).definition.eventId, d.eventId);
+    assert.equal(
+      (await f.db.query('SELECT count(*)::int n FROM club_forms.entries'))
+        .rows[0].n,
+      0,
+    );
+  } finally {
+    await f.db.close();
+  }
 });
 async function create(f, definition = draft()) {
   const id = randomUUID();

@@ -211,7 +211,10 @@ try {
     'Custom survey create preview publish respondents and close',
     async (page) => {
       await page.locator('#surveys-tab').click();
-      await page.locator('#custom-surveys-group').click();
+      await page
+        .locator('#survey-library .survey-library-row a')
+        .first()
+        .click();
       await page
         .getByRole('button', { name: 'Create custom survey', exact: true })
         .click();
@@ -287,9 +290,12 @@ try {
       await expect(
         page.getByRole('button', { name: 'Close survey', exact: true }),
       ).toBeEnabled();
+      await page.locator('.respondent-management > summary').click();
       await page.getByRole('button', { name: /Remove access for/ }).click();
+      await page.locator('.respondent-management > summary').click();
       await page.getByText('Archived respondents', { exact: true }).click();
       await page.getByRole('button', { name: /Restore access for/ }).click();
+      await page.locator('.respondent-management > summary').click();
       await page.getByRole('button', { name: /Remove access for/ }).waitFor();
       await page
         .getByRole('button', { name: 'Close survey', exact: true })
@@ -329,7 +335,10 @@ try {
     'Ambiguous save retries the same request without losing the draft',
     async (page) => {
       await page.locator('#surveys-tab').click();
-      await page.locator('#custom-surveys-group').click();
+      await page
+        .locator('#survey-library .survey-library-row a')
+        .first()
+        .click();
       await page
         .getByRole('button', { name: 'Create custom survey', exact: true })
         .click();
@@ -400,7 +409,7 @@ try {
       },
     );
     await page.locator('#surveys-tab').click();
-    await page.locator('#custom-surveys-group').click();
+    await page.locator('#survey-library .survey-library-row a').first().click();
     await page.getByLabel('Custom survey', { exact: true }).selectOption(id);
     await page
       .getByRole('button', {
@@ -467,7 +476,10 @@ try {
     'Custom draft navigation is guarded',
     async (page, dialogs, setAccept) => {
       await page.locator('#surveys-tab').click();
-      await page.locator('#custom-surveys-group').click();
+      await page
+        .locator('#survey-library .survey-library-row a')
+        .first()
+        .click();
       await page
         .getByRole('button', { name: 'Create custom survey', exact: true })
         .click();
@@ -489,32 +501,41 @@ try {
       await expect(page.locator('#inbox-pane')).toBeVisible();
     },
   );
-  await check('Active tabs preserve filters', async (page) => {
-    await page.locator('#surveys-tab').click();
-    await page.locator('#survey-search').fill('rsvp@example.edu');
-    await expect(page.locator('#survey-results .survey-response')).toHaveCount(
-      1,
-    );
-    await page.locator('#surveys-tab').click();
-    await expect(page.locator('#survey-search')).toHaveValue(
-      'rsvp@example.edu',
-    );
-    await page.locator('#custom-surveys-group').click();
-    await page
-      .getByRole('button', { name: 'Create custom survey', exact: true })
-      .click();
-    await page
-      .getByLabel('Survey title', { exact: true })
-      .fill('Keep on same tab');
-    await page.locator('#custom-surveys-group').click();
-    // The response search waits 250 ms; its late reset must not navigate
-    // away from the page the officer has moved on to.
-    await page.waitForTimeout(400);
-    await expect(page).toHaveURL(/#\/surveys\/custom$/);
-    await expect(page.getByLabel('Survey title', { exact: true })).toHaveValue(
-      'Keep on same tab',
-    );
-  });
+  await check(
+    'Survey collections retain search and protect drafts',
+    async (page, dialogs, setAccept) => {
+      await page.locator('#surveys-tab').click();
+      await page
+        .locator('#survey-hub')
+        .getByRole('link', { name: 'RSVP answers', exact: true })
+        .click();
+      await page.locator('#survey-search').fill('rsvp@example.edu');
+      await expect(
+        page.locator('#survey-results .survey-response'),
+      ).toHaveCount(1);
+      await page.locator('#event-surveys-group').click();
+      await expect(page.locator('#survey-search')).toHaveValue(
+        'rsvp@example.edu',
+      );
+      await page.locator('#custom-surveys-group').click();
+      await page
+        .getByRole('button', { name: 'Create custom survey', exact: true })
+        .click();
+      await page
+        .getByLabel('Survey title', { exact: true })
+        .fill('Keep on same tab');
+      setAccept(false);
+      await page.locator('#custom-surveys-group').click();
+      // The response search waits 250 ms; its late reset must not navigate
+      // away from the page the officer has moved on to.
+      await page.waitForTimeout(400);
+      await expect(page).toHaveURL(/#\/surveys\/new$/);
+      assert.equal(dialogs.length, 1);
+      await expect(
+        page.getByLabel('Survey title', { exact: true }),
+      ).toHaveValue('Keep on same tab');
+    },
+  );
   await check('Hash navigation matches the visible tab', async (page) => {
     await page.evaluate(() => {
       location.hash = 'events';
@@ -533,7 +554,10 @@ try {
     'Cancelled browser navigation retains custom draft and address',
     async (page, dialogs, setAccept) => {
       await page.locator('#surveys-tab').click();
-      await page.locator('#custom-surveys-group').click();
+      await page
+        .locator('#survey-library .survey-library-row a')
+        .first()
+        .click();
       await page
         .getByRole('button', { name: 'Create custom survey', exact: true })
         .click();
@@ -544,7 +568,7 @@ try {
       await page.evaluate(() => {
         location.hash = 'survey=some-entry';
       });
-      await expect(page).toHaveURL(/#\/surveys\/custom/);
+      await expect(page).toHaveURL(/#\/surveys\/new$/);
       await expect(
         page.getByLabel('Survey title', { exact: true }),
       ).toHaveValue('Keep this browser draft');
@@ -769,7 +793,10 @@ try {
     'An exclusive choice is marked in the builder and chosen by itself',
     async (page) => {
       await page.locator('#surveys-tab').click();
-      await page.locator('#custom-surveys-group').click();
+      await page
+        .locator('#survey-library .survey-library-row a')
+        .first()
+        .click();
       await page
         .getByRole('button', { name: 'Create custom survey', exact: true })
         .click();
@@ -1638,6 +1665,10 @@ try {
       );
       await expect(page.locator('#status')).toHaveText('CSV download started.');
       await page.locator('#surveys-tab').click();
+      await page
+        .locator('#survey-hub')
+        .getByRole('link', { name: 'RSVP answers', exact: true })
+        .click();
       await page.locator('#survey-results .survey-response').first().waitFor();
       await page.route(
         (url) =>
@@ -1781,12 +1812,12 @@ try {
     await expect(page).toHaveURL(/#\/events$/);
     await expect(page.locator('#events-heading')).toBeFocused();
     await page.locator('#surveys-tab').click();
-    await expect(page).toHaveURL(/#\/surveys\/events$/);
-    await page.locator('#custom-surveys-group').click();
-    await expect(page).toHaveURL(/#\/surveys\/custom$/);
-    await expect(page).toHaveTitle(/Custom surveys · Surveys · Club Office$/);
+    await expect(page).toHaveURL(/#\/surveys$/);
+    await page.locator('#survey-library .survey-library-row a').first().click();
+    await expect(page).toHaveURL(/#\/surveys\/custom\/[a-f0-9-]+$/);
+    await expect(page).toHaveTitle(/Custom survey · Surveys · Club Office$/);
     await page.goBack();
-    await expect(page.locator('#event-surveys-root')).toBeVisible();
+    await expect(page.locator('#survey-hub')).toBeVisible();
     await page.goBack();
     await expect(page.locator('#events-pane')).toBeVisible();
     await page.goBack();
@@ -1794,16 +1825,16 @@ try {
     assert.equal(new URL(page.url()).pathname, '/admin/');
     await page.goForward();
     await expect(page.locator('#events-pane')).toBeVisible();
-    // Each nav link reopens its section's last page.
+    // Surveys opens its overview instead of hiding the other collection.
     await page.locator('#surveys-tab').click();
-    await page.locator('#custom-surveys-group').click();
+    await page.locator('#survey-library .survey-library-row a').first().click();
     await page.locator('#inbox-tab').click();
     await expect(page.locator('#surveys-tab')).toHaveAttribute(
       'href',
-      '#/surveys/custom',
+      '#/surveys',
     );
     await page.locator('#surveys-tab').click();
-    await expect(page.locator('#custom-surveys-root')).toBeVisible();
+    await expect(page.locator('#survey-hub')).toBeVisible();
     // A submission's page title never names the person.
     const entry = fixture.entries.find((row) => row.kind === 'join');
     await page.evaluate((id) => {
@@ -1821,7 +1852,10 @@ try {
     'Reload keeps the page, the Surveys sub-view and Inbox filters',
     async (page) => {
       await page.locator('#surveys-tab').click();
-      await page.locator('#custom-surveys-group').click();
+      await page
+        .locator('#survey-library .survey-library-row a')
+        .first()
+        .click();
       const create = page.getByRole('button', {
         name: 'Create custom survey',
         exact: true,
@@ -2425,7 +2459,7 @@ try {
   );
   const openCustomSurvey = async (page, id) => {
     await page.locator('#surveys-tab').click();
-    await page.locator('#custom-surveys-group').click();
+    await page.locator('#survey-library .survey-library-row a').first().click();
     await page.getByLabel('Custom survey', { exact: true }).selectOption(id);
   };
   const pdfAudits = async (survey) =>
@@ -2473,7 +2507,7 @@ try {
     await openCustomSurvey(page, studio);
     await avery.waitFor();
     // jsPDF is not part of the first download.
-    assert.deepEqual(await scripts(), ['/admin/index.js']);
+    assert.deepEqual(await scripts(), ['/admin/theme.js', '/admin/index.js']);
     await avery.click();
     await expect(heading).toHaveValue('Advisor Studio sample');
     // The sample's Korean note is beyond the PDF font, so Print is offered.
@@ -2509,7 +2543,7 @@ try {
     ).toBeVisible();
     assert.match(
       (await scripts()).join(' '),
-      /^\/admin\/index\.js \/admin\/response-pdf-\w+\.js$/,
+      /^\/admin\/theme\.js \/admin\/index\.js \/admin\/response-pdf-\w+\.js$/,
     );
     assert.deepEqual(await pdfAudits(studio), [
       {
@@ -2887,15 +2921,12 @@ try {
   );
   await check(
     'Officers add, edit, archive, restore and delete Help topics as plain text',
-    async (page) => {
+    async (page, dialogs, acceptDialogs) => {
       await page.locator('#help-tab').click();
       const form = page.locator('#help-form'),
-        topics = page.locator('#help-officer');
-      await expect(page.locator('#help-officer-status')).toHaveText(
-        'No officer topics yet.',
-      );
+        topics = page.locator('#help-pane');
       await page
-        .getByRole('button', { name: 'Add a topic', exact: true })
+        .getByRole('button', { name: 'Add topic', exact: true })
         .click();
       await form
         .getByLabel('Title', { exact: true })
@@ -2906,59 +2937,91 @@ try {
       await form
         .getByRole('button', { name: 'Save topic', exact: true })
         .click();
-      const entry = page.locator('#help-officer-list .help-entry');
-      await expect(entry.locator('h3')).toHaveText(
+      const entry = page.locator('#help-article');
+      await expect(entry.locator('h2')).toHaveText(
         '<img src=x onerror="window.pwned=1">Room keys',
       );
+      const topicURL = page.url();
       await expect(entry.locator('.help-entry-text')).toHaveText([
         'Ask <b>facilities</b>.',
         '<script>window.pwned=2</script>',
       ]);
       assert.equal(await topics.locator('img, b, script').count(), 0);
       assert.equal(await page.evaluate(() => window.pwned), undefined);
-      await entry.getByRole('button', { name: 'Edit', exact: true }).click();
+      await expect(
+        entry.getByRole('button', { name: 'Delete permanently', exact: true }),
+      ).toHaveCount(0);
+      await entry
+        .getByRole('button', { name: 'Edit topic', exact: true })
+        .click();
       await form.getByLabel('Title', { exact: true }).fill('Room keys');
       await form
+        .getByRole('button', { name: 'Office essentials', exact: true })
+        .click();
+      await form
         .getByLabel('Text', { exact: true })
-        .fill('Ask the front desk.');
+        .fill('Ask the front desk.\n\n1. Bring ID.\n2. Return the keys.');
+      acceptDialogs(false);
+      await page.locator('#home-tab').click();
+      await expect(form).toBeVisible();
+      acceptDialogs(true);
       await form
         .getByRole('button', { name: 'Save topic', exact: true })
         .click();
-      await expect(entry.locator('h3')).toHaveText('Room keys');
+      await expect(entry.locator('h2')).toHaveText('Room keys');
       await expect(entry).toContainText('Updated by You');
-      await entry.getByRole('button', { name: 'Archive', exact: true }).click();
-      await expect(page.locator('#help-officer-list .help-entry')).toHaveCount(
-        0,
+      await expect(entry.locator('.help-steps li')).toHaveCount(2);
+      await entry.getByRole('button', { name: 'History', exact: true }).click();
+      await expect(entry.locator('#help-topic-history li')).toHaveCount(2);
+      await expect(entry.locator('#help-topic-history')).toContainText(
+        'Edited a Help topic',
       );
-      await page.locator('#help-archived summary').click();
-      const archived = page.locator('#help-archived-list .help-entry');
-      await expect(page.locator('#help-archived summary')).toHaveText(
-        'Archived topics (1)',
-      );
-      await archived
-        .getByRole('button', { name: 'Restore', exact: true })
+      await entry
+        .getByRole('button', { name: 'Copy topic link', exact: true })
         .click();
-      await expect(entry).toHaveCount(1);
-      await expect(page.locator('#help-archived')).toBeHidden();
-      await entry.getByRole('button', { name: 'Delete', exact: true }).click();
+      // Chromium fixture clipboard permission: verify the exact copied address.
+      await page
+        .context()
+        .grantPermissions(['clipboard-read', 'clipboard-write']);
+      await entry
+        .getByRole('button', { name: 'Copy topic link', exact: true })
+        .click();
+      assert.equal(
+        await page.evaluate(() => navigator.clipboard.readText()),
+        topicURL,
+      );
+      await page.reload();
+      await expect(entry.locator('h2')).toHaveText('Room keys');
+      await entry.getByRole('button', { name: 'Archive', exact: true }).click();
+      await expect(
+        entry.getByRole('button', { name: 'Restore', exact: true }),
+      ).toBeVisible();
+      await expect(page.locator('#help-views a[aria-current=page]')).toHaveText(
+        'Archived',
+      );
+      await entry.getByRole('button', { name: 'Restore', exact: true }).click();
+      await expect(
+        entry.getByRole('button', { name: 'Archive', exact: true }),
+      ).toBeVisible();
+      await entry.getByRole('button', { name: 'Archive', exact: true }).click();
+      await entry
+        .getByRole('button', { name: 'Delete permanently', exact: true })
+        .click();
       await expect(page.locator('#confirm-title')).toHaveText(
         'Delete “Room keys” permanently?',
       );
       await page.locator('#confirm-dialog [data-confirm]').click();
-      await expect(entry).toHaveCount(0);
-      assert.equal(
-        (
-          await fixture.db.query(
-            'SELECT count(*)::int AS n FROM club_forms.help_entries',
-          )
-        ).rows[0].n,
-        0,
-      );
-      // The built-in topics and their deep links are unchanged.
-      await page.evaluate(() => {
-        location.hash = '#/help?topic=exports';
-      });
-      await expect(page.locator('#help-exports')).toBeInViewport();
+      await expect(entry.locator('h2')).toHaveText('Archived topics');
+      await page
+        .locator('#help-views')
+        .getByRole('link', { name: 'Activity', exact: true })
+        .click();
+      await expect(entry).toContainText('Deleted a Help topic');
+      await expect(entry).not.toContainText('Room keys');
+      await page.goto(topicURL);
+      await expect(entry.locator('h2')).toHaveText('Topic unavailable');
+      await page.goto(fixture.origin + '/admin/#/help?topic=exports');
+      await expect(entry.locator('h2')).toHaveText('Download answers');
     },
   );
   await check(
@@ -2966,7 +3029,7 @@ try {
     async (page) => {
       await page.locator('#help-tab').click();
       await page
-        .getByRole('button', { name: 'Add a topic', exact: true })
+        .getByRole('button', { name: 'Add topic', exact: true })
         .click();
       const form = page.locator('#help-form');
       await form.getByLabel('Title', { exact: true }).fill('Parking');
@@ -2978,9 +3041,7 @@ try {
       await expectPaused(page);
       await page.unroute('**/api/admin');
       await signInAgain(page);
-      await expect(
-        page.locator('#help-officer-list .help-entry h3'),
-      ).toHaveText('Parking');
+      await expect(page.locator('#help-article h2')).toHaveText('Parking');
       await fixture.db.query('DELETE FROM club_forms.help_entries');
     },
   );

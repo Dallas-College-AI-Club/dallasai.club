@@ -132,9 +132,11 @@ test('the counts poll returns counts and arrivals, never rows', async () => {
     'configured',
     'counts',
     'latest',
+    'newInView',
     'user',
   ]);
   assert.equal(first.user, 'admin@example.com');
+  assert.equal(first.newInView, 2);
   assert.deepEqual(first.configured, { uploads: true });
   assert.ok(Number.isFinite(Date.parse(first.asOf)));
   assert.equal(Date.parse(first.latest), Date.parse('2026-01-01T01:00:00Z'));

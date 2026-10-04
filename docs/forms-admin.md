@@ -18,7 +18,7 @@ The office uses the approved Studio appearance with locally served Geist typogra
 - **Next event** is the first upcoming event with a date: its date, type, RSVP count and **Open event**. Potential events without a date are listed on their own line.
 - **Custom survey** is the open custom survey with its response count and link expiry; **Open responses** opens it in Surveys › Custom surveys, where each response's PDF and the CSV export are.
 - **Drafts & unpublished changes** shows unpublished events as event cards; choosing one opens it in Events.
-- **Inbox totals** include saved and archived records, with past and upcoming RSVPs combined. A separate audited deletion count contributes to the overall total without restoring deleted data. Type links open all saved statuses for that type.
+- **Inbox totals** include active New and Reviewed records, with past and upcoming RSVPs combined. Archived and deleted records are excluded. Type links open active submissions for that type; archived records remain accessible from the Inbox status filter.
 - **Recent activity** is collapsed until opened and lists officers' recent actions (reviews, exports, event and custom-survey changes, Help topic changes). It never shows a member's name, email, comment or submitted text.
 - **Quick actions**: **New event**, **Create custom survey** (opens the survey builder) and **Find a contact** (opens Contacts with the search box focused).
 
@@ -26,7 +26,7 @@ While Home is shown, the minute-by-minute check redraws it only when a count has
 
 ### Inbox counts and RSVPs by event
 
-The Inbox count cards are folded by default. The fold's summary still says what is new, for example “Counts · 3 new: 2 RSVPs, 1 question”; open it to see each type's New and total counts. Browser alerts use the same wording and keep **The AI Review** capitalized.
+The Inbox count cards are folded by default. The fold's summary still says what is new, for example “Counts · 3 new: 2 RSVPs, 1 question”; open it to see each type's New and total counts. Browser alerts use the same wording and keep **The AI Review** capitalized. The browser-tab number counts only **New** submissions matching the current Inbox type, event and status filters, across every page. Reviewed and Archived views have no tab number. The Inbox navigation badge and count cards retain the overall totals.
 
 RSVPs in the list are grouped by event. Each event group shows how many RSVPs match the current filters in total, not only those on the page, and has **Show all** for that event. The Type filter also offers **RSVPs for all events** (upcoming and past). For any RSVP type, event chips with **All events** appear above the list on wider screens; on phones, and when there are more than eight events, the Event dropdown is used instead. The chosen event stays in the address, and Export filtered CSV follows it.
 
@@ -45,7 +45,7 @@ CSV exports have separate Subject / title and Message / body fields, dedicated m
 - **The AI Review → Contribute an article** opens the submission page with a title, draft text and optional private attachments. Submit for review saves it under **Articles** and replaces the submitted form with a confirmation screen and Done button. It does not automatically publish an article.
 - **Ask about this event** opens a question dialog, carries the event context into the inbox and confirms receipt within the dialog. **Ask the club** in the footer opens the same dialog for a general question.
 - **Request a workshop** opens the workshop request dialog. Confirmation replaces the form, with a Close button. Dialog close controls stay visible while scrolling.
-- Join and The AI Review subscription requests replace their forms with a focused confirmation screen and Done button. Event RSVPs open a popup with a Close button after submission. Errors preserve the person's entered text.
+- **Join the club** on the homepage and Start menu opens the signup form. Only after the signup is saved does its confirmation show **Open Teams**, which opens separately so the saved confirmation remains available. Subscription requests also replace their form with a focused confirmation screen and Done button. Event RSVPs open a popup with a Close button after submission. Errors preserve the person's entered text.
 
 There are no email alerts, emailed confirmation links, or newsletter broadcasts in this release. The AI Review subscription requests record consent for future updates; email ownership is not verified and `email_verified` remains false. They must not be represented as verified subscribers or automatically enrolled in a future mailing service. The public page explains that newsletters are not currently being sent. People can contact the club to withdraw a request or cancel an RSVP.
 
@@ -61,7 +61,9 @@ the same officer to sign in again. Typed notes, comments, contact notes and unsa
 or survey edits stay in that tab's memory and are not lost. Requests that were refused are
 sent once more after sign-in. Records stay in the hidden page for at most 10 minutes, then
 they are dropped. Unsaved work is never written to browser storage. Signing out, or
-signing in as a different account, discards it.
+signing in as a different account, discards it. Revoking officer access closes editors
+and clears displayed records and drafts. Replies from a discarded session cannot reopen
+or pause a later session, and signing back in starts a fresh Home request.
 
 ## Attachments and privacy
 

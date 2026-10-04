@@ -5,6 +5,22 @@ import http from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { officeFixture } from './helpers/office-fixture.mjs';
+import { submit } from '../lib/submissions.mjs';
+const office = await officeFixture();
+const publicEvents = JSON.parse(
+  await readFile(new URL('../generated/events.json', import.meta.url), 'utf8'),
+).map((event) =>
+  event.id === 'productivity'
+    ? { ...event, date: '2099-10-02', end: null }
+    : event,
+);
+// Attachment bytes stay in this process; no Blob or production API is called.
+process.env.BLOB_READ_WRITE_TOKEN = 'local-forms-fixture';
+const storage = {
+  put: async (pathname) => ({ pathname }),
+  del: async () => {},
+};
 const backend = fileURLToPath(new URL('../', import.meta.url)),
   site = path.resolve(backend, '../.preview/forms-site'),
   screens = path.resolve(backend, '../.preview/forms-checks');
@@ -80,6 +96,7 @@ try {
           },
         });
       received.push(route.request().postDataJSON());
+      await submit(office.db, received.at(-1), publicEvents, storage);
       await route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -98,7 +115,22 @@ try {
       .getByLabel('Email address', { exact: true })
       .fill('student@example.com');
   };
-  await page.goto(origin + '/club.html?mode=join');
+  await page.goto(origin + '/club.html');
+  await page.getByRole('button', { name: 'Start', exact: true }).click();
+  await expect(
+    page
+      .getByRole('navigation', { name: 'Start pages' })
+      .getByRole('link', { name: 'Join the club', exact: true }),
+  ).toHaveAttribute('href', '/club.html?mode=join');
+  await page.keyboard.press('Escape');
+  await page
+    .getByRole('button', { name: 'Join the club', exact: true })
+    .click();
+  await page.getByRole('link', { name: 'Join the club', exact: true }).click();
+  await page.waitForURL('**mode=join');
+  await expect(
+    page.getByRole('link', { name: 'Open Teams ↗', exact: true }),
+  ).toBeHidden();
   await identity();
   await page
     .locator('#membership-form [name="campus"]')
@@ -116,6 +148,12 @@ try {
     )
     .waitFor();
   assert.equal(received.at(-1).kind, 'join');
+  await expect(
+    page.getByRole('link', { name: 'Open Teams ↗', exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('link', { name: 'Open Teams ↗', exact: true }),
+  ).toHaveAttribute('target', '_blank');
   assert.equal(await page.locator('#membership-form input').count(), 0);
   assert.ok(
     await page
@@ -127,7 +165,8 @@ try {
     path: path.join(screens, 'membership-desktop.png'),
     fullPage: true,
   });
-  await page.goto(origin + '/club.html?mode=subscribe');
+  await page.goto(origin + '/club.html?mode=journal');
+  await page.getByRole('button', { name: 'Subscribe ↗', exact: true }).click();
   await page
     .getByLabel('Email address', { exact: true })
     .fill('reader@example.com');
@@ -174,7 +213,10 @@ try {
     '',
   );
   await page.keyboard.press('Escape');
-  await page.goto(origin + '/club.html?mode=contribute');
+  await page.goto(origin + '/club.html?mode=journal');
+  await page
+    .getByRole('button', { name: 'Contribute an article ↗', exact: true })
+    .click();
   await identity();
   await page.getByLabel('Title', { exact: true }).fill('Test contribution');
   await page.locator('#draft-body').fill('A test draft.');
@@ -306,6 +348,9 @@ try {
     .getByRole('button', { name: 'Join the club', exact: true })
     .click();
   await page.locator('.form-error').waitFor();
+  await expect(
+    page.getByRole('link', { name: 'Open Teams ↗', exact: true }),
+  ).toBeHidden();
   assert.equal(
     await page.getByLabel('Your full name', { exact: true }).inputValue(),
     'Test Student',
@@ -333,6 +378,7 @@ try {
           },
         });
       retries.push(route.request().postDataJSON());
+      await submit(office.db, retries.at(-1), publicEvents, storage);
       await route.fulfill({
         status: 200,
         headers: { 'Access-Control-Allow-Origin': origin },
@@ -368,6 +414,60 @@ try {
   assert.equal(retries.length, 2);
   await page.getByRole('button', { name: 'Done', exact: true }).click();
   await page.locator('.form-confirmation').waitFor({ state: 'hidden' });
+  // Read the actual saved records through the officer UI, including each
+  // category, its contact link, the event question and the attachment name.
+  const saved = (
+    await office.db.query(
+      'SELECT id,kind,email FROM club_forms.entries WHERE email IN ($1,$2,$3) ORDER BY kind,email',
+      ['student@example.com', 'reader@example.com', 'mobile@example.com'],
+    )
+  ).rows;
+  assert.deepEqual(
+    saved.map((row) => row.kind),
+    [
+      'contribution',
+      'join',
+      'question',
+      'question',
+      'rsvp',
+      'subscribe',
+      'workshop',
+    ],
+  );
+  const officer = await browser.newPage({
+    viewport: { width: 390, height: 844 },
+  });
+  officer.on('pageerror', (error) => errors.push(error.message));
+  await officer.goto(office.origin + '/test-signin');
+  await expect(officer.locator('#office')).toBeVisible();
+  for (const entry of saved) {
+    await officer.goto(office.origin + '/admin/#/inbox/' + entry.id);
+    const card = officer.locator('#entry-' + entry.id);
+    await expect(card).toBeVisible();
+    if ((await card.getAttribute('open')) === null)
+      await card.locator(':scope > summary').click();
+    await expect(card.locator('.badge')).toHaveText('New');
+    await expect(
+      card.getByRole('link', { name: entry.email, exact: true }),
+    ).toBeVisible();
+    await card.getByText('Submission details', { exact: true }).click();
+    if (entry.kind === 'contribution')
+      await expect(card).toContainText('draft.txt');
+    if (entry.kind === 'question' && entry.email === 'student@example.com')
+      await expect(card).toContainText('Where can I find the materials?');
+    assert.ok(
+      await officer.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+    );
+  }
+  await officer.locator('#contacts-tab').click();
+  await officer.getByRole('button', { name: /student@example.com/ }).click();
+  await expect(officer.locator('#contacts-pane')).toContainText('Test Student');
+  await officer.close();
+  console.log(
+    'PASS public buttons save seven records, retry without duplicates, and reach officer Inbox and Contacts at phone width',
+  );
   const admin = await browser.newPage({
     viewport: { width: 1280, height: 900 },
   });
@@ -421,8 +521,8 @@ try {
       },
     ],
     counts: [
-      { kind: 'join', new: 1, total: 1 },
-      { kind: 'subscribe', new: 1, total: 1 },
+      { kind: 'join', new: 1, reviewed: 0, closed: 0, total: 1 },
+      { kind: 'subscribe', new: 1, reviewed: 0, closed: 0, total: 1 },
     ],
     queue: { pending: 0, failed: 0 },
     configured: {
@@ -472,6 +572,8 @@ try {
       }
       fixture.entries[0].review_status = body.status;
       fixture.counts[0].new = body.status === 'new' ? 1 : 0;
+      fixture.counts[0].reviewed = body.status === 'reviewed' ? 1 : 0;
+      fixture.counts[0].closed = body.status === 'closed' ? 1 : 0;
       activity.unshift({
         id: String(activity.length + 1),
         actor: 'officer@example.com',
@@ -481,6 +583,23 @@ try {
       });
     }
     const params = new URL(route.request().url()).searchParams;
+    const newInView = ['reviewed', 'closed'].includes(params.get('status'))
+      ? 0
+      : fixture.counts
+          .filter(
+            (row) => !params.get('kind') || row.kind === params.get('kind'),
+          )
+          .reduce((sum, row) => sum + row.new, 0);
+    if (params.has('help')) {
+      const response = await fetch(office.origin + '/api/admin?' + params, {
+        headers: { cookie: 'test-officer=yes' },
+      });
+      return route.fulfill({
+        status: response.status,
+        contentType: 'application/json',
+        body: await response.text(),
+      });
+    }
     // The background poll: counts only.
     if (params.get('counts') === '1')
       return route.fulfill({
@@ -488,6 +607,7 @@ try {
         body: JSON.stringify({
           user: fixture.user,
           counts: fixture.counts,
+          newInView,
           latest: fixture.counts
             .map((row) => row.latest)
             .filter(Boolean)
@@ -508,11 +628,13 @@ try {
     const entries = fixture.entries.filter(
       (entry) =>
         (!params.get('status') ||
+          (params.get('status') === 'active' &&
+            entry.review_status !== 'closed') ||
           entry.review_status === params.get('status')) &&
         (!params.get('kind') || entry.kind === params.get('kind')),
     );
     // Read now; a held response then arrives after later changes.
-    const body = JSON.stringify({ ...fixture, entries });
+    const body = JSON.stringify({ ...fixture, entries, newInView });
     if (staleLoad) {
       const hold = staleLoad;
       staleLoad = null;
@@ -532,7 +654,7 @@ try {
   await admin.getByRole('button', { name: 'Sign in', exact: true }).click();
   await admin.locator('#inbox-pane').waitFor();
   testSignedIn = true;
-  await expect(admin.locator('[data-inbox-status="new"]')).toHaveAttribute(
+  await expect(admin.locator('[data-inbox-status="active"]')).toHaveAttribute(
     'aria-pressed',
     'true',
   );
@@ -544,19 +666,21 @@ try {
   );
   await admin.locator('#help-tab').click();
   await admin
-    .getByRole('heading', { name: 'How people reach the inbox', exact: true })
-    .waitFor();
-  assert.equal(await admin.locator('.submission-sources li').count(), 7);
-  for (const target of ['join', 'subscribe', 'contribute', 'events', 'about'])
-    assert.ok(
-      await admin
-        .locator('.submission-sources a[href$="mode=' + target + '"]')
-        .count(),
-    );
-  await admin
-    .getByText('stored in the club’s Neon database', { exact: false })
-    .waitFor();
+    .getByRole('link', { name: 'Where submissions arrive', exact: true })
+    .click();
+  await expect(
+    admin.getByRole('heading', {
+      name: 'Where submissions arrive',
+      exact: true,
+    }),
+  ).toBeVisible();
+  await expect(
+    admin.getByText('Website forms save into the shared club database.', {
+      exact: false,
+    }),
+  ).toBeVisible();
   await admin.locator('#inbox-tab').click();
+  await admin.locator('[data-inbox-status="new"]').click();
   // The count cards are folded; the summary still says what is new.
   await expect(admin.locator('#counts-summary')).toHaveText(/^Counts · /);
   await admin.locator('#counts-summary').click();
@@ -585,8 +709,13 @@ try {
   await admin.getByRole('button', { name: 'Mark reviewed' }).click();
   await expect(admin.locator('#entries .entry')).toHaveCount(0);
   // Counts and the title follow an officer's own change without a Refresh.
-  await expect(admin).toHaveTitle('(1) Inbox · Club Office');
-  await expect(admin.locator('#counts .count strong').first()).toHaveText('0');
+  await expect(admin).toHaveTitle('Inbox · Club Office');
+  await expect(
+    admin
+      .locator('#counts .count')
+      .filter({ hasText: 'Signups' })
+      .locator('strong'),
+  ).toHaveText('1');
   await admin.locator('[data-inbox-status="reviewed"]').click();
   await admin.locator('#entries .entry').waitFor();
   if (!(await admin.locator('#entries .entry').evaluate((el) => el.open)))
@@ -608,7 +737,7 @@ try {
   await admin.getByText('Activity & comments', { exact: true }).click();
   await admin.getByRole('button', { name: 'Mark new', exact: true }).click();
   await expect(admin.locator('#entries .entry')).toHaveCount(0);
-  await expect(admin).toHaveTitle('(2) Inbox · Club Office');
+  await expect(admin).toHaveTitle('Inbox · Club Office');
   await admin.locator('[data-inbox-status="new"]').click();
   await admin.locator('#entries .entry').waitFor();
   if (!(await admin.locator('#entries .entry').evaluate((el) => el.open)))
@@ -818,4 +947,5 @@ try {
 } finally {
   await browser.close();
   await new Promise((resolve) => server.close(resolve));
+  await office.close();
 }

@@ -198,6 +198,7 @@ async function openQuestions() {
         // A failed refresh does not turn a committed save into a failed save.
         try {
           bootstrap = await request('bootstrap');
+          editor.updateResults(bootstrap.results);
           savedResults(bootstrap.results);
         } catch {}
         return result.receipt;

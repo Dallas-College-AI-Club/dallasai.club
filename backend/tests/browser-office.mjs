@@ -9,7 +9,7 @@ import {
 } from './helpers/survey-response-samples.mjs';
 import { pdfLines } from './helpers/pdf-text.mjs';
 import { changeDraft } from '../lib/survey-builder.mjs';
-import { privateSurveyToken } from '../lib/custom-surveys.mjs';
+import { privateSurveyToken, digest } from '../lib/custom-surveys.mjs';
 import { definition } from '../lib/survey-contract.mjs';
 import { randomUUID } from 'node:crypto';
 const fixture = await officeFixture();
@@ -3145,6 +3145,154 @@ try {
         .first()
         .evaluate((card) => getComputedStyle(card).outlineStyle);
       assert.equal(outline, 'solid');
+    },
+  );
+  await check(
+    'Advisor comparison preserves individual choices and sharing boundaries',
+    async (page) => {
+      const id = randomUUID(),
+        token = privateSurveyToken(id);
+      await fixture.db.query(
+        `INSERT INTO club_forms.custom_surveys(id,slug,title,content_version,status,link_digest,expires_at) VALUES($1::uuid,$1::text,'Advisor comparison',$2,'open',$3,now()+interval '30 days')`,
+        [id, definition.content_version, digest(token)],
+      );
+      for (const person of definition.respondents)
+        await fixture.db.query(
+          'INSERT INTO club_forms.custom_survey_members(survey_id,advisor_id,display_name,email) VALUES($1,$2,$3,$4)',
+          [id, person.id, person.name, person.id + '@example.com'],
+        );
+      const responses = advisorResponses();
+      responses.find((r) => r.id === 'note-spark').text =
+        '<img src=x onerror=alert(1)> Shared words only.';
+      await fixture.db.query(
+        "INSERT INTO club_forms.custom_survey_responses(survey_id,advisor_id,revision,responses,shared_with) VALUES($1,'bracewell',1,$2,ARRAY['pearlman'])",
+        [id, JSON.stringify(responses)],
+      );
+      const url = fixture.origin + '/surveys/#invite=' + token;
+      await page.goto(url);
+      await page
+        .getByRole('textbox', { name: 'Email address', exact: true })
+        .fill('pearlman@example.com');
+      await page
+        .getByRole('button', { name: 'Send sign-in code', exact: true })
+        .click();
+      await page
+        .getByRole('textbox', { name: 'Sign-in code', exact: true })
+        .fill('123456');
+      await page
+        .getByRole('button', { name: 'Verify and open questions', exact: true })
+        .click();
+      await page
+        .getByRole('button', {
+          name: 'Prioritize Build or review an AI prototype together',
+          exact: true,
+        })
+        .click();
+      await page.locator('#comments-spark summary').click();
+      await page.locator('#note-spark').fill('My own private draft comment.');
+      await page
+        .getByRole('button', {
+          name: '5 Your playbook, in your words',
+          exact: true,
+        })
+        .click();
+      const ideal = page.locator('#review-card-q-ideal_responsibilities');
+      const spark = page.locator('#review-card-q-spark');
+      const comment = page.locator('#review-card-note-spark');
+      await ideal
+        .locator('textarea')
+        .fill('I will mentor one student project.');
+      await expect(
+        comment
+          .locator('.own-response-heading')
+          .getByRole('button', { name: 'Edit comment', exact: true }),
+      ).toBeVisible();
+      await expect(
+        page.locator(
+          '.peer-responses input, .peer-responses textarea, .peer-responses button',
+        ),
+      ).toHaveCount(0);
+      await expect(comment.locator('.peer-wording')).toHaveText(
+        '<img src=x onerror=alert(1)> Shared words only.',
+      );
+      await expect(comment.locator('.peer-wording img')).toHaveCount(0);
+      await expect(
+        page.locator('#review-card-resource-expertise .own-response'),
+      ).toContainText('You have not answered');
+      await spark.locator('[data-answerreview]').check();
+      await comment.locator('[data-answerinclude]').check();
+      const reviewAll = page.locator('[data-bulk-review="reviewed"]');
+      const includeAll = page.locator('[data-bulk-review="included"]');
+      await reviewAll.click();
+      await includeAll.click();
+      await comment.locator('[data-answerreview]').uncheck();
+      await comment.locator('[data-answerreview]').check();
+      await ideal.locator('[data-answerinclude]').uncheck();
+      await ideal.locator('[data-answerinclude]').check();
+      await reviewAll.click();
+      await includeAll.click();
+      await expect(ideal.locator('[data-answerreview]')).not.toBeChecked();
+      await expect(ideal.locator('[data-answerinclude]')).toBeChecked();
+      await expect(spark.locator('[data-answerreview]')).toBeChecked();
+      await expect(spark.locator('[data-answerinclude]')).not.toBeChecked();
+      await expect(comment.locator('[data-answerreview]')).toBeChecked();
+      await expect(comment.locator('[data-answerinclude]')).toBeChecked();
+      await reviewAll.click();
+      await includeAll.click();
+      await expect(page.locator('#approve-playbook')).not.toBeChecked();
+      await expect(page.locator('#submitPlaybook')).toBeDisabled();
+      await ideal.locator('textarea').fill('Updated private wording.');
+      await expect(ideal.locator('[data-answerreview]')).not.toBeChecked();
+      await expect(ideal.locator('[data-answerinclude]')).not.toBeChecked();
+      await expect(comment.locator('[data-answerinclude]')).toBeChecked();
+      await ideal.locator('[data-answerreview]').check();
+      await ideal.locator('[data-answerinclude]').check();
+      await page.locator('#approve-playbook').check();
+      await page.locator('#submitPlaybook').click();
+      await expect(page.locator('#submit-status')).toContainText(
+        'Shared summary saved. Revision 1.',
+      );
+      const saved = (
+        await fixture.db.query(
+          "SELECT responses FROM club_forms.custom_survey_responses WHERE survey_id=$1 AND advisor_id='pearlman'",
+          [id],
+        )
+      ).rows[0].responses;
+      assert.deepEqual(saved.map((r) => r.id).sort(), [
+        'note-spark',
+        'q-ideal_responsibilities',
+        'q-spark',
+      ]);
+      assert.ok(!JSON.stringify(saved).includes('Shared words only'));
+      const download = page.waitForEvent('download');
+      await page.locator('#exportFullMarkdown').click();
+      const text = await readFile(await (await download).path(), 'utf8');
+      assert.ok(text.includes('My own private draft comment.'));
+      assert.ok(!text.includes('Shared words only'));
+      for (const width of [390, 320]) {
+        await page.setViewportSize({ width, height: 844 });
+        assert.ok(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        );
+        const own = await comment.locator('.own-response').boundingBox();
+        const peer = await comment.locator('.peer-responses').boundingBox();
+        assert.ok(peer.y >= own.y + own.height);
+      }
+      await page.setViewportSize({ width: 1440, height: 1000 });
+      await page.goto(url + '&preview=1');
+      await page.reload();
+      await page
+        .getByRole('button', {
+          name: '5 Your playbook, in your words',
+          exact: true,
+        })
+        .click();
+      await expect(page.locator('.peer-responses')).toHaveCount(0);
+      await expect(page.locator('#main')).not.toContainText(
+        'Shared words only',
+      );
     },
   );
 } finally {

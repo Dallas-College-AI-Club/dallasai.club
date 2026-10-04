@@ -195,6 +195,97 @@ async function csv(page, button) {
 
 try {
   await check(
+    'All surveys includes searchable RSVP links, empty registrations and retained answers',
+    async (page, fixture, ids) => {
+      for (const [id, registrationOpen] of [
+        ['empty-registration', true],
+        ['disabled-registration', false],
+      ])
+        await saveEvent(
+          fixture.db,
+          {
+            id,
+            revision: 0,
+            action: 'publish',
+            event: {
+              ...fixture.event.draft,
+              title: id,
+              registrationOpen,
+              surveyQuestions: [],
+            },
+          },
+          'officer@example.com',
+        );
+      // Answers remain discoverable when registration closes and is archived.
+      const closed = await saveEvent(
+        fixture.db,
+        {
+          id: ids.other,
+          revision: 1,
+          action: 'publish',
+          event: {
+            ...fixture.event.draft,
+            title: 'Other group event',
+            registrationOpen: false,
+          },
+        },
+        'officer@example.com',
+      );
+      await saveEvent(
+        fixture.db,
+        { id: ids.other, revision: closed.revision, action: 'archive' },
+        'officer@example.com',
+      );
+      await page.locator('#surveys-tab').click();
+      const library = page.locator('#survey-library');
+      const registrations = library.locator(
+        'a[href^="#/surveys/events?event="]',
+      );
+      await expect(registrations).toHaveCount(3);
+      await expect(library).not.toContainText('disabled-registration');
+      await expect(library).toContainText('Office feedback A');
+      for (const width of [320, 390, 1280]) {
+        await page.setViewportSize({ width, height: 900 });
+        assert.ok(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        );
+      }
+      await page
+        .getByRole('combobox', { name: 'Collection', exact: true })
+        .selectOption('custom');
+      await expect(registrations).toHaveCount(0);
+      await page
+        .getByRole('combobox', { name: 'Collection', exact: true })
+        .selectOption('events');
+      await expect(registrations).toHaveCount(3);
+      await page
+        .getByLabel('Search titles', { exact: true })
+        .fill('no-matching-event');
+      await expect(library).toHaveText('No surveys in this collection yet.');
+      await page.getByLabel('Search titles', { exact: true }).fill('EMPTY-REG');
+      await expect(registrations).toHaveCount(1);
+      await registrations.press('Enter');
+      await expect(page.locator('#survey-event')).toHaveValue(
+        'empty-registration',
+      );
+      await expect(page.locator('#survey-results')).toContainText(
+        'No RSVP responses match these filters.',
+      );
+      await page.locator('#surveys-tab').click();
+      await page
+        .getByLabel('Search titles', { exact: true })
+        .fill('Other group');
+      await expect(registrations).toHaveCount(1);
+      await registrations.click();
+      await expect(page.locator('#survey-event')).toHaveValue(ids.other);
+      await expect(
+        page.locator('#survey-results .survey-response'),
+      ).toHaveCount(1);
+    },
+  );
+  await check(
     'Basic question types work from builder and preview through respondent save and reload',
     async (page, fixture) => {
       await page.goto(fixture.origin + '/admin/#/surveys/new');

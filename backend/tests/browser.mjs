@@ -430,7 +430,8 @@ try {
   };
   const activity = [];
   let failComment = false,
-    slowReview = null;
+    slowReview = null,
+    staleLoad = null;
   const postedComments = [];
   await admin.route('**/api/admin*', async (route) => {
     if (new URL(route.request().url()).searchParams.has('history'))
@@ -461,7 +462,7 @@ try {
         });
       }
       fixture.entries[0].review_status = body.status;
-      fixture.counts[0].new = 0;
+      fixture.counts[0].new = body.status === 'new' ? 1 : 0;
       activity.unshift({
         id: String(activity.length + 1),
         actor: 'officer@example.com',
@@ -483,10 +484,15 @@ try {
           entry.review_status === params.get('status')) &&
         (!params.get('kind') || entry.kind === params.get('kind')),
     );
-    await route.fulfill({
-      contentType: 'application/json',
-      body: JSON.stringify({ ...fixture, entries }),
-    });
+    // Read now; a held response then arrives after later changes.
+    const body = JSON.stringify({ ...fixture, entries });
+    if (staleLoad) {
+      const hold = staleLoad;
+      staleLoad = null;
+      hold.arrived();
+      await hold.response;
+    }
+    await route.fulfill({ contentType: 'application/json', body });
   });
   await admin.goto(origin + '/admin/');
   await admin
@@ -541,6 +547,9 @@ try {
   assert.equal(await admin.locator('.entry img').count(), 0);
   await admin.getByRole('button', { name: 'Mark reviewed' }).click();
   await expect(admin.locator('#entries .entry')).toHaveCount(0);
+  // Counts and the title follow an officer's own change without a Refresh.
+  await expect(admin).toHaveTitle('(1) Club office · Dallas AI Club');
+  await expect(admin.locator('#counts .count strong').first()).toHaveText('0');
   await admin.locator('[data-inbox-status="reviewed"]').click();
   await admin.locator('#entries .entry').waitFor();
   if (!(await admin.locator('#entries .entry').evaluate((el) => el.open)))
@@ -562,11 +571,14 @@ try {
   await admin.getByText('Activity & comments', { exact: true }).click();
   await admin.getByRole('button', { name: 'Mark new', exact: true }).click();
   await expect(admin.locator('#entries .entry')).toHaveCount(0);
+  await expect(admin).toHaveTitle('(2) Club office · Dallas AI Club');
   await admin.locator('[data-inbox-status="new"]').click();
   await admin.locator('#entries .entry').waitFor();
   if (!(await admin.locator('#entries .entry').evaluate((el) => el.open)))
     await admin.locator('#entries .entry > summary').click();
   await admin.locator('.badge').filter({ hasText: 'new' }).waitFor();
+  // Reopening an entry is not an arrival.
+  await expect(admin.locator('#inbox-alert')).toHaveText('');
   await admin.getByText('Activity & comments', { exact: true }).click();
   await admin
     .getByText('Visible to all authorized club admins.', { exact: false })
@@ -606,9 +618,30 @@ try {
       '5:00:00 PM CDT',
     ),
   );
+  // A load that read the counts before this officer's change, but returns
+  // after it, is read again instead of being taken as an arrival.
+  let loadArrived, releaseLoad;
+  const loadHeld = new Promise((resolve) => {
+    loadArrived = resolve;
+  });
+  staleLoad = {
+    arrived: loadArrived,
+    response: new Promise((resolve) => {
+      releaseLoad = resolve;
+    }),
+  };
+  await admin.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await loadHeld;
   await admin
     .getByRole('button', { name: 'Archive submission', exact: true })
     .click();
+  await admin
+    .getByText('Submission moved to Archived.', { exact: false })
+    .waitFor();
+  releaseLoad();
+  await expect(admin).toHaveTitle('(1) Club office · Dallas AI Club');
+  await expect(admin.locator('#entries')).toHaveAttribute('aria-busy', 'false');
+  await expect(admin.locator('#inbox-alert')).toHaveText('');
   await expect(admin.locator('#entries .entry')).toHaveCount(0);
   await admin.locator('[data-inbox-status="closed"]').click();
   await admin.locator('#entries .entry').waitFor();

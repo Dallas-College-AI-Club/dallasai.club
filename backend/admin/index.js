@@ -257,6 +257,9 @@ async function review(card, entry, value) {
     });
     if (note) drafts.delete(key);
     if (version !== sessionGeneration) return;
+    // This officer's own change moves the New count; it is not an arrival.
+    if (lastNewCount !== null)
+      lastNewCount += (value === 'new') - (entry.review_status === 'new');
     // A card dropped while the session was paused just reports the result.
     if (card.isConnected) removeEntry(card);
     status(
@@ -265,6 +268,7 @@ async function review(card, entry, value) {
         : 'Submission moved to ' + (value === 'new' ? 'New.' : 'Reviewed.')) +
         (note ? ' Your note was saved with it.' : ''),
     );
+    load({ background: true });
   } catch (error) {
     if (version !== sessionGeneration) return;
     release();

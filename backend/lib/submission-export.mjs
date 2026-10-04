@@ -28,6 +28,9 @@ const knownFields = new Set([
   'eventDate',
   'location',
   'eventId',
+  // Internal flags, not details anyone submitted.
+  'hasSurvey',
+  'potential',
 ]);
 const received = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/Chicago',
@@ -45,6 +48,31 @@ function plainText(value) {
       )
       .join('\n');
   return String(value ?? '');
+}
+const centralDate = new Intl.DateTimeFormat('en-CA', {
+  timeZone: 'America/Chicago',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+});
+// Says what the file holds: club-submissions-<status|all>-<kind|all>[-<event>]
+// [-search]-<Central date>.csv. The values are already validated filters.
+export function exportFilename(
+  { status, kind, eventId, search },
+  now = new Date(),
+) {
+  return (
+    [
+      'club-submissions',
+      { closed: 'archived' }[status] || status || 'all',
+      kind || 'all',
+      eventId,
+      search && 'search',
+      centralDate.format(now),
+    ]
+      .filter(Boolean)
+      .join('-') + '.csv'
+  );
 }
 export function submissionsCSV(rows) {
   const columns = [
@@ -75,7 +103,11 @@ export function submissionsCSV(rows) {
           types[row.kind] || row.kind,
           row.email,
           row.name,
-          row.state === 'active' ? 'Received in club inbox' : row.state,
+          {
+            active: 'Received in club inbox',
+            cancelled: 'RSVP cancelled',
+            unsubscribed: 'Newsletter request withdrawn',
+          }[row.state] || row.state,
           { new: 'New', reviewed: 'Reviewed', closed: 'Archived' }[
             row.review_status
           ] || row.review_status,

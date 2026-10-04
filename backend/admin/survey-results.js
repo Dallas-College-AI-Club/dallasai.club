@@ -1,11 +1,31 @@
-import { busy, button, focusFallback, h, keyed, node } from './ui.js';
-import { activityTime } from './event-activity.js';
+import {
+  busy,
+  button,
+  download as save,
+  focusFallback,
+  h,
+  keyed,
+  node,
+} from './ui.js';
+import { dateTime, day, plural } from './format.js';
 import { contactHistory } from './contact-history.js';
 import { submissionEditor } from './submission-editor.js';
-import { isPaused, signedInAgain } from './session.js';
-export function mountSurveyResults(api, onContactPurge = () => {}) {
+import { isPaused } from './session.js';
+// onReset runs when the filters replace a single-response view, so the
+// address can drop the response.
+export function mountSurveyResults(
+  api,
+  onContactPurge = () => {},
+  onReset = () => {},
+) {
   const editor = submissionEditor(api, async (result) => {
     await load();
+    // The cards were rebuilt under the closed dialog: focus this response.
+    if (document.activeElement === document.body)
+      (
+        q('[data-entry-id="' + CSS.escape(result.entryId) + '"] summary') ||
+        q('#event-surveys-root [data-focus-fallback]')
+      ).focus();
     onContactPurge(result);
     document.querySelector('#survey-status').textContent = result.removed
       ? result.filesCleaned === false
@@ -134,29 +154,18 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
     if (eventId) params.delete('entryId');
     params.set('export', 'csv');
     status.textContent = 'Preparing CSV for all matching responses…';
-    const get = () =>
-      fetch('/api/surveys?' + params, { credentials: 'same-origin' });
+    const current = () => version === generation && isCurrent();
     try {
-      let response = await get();
-      // The session ended: download once the officer has signed in again.
-      if (response.status === 401) {
-        await signedInAgain();
-        response = await get();
-      }
-      if (!response.ok) {
-        const data = await response.json().catch(() => ({}));
-        throw Error(data.error || 'Could not export responses.');
-      }
-      const blob = await response.blob();
-      if (version !== generation || !isCurrent()) return;
-      const link = node('a');
-      link.href = URL.createObjectURL(blob);
-      link.download = (eventId || 'event-surveys') + '-responses.csv';
-      link.hidden = true;
-      (reportDialog.open ? reportDialog : document.body).append(link);
-      link.click();
-      link.remove();
-      setTimeout(() => URL.revokeObjectURL(link.href), 1000);
+      // The anchor goes inside an open modal report, or the click is lost.
+      const saved = await save(
+        '/api/surveys?' + params,
+        (eventId || 'event-surveys') + '-responses.csv',
+        {
+          container: reportDialog.open ? reportDialog : document.body,
+          isCurrent: current,
+        },
+      );
+      if (!saved || !current()) return;
       status.textContent =
         'CSV downloaded. It includes all matching responses across every page.';
     } catch (error) {
@@ -197,7 +206,7 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
       reportStatus.textContent = '';
       reportExport.disabled = data.total === 0;
       report.replaceChildren(
-        node('h3', data.total + ' matching responses · all pages'),
+        node('h3', plural(data.total, 'matching response') + ' · all pages'),
         node(
           'p',
           'Uses the current search, archive and star filters. Changed question versions are shown separately.',
@@ -212,8 +221,8 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
             'summary',
             group.title +
               ' · ' +
-              group.count +
-              ' responses · version ' +
+              plural(group.count, 'response') +
+              ' · version ' +
               group.version.slice(0, 8),
           ),
         );
@@ -361,7 +370,7 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
       name.textContent =
         (response.starred ? '★ ' : '') + (response.name || response.email);
       when.textContent =
-        activityTime(response.created_at) +
+        dateTime(response.created_at) +
         (response.archived_at ? ' · Archived' : '');
       mark.textContent = response.starred ? '★ Unstar' : '☆ Star';
       mark.setAttribute('aria-pressed', String(response.starred));
@@ -372,7 +381,12 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
     el.append(
       actions,
       status,
-      node('p', 'Event date: ' + (response.event_date?.slice(0, 10) || 'TBD')),
+      node(
+        'p',
+        response.event_date
+          ? 'Event date: ' + day(response.event_date)
+          : 'Date TBD',
+      ),
     );
     const answers = node('dl');
     for (const question of response.questions) {
@@ -444,8 +458,7 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
       q('#survey-event').replaceChildren(
         new Option('All events, including past events', ''),
         ...data.events.map(
-          (e) =>
-            new Option(e.title + ' · ' + (e.date?.slice(0, 10) || 'TBD'), e.id),
+          (e) => new Option(e.title + ' · ' + day(e.date), e.id),
         ),
       );
       q('#survey-event').value = eventId;
@@ -472,8 +485,8 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
         q('#survey-results').append(box);
       }
       q('#survey-status').textContent =
-        data.total +
-        ' matching saved responses. Expand a person to read answers or manage their response.';
+        plural(data.total, 'matching saved response') +
+        '. Expand a person to read answers or manage their response.';
       q('#survey-previous').disabled = offset === 0;
       q('#survey-next').disabled = !data.hasMore;
       q('#survey-page').textContent = 'Page ' + (offset / 50 + 1);
@@ -486,7 +499,7 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
   function reset() {
     entryId = '';
     offset = 0;
-    history.replaceState({}, '', '#surveys');
+    onReset();
     return load();
   }
   search.oninput = () => {

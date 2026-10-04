@@ -65,7 +65,7 @@ Use Vercel project **ai-c64d/dallasai-leaderboard**, Framework **Other**. Deploy
 
 The Vercel backend stores membership requests, newsletter requests, event RSVPs, workshop requests, questions, and private article submissions in Neon. Approved officers sign in to `/admin/` using an emailed six-digit code. Access requires both the officer email allowlist and the Neon admin role.
 
-All six forms confirm success on screen only after the record is saved. New records appear in the admin inbox with New counts and review status; the inbox refreshes every minute while open. Form confirmation emails, inbox email alerts, and newsletter delivery are not enabled. Neon sends authentication codes separately.
+All six forms confirm success on screen only after the record is saved. New records appear in the admin inbox with New counts and review status; counts update every minute while the office is open, and new arrivals appear when an officer selects Show. Form confirmation emails, inbox email alerts, and newsletter delivery are not enabled. Neon sends authentication codes separately.
 
 Use [operations](docs/operations.md) for configuration, migrations, sessions, verification, and deployment. See [forms and inbox](docs/forms-admin.md), [event editing](docs/event-editor.md), and [custom surveys](docs/custom-surveys.md) for officer workflows. Local calendar downloads are personal conveniences; registration uses the RSVP form.
 

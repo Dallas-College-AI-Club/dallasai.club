@@ -1,4 +1,6 @@
-import { node } from './ui.js';
+import { copyText, node } from './ui.js';
+import { actionLabel, actorLabel, dateTime, plural } from './format.js';
+import { currentOfficer } from './session.js';
 import { mountRespondents } from './survey-respondents.js';
 import { mountSurveyBuilder } from './survey-builder.js';
 import { responseSections } from '../surveys/results-ui.js';
@@ -31,7 +33,7 @@ export function mountCustomSurveys(root, api) {
           'Create surveys, manage respondents, and read submitted results.',
         ),
       );
-      const create = node('button', 'Create custom survey');
+      const create = node('button', 'Create custom survey', 'btn-primary');
       const edit = (id) => {
         generation++;
         builder = mountSurveyBuilder(
@@ -56,7 +58,7 @@ export function mountCustomSurveys(root, api) {
       for (const survey of surveys) {
         const option = node(
           'option',
-          `${survey.title} · ${survey.expired ? 'expired' : survey.status} · ${survey.response_count} active ${survey.response_count === 1 ? 'response' : 'responses'}${survey.archived_response_count ? ` · ${survey.archived_response_count} archived` : ''}`,
+          `${survey.title} · ${survey.expired ? 'expired' : survey.status} · ${plural(survey.response_count, 'active response')}${survey.archived_response_count ? ` · ${survey.archived_response_count} archived` : ''}`,
         );
         option.value = survey.id;
         select.append(option);
@@ -166,10 +168,8 @@ export function mountCustomSurveys(root, api) {
                   : survey.expired
                     ? 'This survey has expired. Saved responses remain available.'
                     : 'Private link expires ' +
-                      new Date(survey.expires_at).toLocaleString('en-US', {
-                        timeZone: 'America/Chicago',
-                      }) +
-                      ' Central.',
+                      dateTime(survey.expires_at) +
+                      '.',
             ),
           );
           if (survey.privateLink || survey.previewLink) {
@@ -181,14 +181,9 @@ export function mountCustomSurveys(root, api) {
               notice = node('p');
             notice.setAttribute('role', 'status');
             copy.onclick = async () => {
-              try {
-                await navigator.clipboard.writeText(survey.privateLink);
-                notice.textContent =
-                  'Answering link copied. Share it with the intended respondents.';
-              } catch {
-                notice.textContent =
-                  'Copy this private link: ' + survey.privateLink;
-              }
+              notice.textContent = (await copyText(survey.privateLink))
+                ? 'Answering link copied. Share it with the intended respondents.'
+                : 'Copy this private link: ' + survey.privateLink;
             };
             const preview = node('a', 'Preview questions ↗');
             preview.href =
@@ -201,13 +196,9 @@ export function mountCustomSurveys(root, api) {
               'secondary',
             );
             copyPreview.onclick = async () => {
-              try {
-                await navigator.clipboard.writeText(preview.href);
-                notice.textContent =
-                  'Preview link copied. Answer controls are disabled.';
-              } catch {
-                notice.textContent = 'Copy this preview link: ' + preview.href;
-              }
+              notice.textContent = (await copyText(preview.href))
+                ? 'Preview link copied. Answer controls are disabled.'
+                : 'Copy this preview link: ' + preview.href;
             };
             const actions = node('div', undefined, 'entry-actions');
             actions.append(preview, copyPreview);
@@ -234,7 +225,7 @@ export function mountCustomSurveys(root, api) {
               history.append(
                 node(
                   'p',
-                  `${new Date(entry.created_at).toLocaleString('en-US', { timeZone: 'America/Chicago' })} Central · ${entry.actor_email} · ${{ draft_saved: 'Saved draft', published: 'Published survey', closed: 'Closed survey' }[entry.action]}`,
+                  `${dateTime(entry.created_at)} · ${actorLabel(entry.actor_email, currentOfficer())} · ${actionLabel(entry.action)}`,
                 ),
               );
             content.append(history);
@@ -288,7 +279,7 @@ export function mountCustomSurveys(root, api) {
               'a',
               'View archived responses in Inbox → Archived → Questions',
             );
-            archived.href = '#archived-survey-questions';
+            archived.href = '#/inbox?status=archived&type=question';
             content.append(archived);
           }
         } catch (error) {

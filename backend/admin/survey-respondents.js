@@ -1,4 +1,6 @@
 import { lock, node } from './ui.js';
+import { actionLabel, actorLabel, dateTime } from './format.js';
+import { currentOfficer } from './session.js';
 export async function mountRespondents(root, surveyId, api, onChanged) {
   root.append(node('p', 'Loading respondents…'));
   try {
@@ -133,15 +135,9 @@ export async function mountRespondents(root, surveyId, api, onChanged) {
     history.append(node('summary', 'Respondent activity'));
     if (!data.activity.length)
       history.append(node('p', 'No respondent changes recorded yet.', 'hint'));
-    const labels = {
-      respondent_added: 'Added',
-      respondent_restored: 'Restored',
-      respondent_removed: 'Archived',
-      respondent_registered: 'Registered',
-    };
     for (const entry of data.activity) {
       const item = node('p');
-      item.textContent = `${new Date(entry.created_at).toLocaleString('en-US', { timeZone: 'America/Chicago' })} Central · ${entry.actor_email} · ${labels[entry.action]} ${entry.respondent_name ? `${entry.respondent_name} (${entry.respondent_email})` : entry.respondent_email}`;
+      item.textContent = `${dateTime(entry.created_at)} · ${actorLabel(entry.actor_email, currentOfficer())} · ${actionLabel(entry.action)} ${entry.respondent_name ? `${entry.respondent_name} (${entry.respondent_email})` : entry.respondent_email}`;
       history.append(item);
     }
     history.append(node('p', 'Shows the latest 100 changes.', 'hint'));

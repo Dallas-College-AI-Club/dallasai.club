@@ -1,9 +1,10 @@
 import { coreEventTypes } from '../lib/event-types.mjs';
-import { lock, node } from './ui.js';
+import { confirmDialog, lock, node } from './ui.js';
 import { eventOverview } from './event-overview.js';
 import { mountTextFormatting } from './text-formatting.js';
 import { surveyEditor } from './survey-editor.js';
-import { mountEventActivity, activityTime } from './event-activity.js';
+import { mountEventActivity } from './event-activity.js';
+import { dateTime, day } from './format.js';
 import { drafts, isPaused } from './session.js';
 const blank = () => ({
   potential: false,
@@ -54,8 +55,13 @@ export function mountEventEditor(api) {
   function discardEdits() {
     if (!current || !editing) return;
     if (!current.revision && !current.published) {
+      // A discarded new event leaves nothing behind in the hidden form.
       current = null;
       editing = false;
+      form.reset();
+      survey.set();
+      images = [];
+      renderImages();
       form.hidden = true;
       overview.hidden = true;
       activity.clear();
@@ -222,7 +228,7 @@ export function mountEventEditor(api) {
       button.setAttribute('aria-pressed', String(row.id === current?.id));
       button.append(
         node('strong', row.draft.title),
-        node('span', row.draft.date || 'Date to be decided'),
+        node('span', row.draft.date ? day(row.draft.date) : 'Date TBD'),
         node(
           'small',
           row.archived_at
@@ -237,8 +243,8 @@ export function mountEventEditor(api) {
       button.onclick = () => {
         if (canLeave()) edit(row);
       };
-      if (activityTime(row.updated_at))
-        button.append(node('span', 'Updated ' + activityTime(row.updated_at)));
+      if (dateTime(row.updated_at))
+        button.append(node('span', 'Updated ' + dateTime(row.updated_at)));
       listItems.push(button);
     }
     q('#event-list').replaceChildren(...listItems);
@@ -421,7 +427,7 @@ export function mountEventEditor(api) {
             'p',
             data.event.draft.title +
               ' · Saved ' +
-              activityTime(data.event.updated_at),
+              dateTime(data.event.updated_at),
           ),
         );
         overview.prepend(confirmation);
@@ -465,25 +471,30 @@ export function mountEventEditor(api) {
     if (!canLeave()) return;
     newEvent({ ...values(), title: values().title + ' (copy)' });
   };
-  q('#unpublish-event').onclick = () => {
+  // Both change the public website, so they ask in the shared dialog.
+  q('#unpublish-event').onclick = async () => {
     if (busy || !current?.published) return;
     if (
-      confirm(
-        'Remove this event from the public calendar? Existing RSVPs will be kept. Unsaved edits will be discarded.',
-      )
+      await confirmDialog({
+        title: 'Unpublish “' + current.draft.title + '”?',
+        body: 'It leaves the public calendar. Existing RSVPs are kept. Unsaved edits will be discarded.',
+        confirmLabel: 'Unpublish event',
+      })
     )
       save('unpublish');
   };
-  q('#archive-event').onclick = () => {
+  q('#archive-event').onclick = async () => {
     if (busy || !current || current.archived_at) return;
     if (dirty())
       return say(
         'Save your draft before archiving so your latest edits are kept.',
       );
     if (
-      confirm(
-        'Archive this event? It will be hidden from the website. Its content, images, and RSVPs will be kept, and you can edit or restore it later.',
-      )
+      await confirmDialog({
+        title: 'Archive “' + current.draft.title + '”?',
+        body: 'It will be hidden from the website. Its content, images and RSVPs are kept, and you can edit or restore it later.',
+        confirmLabel: 'Archive event',
+      })
     )
       save('archive');
   };

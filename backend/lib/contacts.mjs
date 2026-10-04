@@ -1,7 +1,34 @@
+import { createHmac } from 'node:crypto';
 import { RequestError } from './errors.mjs';
 import { uuid } from './validation.mjs';
 import { del } from '@vercel/blob';
 import { editContact, contactAliases } from './contact-profile.mjs';
+// A person's id in links, so an email address never goes in a URL: the first
+// 16 hex characters of HMAC-SHA256(FORM_TOKEN_SECRET, primary contact email).
+// Rotating the secret changes every ref. Null when the secret is not set.
+export function contactRef(email) {
+  const secret = process.env.FORM_TOKEN_SECRET;
+  if (!email || !secret || secret.length < 32) return null;
+  return createHmac('sha256', secret).update(email).digest('hex').slice(0, 16);
+}
+// The person behind one submission, for its Inbox record: up to 3 of their
+// other submissions, their counts and the latest officer note.
+export async function submissionContact(db, entry) {
+  const contact = (
+    await db.query(
+      `SELECT c.email,c.name,c.deleted_at,c.deleted_by,c.is_test,
+      (SELECT count(*)::int FROM club_forms.contact_emails a JOIN club_forms.entries o ON o.email=a.email WHERE a.contact_email=c.email) AS submission_count,
+      (SELECT count(*)::int FROM club_forms.contact_emails a JOIN club_forms.contact_notes n ON n.email=a.email WHERE a.contact_email=c.email) AS note_count,
+      (SELECT json_build_object('author_email',n.author_email,'body',left(n.body,200),'created_at',n.created_at) FROM club_forms.contact_emails a JOIN club_forms.contact_notes n ON n.email=a.email WHERE a.contact_email=c.email ORDER BY n.created_at DESC,n.id DESC LIMIT 1) AS last_note,
+      (SELECT coalesce(json_agg(s ORDER BY s.created_at DESC,s.id DESC),'[]') FROM (
+        SELECT o.id,o.kind,o.review_status,o.created_at,coalesce(nullif(o.data->>'subject',''),nullif(o.data->>'title',''),nullif(o.data->>'topic',''),nullif(o.data->>'eventTitle',''),nullif(o.data->>'campus',''),'') AS subject
+        FROM club_forms.contact_emails a JOIN club_forms.entries o ON o.email=a.email WHERE a.contact_email=c.email AND o.id<>$2 ORDER BY o.created_at DESC,o.id DESC LIMIT 3) s) AS submissions
+      FROM club_forms.contact_emails link JOIN club_forms.contacts c ON c.email=link.contact_email WHERE link.email=$1`,
+      [entry.email, entry.id],
+    )
+  ).rows[0];
+  return contact ? { ref: contactRef(contact.email), ...contact } : null;
+}
 function emailKey(email) {
   if (
     typeof email !== 'string' ||

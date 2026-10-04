@@ -1,4 +1,4 @@
-import { button, node } from './ui.js';
+import { button, copyText, node } from './ui.js';
 import { mountRespondents } from './survey-respondents.js';
 import { surveyTrial } from './survey-trial.js';
 import { choiceEditor } from './survey-choices.js';
@@ -456,12 +456,9 @@ export function mountSurveyBuilder(root, api, onDone, id) {
         panel.append(
           link,
           button('Copy preview link', async () => {
-            try {
-              await navigator.clipboard.writeText(previewLink);
-              status.textContent = 'Preview link copied.';
-            } catch {
-              status.textContent = previewLink;
-            }
+            status.textContent = (await copyText(previewLink))
+              ? 'Preview link copied.'
+              : previewLink;
           }),
         );
       }
@@ -515,14 +512,16 @@ export function mountSurveyBuilder(root, api, onDone, id) {
             if (!saved && !(await save())) return;
             await save('publish');
           },
-          '',
+          'btn-primary',
         ),
       );
     }
     const actions = node('div', undefined, 'entry-actions');
     if (step) actions.append(button('← Back', () => go(step - 1)));
     if (step < 4)
-      actions.append(button('Save and continue →', () => go(step + 1), ''));
+      actions.append(
+        button('Save and continue →', () => go(step + 1), 'btn-primary'),
+      );
     actions.append(
       button('Save draft and leave', async () => {
         if (await save()) onDone(surveyId);

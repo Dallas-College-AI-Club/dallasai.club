@@ -44,7 +44,7 @@
     {
       "source": "/surveys/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "no-store" },
+        { "key": "Cache-Control", "value": "no-cache" },
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "X-Frame-Options", "value": "DENY" },
         { "key": "Referrer-Policy", "value": "no-referrer" },
@@ -59,7 +59,7 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "no-store"
+          "value": "no-cache"
         },
         {
           "key": "X-Content-Type-Options",

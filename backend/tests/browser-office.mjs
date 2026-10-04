@@ -422,19 +422,13 @@ try {
       })
       .click();
     await requested;
+    await page.locator('#account-button').click();
     await page.locator('#signout').click();
     await page.locator('#login').waitFor();
-    // Signed out: focus is on the email field, the tabs are reset and the
+    // Signed out: focus is on the email field, the nav is gone and the
     // re-auth links take no space.
     await expect(page.locator('#login-form [name="email"]')).toBeFocused();
-    await expect(page.locator('#inbox-tab')).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
-    await expect(page.locator('#surveys-tab')).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    );
+    await expect(page.locator('#app-nav')).toBeHidden();
     await expect(page.locator('.login-links')).toHaveAttribute('hidden', '');
     const response = page.waitForResponse(
       '**/api/custom-surveys?action=draft&id=' + id,
@@ -458,6 +452,8 @@ try {
     );
     await page.locator('#events-tab').click();
     assert.equal(await page.locator('#event-form').isVisible(), false);
+    // Nothing of the discarded text stays in the hidden form.
+    await expect(page.locator('#event-form [name=title]')).toHaveValue('');
   });
   await check(
     'Custom draft navigation is guarded',
@@ -503,6 +499,10 @@ try {
       .getByLabel('Survey title', { exact: true })
       .fill('Keep on same tab');
     await page.locator('#custom-surveys-group').click();
+    // The response search waits 250 ms; its late reset must not navigate
+    // away from the page the officer has moved on to.
+    await page.waitForTimeout(400);
+    await expect(page).toHaveURL(/#\/surveys\/custom$/);
     await expect(page.getByLabel('Survey title', { exact: true })).toHaveValue(
       'Keep on same tab',
     );
@@ -536,7 +536,7 @@ try {
       await page.evaluate(() => {
         location.hash = 'survey=some-entry';
       });
-      await expect(page).toHaveURL(/#surveys$/);
+      await expect(page).toHaveURL(/#\/surveys\/custom/);
       await expect(
         page.getByLabel('Survey title', { exact: true }),
       ).toHaveValue('Keep this browser draft');
@@ -1124,7 +1124,7 @@ try {
       await expect(page.locator('#login-form [name="email"]')).toHaveValue('');
       await page.unroute('**/api/surveys?**');
       await signInAgain(page, 'second-officer@example.com');
-      await expect(page.locator('#identity')).toHaveText(
+      await expect(page.locator('#account-identity')).toHaveText(
         'Signed in as second-officer@example.com',
       );
       await expect(page.locator('dialog[open]')).toHaveCount(0);
@@ -1215,7 +1215,7 @@ try {
       await expect(page.locator('#status')).toContainText(
         'other-officer@example.com already',
       );
-      await expect(card.locator('.badge')).toHaveText('archived');
+      await expect(card.locator('.badge')).toHaveText('Archived');
       await expect(card).toHaveAttribute('open', '');
       await expect(
         card.getByRole('button', { name: 'Delete permanently', exact: true }),
@@ -1248,6 +1248,10 @@ try {
     await expect(card.getByLabel('Add a comment', { exact: true })).toHaveValue(
       'Draft kept through an edit',
     );
+    // The list was rebuilt; focus is back on the response, not <body>.
+    await expect(
+      card.getByRole('button', { name: 'Edit response', exact: true }),
+    ).toBeFocused();
   });
   await check(
     'A failed first load shows the load error, not the sign-in form',
@@ -1277,16 +1281,35 @@ try {
         .click();
       await expect(page.locator('#office')).toBeVisible();
       await expect(page.locator('#load-error')).toBeHidden();
-      await expect(page.locator('#office h1')).toBeFocused();
+      await expect(page.locator('#inbox-heading')).toBeFocused();
     },
   );
-  await check('A malformed entry link opens the plain inbox', async (page) => {
-    await page.goto(fixture.origin + '/admin/?link#entry=not-a-submission');
-    await expect(page.locator('#office')).toBeVisible();
-    await expect(page.locator('#load-error')).toBeHidden();
-    await expect(page.locator('#entries .entry')).not.toHaveCount(0);
-    assert.equal(new URL(page.url()).hash, '');
-  });
+  await check(
+    'A malformed entry link shows not found, without a request or sign-in',
+    async (page) => {
+      const requested = [];
+      page.on('request', (request) => requested.push(request.url()));
+      await page.goto(fixture.origin + '/admin/?link#entry=abc');
+      await expect(page.locator('#not-found')).toBeVisible();
+      await expect(page.locator('#not-found-message')).toHaveText(
+        'This submission no longer exists or the link is incomplete.',
+      );
+      await expect(page.locator('#not-found h1')).toBeFocused();
+      await expect(page).toHaveURL(/#\/inbox\/abc\?status=all$/);
+      await expect(page.locator('#login')).toBeHidden();
+      await expect(page.locator('#load-error')).toBeHidden();
+      await expect(page.locator('#inbox-tab')).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
+      assert.deepEqual(
+        requested.filter((url) => url.includes('/api/') && url.includes('abc')),
+        [],
+      );
+      await page.getByRole('link', { name: 'Go to the Inbox' }).click();
+      await expect(page.locator('#entries .entry')).not.toHaveCount(0);
+    },
+  );
   await check(
     'A non-officer account sees an explanation instead of the sign-in form',
     async (page) => {
@@ -1529,7 +1552,7 @@ try {
         }),
       });
       await page.locator('#refresh').click();
-      await expect(page.locator('#identity')).toHaveText(
+      await expect(page.locator('#account-identity')).toHaveText(
         'Signed in as third-officer@example.com',
       );
       assert.equal(dialogs.length, 1);
@@ -1539,6 +1562,614 @@ try {
       await expect(
         dialog.getByLabel('Record a follow-up note', { exact: true }),
       ).toHaveValue('');
+    },
+  );
+  await check('Back and Forward stay in the app', async (page) => {
+    await expect(page).toHaveURL(/\/admin\/#\/inbox$/);
+    await expect(page).toHaveTitle(/^\(\d+\) Inbox · Club Office$/);
+    await page.locator('#events-tab').click();
+    await expect(page).toHaveURL(/#\/events$/);
+    await expect(page.locator('#events-heading')).toBeFocused();
+    await page.locator('#surveys-tab').click();
+    await expect(page).toHaveURL(/#\/surveys\/events$/);
+    await page.locator('#custom-surveys-group').click();
+    await expect(page).toHaveURL(/#\/surveys\/custom$/);
+    await expect(page).toHaveTitle(/Custom surveys · Surveys · Club Office$/);
+    await page.goBack();
+    await expect(page.locator('#event-surveys-root')).toBeVisible();
+    await page.goBack();
+    await expect(page.locator('#events-pane')).toBeVisible();
+    await page.goBack();
+    await expect(page.locator('#inbox-pane')).toBeVisible();
+    assert.equal(new URL(page.url()).pathname, '/admin/');
+    await page.goForward();
+    await expect(page.locator('#events-pane')).toBeVisible();
+    // Each nav link reopens its section's last page.
+    await page.locator('#surveys-tab').click();
+    await page.locator('#custom-surveys-group').click();
+    await page.locator('#inbox-tab').click();
+    await expect(page.locator('#surveys-tab')).toHaveAttribute(
+      'href',
+      '#/surveys/custom',
+    );
+    await page.locator('#surveys-tab').click();
+    await expect(page.locator('#custom-surveys-root')).toBeVisible();
+    // A submission's page title never names the person.
+    const entry = fixture.entries.find((row) => row.kind === 'join');
+    await page.evaluate((id) => {
+      location.hash = '#/inbox/' + id;
+    }, entry.id);
+    await expect(page.locator('#entry-' + entry.id)).toHaveAttribute(
+      'open',
+      '',
+    );
+    await expect(page).toHaveTitle(
+      /^\(\d+\) Submission · Inbox · Club Office$/,
+    );
+  });
+  await check(
+    'Reload keeps the page, the Surveys sub-view and Inbox filters',
+    async (page) => {
+      await page.locator('#surveys-tab').click();
+      await page.locator('#custom-surveys-group').click();
+      const create = page.getByRole('button', {
+        name: 'Create custom survey',
+        exact: true,
+      });
+      await create.waitFor();
+      await page.reload();
+      await expect(page.locator('#custom-surveys-root')).toBeVisible();
+      await expect(create).toBeVisible();
+      await expect(page.locator('#custom-surveys-group')).toHaveAttribute(
+        'aria-current',
+        'page',
+      );
+      await page.locator('#inbox-tab').click();
+      await page.locator('[data-inbox-status="closed"]').click();
+      await expect(page).toHaveURL(/#\/inbox\?status=archived$/);
+      await page.reload();
+      await expect(
+        page.locator('[data-inbox-status="closed"]'),
+      ).toHaveAttribute('aria-pressed', 'true');
+      await expect(page.locator('#entries')).toContainText(
+        'No submissions match these filters.',
+      );
+    },
+  );
+  await check(
+    'Success toasts leave after 6 s, errors stay, and #status keeps the latest',
+    async (page) => {
+      await page.clock.install();
+      await page.reload();
+      await page.locator('#entries .entry').first().waitFor();
+      const card = page.locator('#entries .entry').first(),
+        id = (await card.getAttribute('id')).replace('entry-', '');
+      await card.locator('summary').first().click();
+      await card
+        .getByRole('button', { name: 'Mark reviewed', exact: true })
+        .click();
+      // Hovering a toast pauses its timer; keep the pointer elsewhere.
+      await page.mouse.move(1000, 20);
+      const done = page
+        .locator('#toasts .toast')
+        .filter({ hasText: 'Submission moved to Reviewed.' });
+      await expect(done).toBeVisible();
+      await expect(page.locator('#status')).toHaveText(
+        'Submission moved to Reviewed.',
+      );
+      await page.clock.runFor(5500);
+      await expect(done).toBeVisible();
+      await page.clock.runFor(1000);
+      await expect(done).toHaveCount(0);
+      await expect(page.locator('#status')).toHaveText(
+        'Submission moved to Reviewed.',
+      );
+      await page.route('**/api/admin?**', (route) =>
+        route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Club Office is busy.' }),
+        }),
+      );
+      await page.locator('#refresh').click();
+      const failed = page.locator('#toasts .toast-error');
+      await expect(failed).toContainText('Club Office is busy.');
+      // A failing background poll only changes the 'Updated' line.
+      await page.clock.runFor(61000);
+      await expect(page.locator('#inbox-updated')).toContainText(
+        'Couldn’t update',
+      );
+      await expect(page.locator('#toasts .toast')).toHaveCount(1);
+      await expect(failed).toBeVisible();
+      // Dismissing from the keyboard keeps focus on the page, not <body>.
+      await failed
+        .getByRole('button', { name: 'Dismiss', exact: true })
+        .focus();
+      await page.emulateMedia({ forcedColors: 'active' });
+      assert.equal(
+        await failed.evaluate((el) => getComputedStyle(el).borderLeftWidth),
+        '4px',
+      );
+      await page.emulateMedia({ forcedColors: 'none' });
+      await page.keyboard.press('Enter');
+      await expect(page.locator('#toasts .toast')).toHaveCount(0);
+      await expect(page.locator('#inbox-heading')).toBeFocused();
+      await page.unroute('**/api/admin?**');
+      await fixture.db.query(
+        "UPDATE club_forms.entries SET review_status='new' WHERE id=$1",
+        [id],
+      );
+    },
+  );
+  await check('The counts poll never touches the list', async (page) => {
+    await page.clock.install();
+    await page.reload();
+    await page.locator('#entries .entry').first().waitFor();
+    await page.evaluate(() => {
+      window.listChanges = 0;
+      new MutationObserver((records) => {
+        window.listChanges += records.length;
+      }).observe(document.querySelector('#entries'), {
+        subtree: true,
+        childList: true,
+        attributes: true,
+        characterData: true,
+      });
+    });
+    const id = randomUUID(),
+      before = parseInt(await page.locator('#nav-new-count').textContent());
+    await fixture.db.query(
+      "INSERT INTO club_forms.entries(id,kind,email,name,dedupe_key,data) VALUES($1::uuid,'question','arrival@example.edu','New arrival',$1::text,'{}')",
+      [id],
+    );
+    try {
+      const polled = page.waitForResponse((response) =>
+        response.url().includes('counts=1'),
+      );
+      await page.clock.runFor(61000);
+      await polled;
+      await expect(page.locator('#arrivals')).toHaveText(
+        '1 new submission · Show',
+      );
+      assert.equal(await page.evaluate(() => window.listChanges), 0);
+      await expect(page.locator('#nav-new-count')).toHaveText(
+        before + 1 + ' new',
+      );
+      await page.locator('#arrivals').click();
+      await expect(page.locator('#entry-' + id)).toHaveCount(1);
+      await expect(page.locator('#arrivals')).toBeHidden();
+    } finally {
+      await fixture.db.query('DELETE FROM club_forms.entries WHERE id=$1', [
+        id,
+      ]);
+    }
+  });
+  await check(
+    'An officer’s own Mark new raises no alert; a new submission does',
+    async (page) => {
+      await page.addInitScript(() => {
+        window.testAlerts = [];
+        window.Notification = class {
+          static permission = 'granted';
+          static async requestPermission() {
+            return 'granted';
+          }
+          constructor(title, options) {
+            window.testAlerts.push({ title, ...options });
+          }
+        };
+        localStorage.setItem('club-office-browser-alerts', 'on');
+      });
+      await page.clock.install();
+      const { id } = fixture.entries.find((row) => row.kind === 'question'),
+        arrival = randomUUID();
+      await fixture.db.query(
+        "UPDATE club_forms.entries SET review_status='reviewed' WHERE id=$1",
+        [id],
+      );
+      try {
+        await page.goto(
+          fixture.origin + '/admin/?alerts#/inbox?status=reviewed',
+        );
+        const card = page.locator('#entry-' + id);
+        await card.locator('summary').first().click();
+        const counted = page.waitForResponse((response) =>
+          response.url().includes('counts=1'),
+        );
+        await card
+          .getByRole('button', { name: 'Mark new', exact: true })
+          .click();
+        await counted;
+        const polled = page.waitForResponse((response) =>
+          response.url().includes('counts=1'),
+        );
+        await page.clock.runFor(61000);
+        await polled;
+        assert.deepEqual(await page.evaluate(() => window.testAlerts), []);
+        await expect(page.locator('#arrivals')).toBeHidden();
+        await fixture.db.query(
+          "INSERT INTO club_forms.entries(id,kind,email,name,dedupe_key,data) VALUES($1::uuid,'question','alert@example.edu','Alert test',$1::text,'{}')",
+          [arrival],
+        );
+        await page.clock.runFor(61000);
+        await expect
+          .poll(() => page.evaluate(() => window.testAlerts.length))
+          .toBe(1);
+        const [alert] = await page.evaluate(() => window.testAlerts);
+        assert.equal(alert.body, '1 new: 1 question');
+        assert.equal(alert.tag, 'club-office-arrivals');
+        assert.equal(alert.renotify, true);
+      } finally {
+        await fixture.db.query('DELETE FROM club_forms.entries WHERE id=$1', [
+          arrival,
+        ]);
+        await fixture.db.query(
+          "UPDATE club_forms.entries SET review_status='new' WHERE id=$1",
+          [id],
+        );
+      }
+    },
+  );
+  await check(
+    'A refused code keeps the code step; the right code signs in',
+    async (page) => {
+      await page.locator('#account-button').click();
+      await page.locator('#signout').click();
+      await page
+        .getByLabel('Email address', { exact: true })
+        .fill('officer@example.com');
+      await page
+        .getByRole('button', { name: 'Send sign-in code', exact: true })
+        .click();
+      await expect(page.locator('#code-instructions')).toHaveText(
+        'Enter the 6-digit code we sent to officer@example.com. Check junk too; use the newest code.',
+      );
+      await page.route('**/api/auth/sign-in/email-otp', (route) =>
+        route.fulfill({
+          status: 401,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Use the latest code.' }),
+        }),
+      );
+      const code = page.getByLabel('Sign-in code', { exact: true });
+      await code.fill('654321');
+      await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+      await expect(page.locator('#login-error')).toHaveText(
+        'That code is wrong or has expired. Use the newest email, or send a new code.',
+      );
+      await expect(code).toHaveAttribute('aria-invalid', 'true');
+      await expect(page.locator('#office')).toBeHidden();
+      await page.unroute('**/api/auth/sign-in/email-otp');
+      await code.fill('123456');
+      await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+      await expect(page.locator('#entries .entry')).not.toHaveCount(0);
+      await expect(page.locator('#inbox-heading')).toBeFocused();
+    },
+  );
+  await check('Signing out in one tab signs out the others', async (page) => {
+    const other = await page.context().newPage();
+    await other.goto(fixture.origin + '/admin/#/events');
+    // The other tab is asking whether to archive an event.
+    await other.locator('.event-choice').first().click();
+    if (!(await other.locator('#event-form').isVisible()))
+      await other.locator('#edit-selected-event').click();
+    await other
+      .getByRole('button', { name: 'Archive event', exact: true })
+      .click();
+    await expect(other.locator('#confirm-dialog')).toBeVisible();
+    await page.locator('#account-button').click();
+    await page.locator('#signout').click();
+    await expect(page.locator('#login')).toBeVisible();
+    await expect(other.locator('#login')).toBeVisible();
+    await expect(other.locator('#office')).toBeHidden();
+    await expect(other.locator('#status')).toHaveText(
+      'You signed out in another tab.',
+    );
+    await expect(other.locator('#entries .entry')).toHaveCount(0);
+    await expect(other.locator('#confirm-dialog')).toBeHidden();
+    assert.equal(
+      (
+        await fixture.db.query(
+          'SELECT archived_at FROM club_forms.events WHERE id=$1',
+          [fixture.event.id],
+        )
+      ).rows[0].archived_at,
+      null,
+    );
+  });
+  await check(
+    'A tab with unsaved work pauses when another tab signs out',
+    async (page) => {
+      const other = await page.context().newPage();
+      await other.goto(fixture.origin + '/admin/#/events');
+      await other.locator('#new-event').click();
+      await other
+        .locator('#event-form [name="title"]')
+        .fill('Kept when another tab signs out');
+      await page.locator('#account-button').click();
+      await page.locator('#signout').click();
+      await expect(page.locator('#login')).toBeVisible();
+      await expect(other.locator('#reauth-note')).toBeVisible();
+      await expect(other.locator('#office')).toBeHidden();
+      await expect(other.locator('#status')).toHaveText(
+        'You signed out in another tab.',
+      );
+      await signInAgain(other);
+      await expect(other.locator('#event-form [name="title"]')).toHaveValue(
+        'Kept when another tab signs out',
+      );
+    },
+  );
+  await check(
+    'A late first load does not reset the code step',
+    async (page) => {
+      await page.locator('#account-button').click();
+      await page.locator('#signout').click();
+      await page.locator('#login').waitFor();
+      let release;
+      const gate = new Promise((resolve) => (release = resolve));
+      await page.route('**/api/admin?**', async (route) => {
+        await gate;
+        await route.continue();
+      });
+      await page.reload();
+      await page
+        .getByLabel('Email address', { exact: true })
+        .fill('officer@example.com');
+      await page
+        .getByRole('button', { name: 'Send sign-in code', exact: true })
+        .click();
+      const code = page.getByLabel('Sign-in code', { exact: true });
+      await expect(code).toBeVisible();
+      const refused = page.waitForResponse((response) =>
+        response.url().includes('/api/admin?'),
+      );
+      release();
+      assert.equal((await refused).status(), 401);
+      await page.waitForTimeout(200);
+      await expect(code).toBeVisible();
+      await expect(page.locator('#status')).not.toContainText(
+        'Your session ended',
+      );
+      await page.unroute('**/api/admin?**');
+      await code.fill('123456');
+      await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+      await expect(page.locator('#entries .entry')).not.toHaveCount(0);
+    },
+  );
+  await check(
+    'A page restored from the back/forward cache checks the session',
+    async (page) => {
+      await fetch(fixture.origin + '/api/auth/sign-out', { method: 'POST' });
+      await page.evaluate(() =>
+        window.dispatchEvent(
+          new PageTransitionEvent('pageshow', { persisted: true }),
+        ),
+      );
+      await expect(page.locator('#login')).toBeVisible();
+      await expect(page.locator('#office')).toBeHidden();
+      await expect(page.locator('#entries .entry')).toHaveCount(0);
+    },
+  );
+  await check(
+    'Refusing Back keeps both history entries',
+    async (page, dialogs, setAccept) => {
+      await page.locator('#events-tab').click();
+      await page.locator('#new-event').click();
+      await page
+        .locator('#event-form [name="title"]')
+        .fill('Unsaved when going back');
+      await page.evaluate(() => {
+        window.samePage = true;
+      });
+      setAccept(false);
+      await page.goBack();
+      await expect(page).toHaveURL(/#\/events$/);
+      await expect(page.locator('#event-form [name="title"]')).toHaveValue(
+        'Unsaved when going back',
+      );
+      assert.equal(dialogs.length, 1);
+      setAccept(true);
+      await page.goBack();
+      await expect(page.locator('#inbox-pane')).toBeVisible();
+      await expect(page).toHaveURL(/\/admin\/#\/inbox$/);
+      assert.equal(await page.evaluate(() => window.samePage), true);
+    },
+  );
+  await check(
+    'The editor actions stay clear of the tab bar and of toasts',
+    async (page) => {
+      // A failed refresh leaves an error toast, which stays across sections.
+      await page.route('**/api/admin?**', (route) =>
+        route.fulfill({
+          status: 503,
+          contentType: 'application/json',
+          body: JSON.stringify({ error: 'Club Office is busy.' }),
+        }),
+      );
+      await page.locator('#refresh').click();
+      await page.locator('#toasts .toast-error').waitFor();
+      await page.unroute('**/api/admin?**');
+      await page.locator('#events-tab').click();
+      await page.locator('#new-event').click();
+      for (const width of [390, 768, 1440]) {
+        await page.setViewportSize({ width, height: 700 });
+        await page
+          .locator('#event-form [name="summary"]')
+          .evaluate((el) => el.scrollIntoView({ block: 'center' }));
+        await page.mouse.move(width - 2, 2);
+        const covered = await page
+          .locator('.primary-actions button')
+          .evaluateAll((buttons) =>
+            buttons
+              .filter((button) => {
+                const box = button.getBoundingClientRect(),
+                  hit = document.elementFromPoint(
+                    box.left + box.width / 2,
+                    box.top + box.height / 2,
+                  );
+                return !button.contains(hit);
+              })
+              .map((button) => button.textContent.trim()),
+          );
+        assert.deepEqual(covered, [], `covered at ${width}px`);
+      }
+    },
+  );
+  await check('The account menu works from the keyboard', async (page) => {
+    const menu = page.locator('#account-menu'),
+      button = page.locator('#account-button');
+    await button.click();
+    await expect(page.locator('#account-menu button').first()).toBeFocused();
+    await page.keyboard.press('Shift+Tab');
+    await expect(button).toBeFocused();
+    await page.locator('#signout').focus();
+    await page.keyboard.press('Tab');
+    await expect(menu).toBeHidden();
+    await expect(page.locator('#inbox-tab')).toBeFocused();
+    await button.click();
+    // A click on plain content closes it and returns focus to the button.
+    await page.locator('#counts .count').last().click();
+    await expect(menu).toBeHidden();
+    await expect(button).toBeFocused();
+    // On a phone the sheet covers any toast.
+    await page.setViewportSize({ width: 390, height: 700 });
+    await page.route('**/api/admin?**', (route) =>
+      route.fulfill({
+        status: 503,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Club Office is busy.' }),
+      }),
+    );
+    await page.locator('#refresh').click();
+    await page.locator('#toasts .toast-error').waitFor();
+    await page.unroute('**/api/admin?**');
+    await button.click();
+    const covered = await page
+      .locator('#account-menu > a, #account-menu > button')
+      .evaluateAll((items) =>
+        items
+          .filter((item) => {
+            const box = item.getBoundingClientRect(),
+              hit = document.elementFromPoint(
+                box.left + box.width / 2,
+                box.top + box.height / 2,
+              );
+            return box.width && !item.contains(hit);
+          })
+          .map((item) => item.textContent.trim()),
+      );
+    assert.deepEqual(covered, []);
+  });
+  await check('Contact history names actions in words', async (page) => {
+    const { id } = fixture.entries.find((row) => row.kind === 'rsvp');
+    await fixture.db.query(
+      "INSERT INTO club_forms.audit(actor,entry_id,action) VALUES('other-officer@example.com',$1,'download-attachment')",
+      [id],
+    );
+    const dialog = await openContact(page);
+    await expect(
+      dialog.getByRole('heading', {
+        name: 'Downloaded an attachment',
+        exact: true,
+      }),
+    ).toBeVisible();
+    await expect(dialog).not.toContainText('download-attachment');
+  });
+  await check(
+    'The account menu shows when the session ends and warns 30 minutes before',
+    async (page) => {
+      await page.clock.install({ time: new Date('2026-10-03T13:00:00Z') });
+      fixture.session.expiresAt = '2026-10-03T13:40:00Z';
+      try {
+        await page.reload();
+        await page.locator('#entries .entry').first().waitFor();
+        await page.locator('#account-button').click();
+        await expect(page.locator('#account-until')).toHaveText(
+          'Signed in until Sat, Oct 3, 8:40 AM CT',
+        );
+        await page.keyboard.press('Escape');
+        await expect(page.locator('#account-menu')).toBeHidden();
+        await expect(page.locator('#account-button')).toBeFocused();
+        const warning = page
+          .locator('#toasts .toast')
+          .filter({ hasText: 'Your session ends at 8:40 AM.' });
+        await page.clock.runFor(9 * 60000);
+        await expect(warning).toHaveCount(0);
+        await page.clock.runFor(2 * 60000);
+        await expect(warning).toBeVisible();
+        await page.clock.runFor(10 * 60000);
+        await expect(warning).toBeVisible();
+        fixture.session.expiresAt = '2026-10-06T13:20:00Z';
+        await warning
+          .getByRole('button', { name: 'Sign in again', exact: true })
+          .click();
+        // The card opens above the office, which stays open.
+        await expect(page.locator('#login')).toBeVisible();
+        await expect(page.locator('#office')).toBeVisible();
+        await signInAgain(page);
+        await expect(page.locator('#login')).toBeHidden();
+        await expect(page.locator('#account-until')).toHaveText(
+          'Signed in until Tue, Oct 6, 8:20 AM CT',
+        );
+      } finally {
+        fixture.session.expiresAt = undefined;
+      }
+    },
+  );
+  await check(
+    'The shell fits from 320px to 1440px and the nav stays reachable',
+    async (page) => {
+      // No hero above the work, and no text below 12px.
+      assert.equal(await page.locator('.office-intro').count(), 0);
+      assert.equal(
+        await page
+          .locator('#entries small')
+          .first()
+          .evaluate((el) => getComputedStyle(el).fontSize),
+        '12px',
+      );
+      await expect(
+        page.getByText('Your club office', { exact: true }),
+      ).toHaveCount(0);
+      for (const width of [320, 375, 768, 1024, 1440]) {
+        await page.setViewportSize({ width, height: 700 });
+        for (const pane of ['inbox', 'events', 'surveys']) {
+          await page.locator('#' + pane + '-tab').click();
+          await expect(page.locator('#' + pane + '-pane')).toBeVisible();
+          assert.equal(
+            await page.evaluate(
+              () => document.documentElement.scrollWidth <= innerWidth,
+            ),
+            true,
+            `${pane} overflows at ${width}px`,
+          );
+        }
+        // Help: in the nav from 768px, in the account menu on phones.
+        if (width < 768) {
+          await page.locator('#account-button').click();
+          await page.locator('#account-help').click();
+        } else await page.locator('#help-tab').click();
+        await expect(page.locator('#help-pane')).toBeVisible();
+        await expect(page.locator('#account-menu')).toBeHidden();
+        // Nothing hides under the bottom tabs: the page scrolls past them.
+        await page.locator('#inbox-tab').click();
+        await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
+        const nav = await page.locator('#app-nav').boundingBox(),
+          last = await page.locator('#inbox-pane .pagination').boundingBox();
+        if (width < 768) {
+          assert.ok(last.y + last.height <= nav.y, `covered at ${width}px`);
+          // Focused controls scroll clear of the tab bar (WCAG 2.4.11).
+          const padding = await page.evaluate(
+            () =>
+              getComputedStyle(document.documentElement).scrollPaddingBottom,
+          );
+          assert.ok(
+            parseFloat(padding) >= nav.height + 16,
+            `scroll-padding ${padding} at ${width}px`,
+          );
+        }
+      }
     },
   );
 } finally {

@@ -60,10 +60,10 @@ If someone else edits the same event, the save is rejected and your text remains
 in the form. Copy it, refresh the list, and review the latest saved version.
 The editor also warns before leaving unsaved changes.
 
-The editor shows **Last updated by** with the officer's account and the saved
+The editor shows **Last updated by** with the officer's account (**You** for your own saves) and the saved
 timestamp. **Activity history** lists draft saves, publication, unpublishing,
 archiving, and restoration, newest first. Every entry includes the actor and
-the date and time in Central Time (CST/CDT), including seconds. **Load older
+the date and time in Central Time, shown as CT (for example 'Thu, Oct 2, 11:34 PM CT'). **Load older
 activity** retrieves earlier changes. Existing recorded history is included;
 events imported from the website have no office history until an officer saves
 a change. Previewing or typing without saving does not create a history entry.

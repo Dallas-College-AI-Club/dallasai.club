@@ -6,10 +6,23 @@ import { send, fail, jsonBody } from '../lib/http.mjs';
 import { RequestError } from '../lib/errors.mjs';
 import { uuid } from '../lib/validation.mjs';
 import { liveEvents } from '../lib/events.mjs';
-import { upcomingEvents, inboxFilter } from '../lib/inbox.mjs';
-import { submissionsCSV } from '../lib/submission-export.mjs';
+import {
+  upcomingEvents,
+  inboxFilter,
+  inboxPage,
+  summarize,
+  reviewMany,
+  reviewKinds,
+  changeState,
+  validTime,
+} from '../lib/inbox.mjs';
+import { submissionsCSV, exportFilename } from '../lib/submission-export.mjs';
 import { changeSubmission } from '../lib/submission-management.mjs';
-import { cleanupContactFiles } from '../lib/contacts.mjs';
+import {
+  cleanupContactFiles,
+  contactRef,
+  submissionContact,
+} from '../lib/contacts.mjs';
 import {
   submissionActivity,
   addSubmissionComment,
@@ -17,6 +30,9 @@ import {
   staleStatus,
 } from '../lib/submission-activity.mjs';
 export { csvCell } from '../lib/submission-export.mjs';
+// Per-kind counts; RSVPs for events that are no longer upcoming count as
+// rsvp-past.
+const countsQuery = `SELECT CASE WHEN kind='rsvp' AND NOT(coalesce(data->>'eventId','')=ANY($1::text[])) THEN 'rsvp-past' ELSE kind END AS kind,count(*)::int AS total,count(*) FILTER (WHERE review_status='new')::int AS new,count(*) FILTER (WHERE review_status='reviewed')::int AS reviewed,count(*) FILTER (WHERE review_status='closed')::int AS closed,max(created_at) AS latest FROM club_forms.entries GROUP BY 1`;
 export function adminHandler({
   authorize = requireAdmin,
   getDatabase = database,
@@ -33,14 +49,23 @@ export function adminHandler({
           const id = url.searchParams.get('edit');
           if (!uuid.test(id || ''))
             throw new RequestError(400, 'Choose a submission.');
-          const entry = (
+          const row = (
             await db.query(
-              `SELECT e.*,(SELECT row_to_json(s) FROM club_forms.survey_responses s WHERE s.entry_id=e.id) AS survey FROM club_forms.entries e WHERE e.id=$1`,
+              `SELECT e.*,(SELECT row_to_json(s) FROM club_forms.survey_responses s WHERE s.entry_id=e.id) AS survey,
+              (SELECT COALESCE(json_agg(json_build_object('id',a.id,'name',a.name,'size',a.size)),'[]') FROM club_forms.attachments a WHERE a.entry_id=e.id) AS attachments,
+              (SELECT json_build_object('starred',m.starred,'archived_at',m.archived_at,'updated_by',m.updated_by,'updated_at',m.updated_at) FROM club_forms.survey_response_state m WHERE m.entry_id=e.id) AS survey_state
+              FROM club_forms.entries e WHERE e.id=$1`,
               [id],
             )
           ).rows[0];
-          if (!entry) throw new RequestError(404, 'Submission not found.');
-          return send(res, 200, { entry });
+          if (!row) throw new RequestError(404, 'Submission not found.');
+          const { attachments, survey_state, ...entry } = row;
+          return send(res, 200, {
+            entry,
+            attachments,
+            survey_state,
+            contact: await submissionContact(db, entry),
+          });
         }
         if (url.searchParams.has('history'))
           return send(
@@ -81,6 +106,52 @@ export function adminHandler({
           await pipeline(blob.stream, res);
           return;
         }
+        // The background poll: counts and arrivals only, no rows. An arrival
+        // is a submission created after `since`, so status changes (an
+        // officer's own Mark new) never count as one.
+        if (url.searchParams.get('counts') === '1') {
+          // A strict ISO time: Date.parse alone accepts '0' or a year like
+          // +275760, which Postgres then refuses.
+          const since = url.searchParams.get('since') || null;
+          if (since && !validTime(since))
+            throw new RequestError(400, 'Invalid filter.');
+          const events = upcomingEvents(await getEvents(db));
+          const { values: filters, where } = inboxFilter(
+            url.searchParams,
+            events,
+          );
+          const counts = (
+            await db.query(countsQuery, [events.map((event) => event.id)])
+          ).rows;
+          const { asOf, arrived } = (
+            await db.query(
+              // `since` comes back from JSON in milliseconds; created_at has
+              // microseconds, so compare at the same precision.
+              `SELECT now() AS "asOf",count(*) FILTER (WHERE date_trunc('milliseconds',created_at)>$1::timestamptz)::int AS arrived FROM club_forms.entries`,
+              [since],
+            )
+          ).rows[0];
+          const inView = (
+            await db.query(
+              `SELECT count(*)::int AS n FROM club_forms.entries e ${where} AND date_trunc('milliseconds',e.created_at)>$${filters.length + 1}::timestamptz`,
+              [...filters, since],
+            )
+          ).rows[0].n;
+          return send(res, 200, {
+            user: user.email,
+            counts,
+            latest: counts.reduce(
+              (max, row) => (!max || row.latest > max ? row.latest : max),
+              null,
+            ),
+            arrived,
+            arrivedInView: inView,
+            asOf,
+            configured: {
+              uploads: Boolean(process.env.BLOB_READ_WRITE_TOKEN),
+            },
+          });
+        }
         const savedEvents = (
           await db.query(
             `SELECT DISTINCT ON (data->>'eventId') data->>'eventId' AS id,data->>'eventTitle' AS title,data->>'eventDate' AS date,(data->>'potential')='true' AS potential FROM club_forms.entries WHERE kind='rsvp' ORDER BY data->>'eventId',created_at DESC,id`,
@@ -101,14 +172,17 @@ export function adminHandler({
         const { values: filters, where } = inboxFilter(
           url.searchParams,
           events,
+          { search: true },
         );
+        // $7 is the offset; the cursor uses $8 and $9.
+        const page = inboxPage(url.searchParams, filters.length + 2);
         const offset = Number(url.searchParams.get('offset') || 0);
         if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100000)
           throw new RequestError(400, 'Choose a valid inbox page.');
         if (url.searchParams.get('export') === 'csv') {
           const rows = (
             await db.query(
-              `SELECT id,kind,email,name,state,review_status,created_at,data FROM club_forms.entries e ${where} ORDER BY created_at DESC,id LIMIT 10001`,
+              `SELECT id,kind,email,name,state,review_status,created_at,data FROM club_forms.entries e ${where} ORDER BY ${page.order} LIMIT 10001`,
               filters,
             )
           ).rows;
@@ -125,27 +199,76 @@ export function adminHandler({
           res.setHeader('Cache-Control', 'no-store');
           res.setHeader(
             'Content-Disposition',
-            'attachment; filename="club-submissions.csv"',
+            `attachment; filename="${exportFilename({
+              status: filters[1],
+              kind: filters[0],
+              eventId: filters[3],
+              search: filters[5],
+            })}"`,
           );
           res.end(submissionsCSV(rows));
           return;
         }
+        // One statement, so total, asOf and the page share one snapshot. total
+        // counts the whole filtered set, whatever the cursor; asOf is the
+        // statement's now(). A submission whose transaction began before asOf
+        // but commits after this read is not shown, yet is not newer than asOf
+        // either; inserts commit within milliseconds, so that gap is accepted.
+        // The page is chosen first, so the per-row extras run for 51 rows; an
+        // empty page still returns one row, with a null id, for the totals.
         const result = await db.query(
-          `SELECT e.*,
-        (SELECT COALESCE(json_agg(json_build_object('id',a.id,'name',a.name,'size',a.size)),'[]') FROM club_forms.attachments a WHERE a.entry_id=e.id) AS attachments
-        FROM club_forms.entries e ${where} ORDER BY e.created_at DESC,e.id LIMIT 51 OFFSET $6`,
-          [...filters, offset],
+          `SELECT list.total AS list_total,list."asOf" AS list_as_of,e.*,
+        (SELECT COALESCE(json_agg(json_build_object('id',a.id,'name',a.name,'size',a.size)),'[]') FROM club_forms.attachments a WHERE a.entry_id=e.id) AS attachments,
+        (SELECT count(*)::int FROM club_forms.entry_comments c WHERE c.entry_id=e.id) AS comment_count,
+        (SELECT json_build_object('action',a.action,'actor',a.actor,'at',a.created_at) FROM club_forms.audit a WHERE a.entry_id=e.id AND a.action LIKE 'review:%' ORDER BY a.id DESC LIMIT 1) AS last_review,
+        link.contact_email,
+        (SELECT count(*)::int FROM club_forms.contact_emails a JOIN club_forms.entries o ON o.email=a.email WHERE a.contact_email=link.contact_email AND o.id<>e.id) AS contact_others,
+        (SELECT count(*)::int FROM club_forms.contact_emails a JOIN club_forms.contact_notes n ON n.email=a.email WHERE a.contact_email=link.contact_email) AS contact_notes,
+        person.deleted_at AS contact_deleted_at
+        FROM (SELECT count(*)::int AS total,now() AS "asOf" FROM club_forms.entries e ${where}) list
+        LEFT JOIN (SELECT e.*,to_char(e.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at FROM club_forms.entries e ${where}${page.where} ORDER BY ${page.order} LIMIT 51 OFFSET $7) e ON true
+        LEFT JOIN club_forms.contact_emails link ON link.email=e.email
+        LEFT JOIN club_forms.contacts person ON person.email=link.contact_email
+        ORDER BY ${page.order}`,
+          [...filters, offset, ...page.values],
         );
-        const counts = (
-          await db.query(
-            `SELECT CASE WHEN kind='rsvp' AND NOT(coalesce(data->>'eventId','')=ANY($1::text[])) THEN 'rsvp-past' ELSE kind END AS kind,count(*)::int AS total,count(*) FILTER (WHERE review_status='new')::int AS new,max(created_at) AS latest FROM club_forms.entries GROUP BY 1`,
-            [upcomingIds],
-          )
-        ).rows;
+        const { list_total: total, list_as_of: asOf } = result.rows[0];
+        const rows = result.rows.filter((row) => row.id !== null);
+        const summary = url.searchParams.get('summary') === '1';
+        const entries = rows
+          .slice(0, 50)
+          .map(
+            ({
+              list_total,
+              list_as_of,
+              cursor_at,
+              contact_email,
+              contact_others,
+              contact_notes,
+              contact_deleted_at,
+              ...entry
+            }) => ({
+              ...entry,
+              ...(summary ? { data: summarize(entry.data) } : {}),
+              contact: {
+                ref: contactRef(contact_email),
+                other_submissions: contact_others,
+                notes: contact_notes,
+                deleted_at: contact_deleted_at,
+              },
+            }),
+          );
+        const last = rows[49];
+        const counts = (await db.query(countsQuery, [upcomingIds])).rows;
         return send(res, 200, {
           user: user.email,
-          entries: result.rows.slice(0, 50),
-          hasMore: result.rows.length > 50,
+          entries,
+          hasMore: rows.length > 50,
+          // Send back as `before` for the next page: it carries the exact
+          // microsecond time, which a JSON created_at does not.
+          nextBefore: rows.length > 50 ? `${last.cursor_at}|${last.id}` : null,
+          total,
+          asOf,
           counts,
           events: allEvents.map(({ id, title, date }) => ({
             id,
@@ -173,6 +296,12 @@ export function adminHandler({
         const comment = await addSubmissionComment(db, body, user.email);
         return send(res, 200, { comment });
       }
+      if (body.action === 'review' && body.items !== undefined)
+        return send(res, 200, await reviewMany(db, body, user.email));
+      if (body.action === 'review-kinds')
+        return send(res, 200, await reviewKinds(db, body, user.email));
+      if (body.action === 'state')
+        return send(res, 200, await changeState(db, body, user.email));
       const statuses = ['new', 'reviewed', 'closed'];
       if (
         body.action !== 'review' ||

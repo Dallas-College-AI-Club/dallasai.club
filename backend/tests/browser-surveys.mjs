@@ -389,7 +389,7 @@ try {
   await admin.locator('#entry-' + entryId + ' > summary').click();
   assert.match(
     await admin.locator('#entries').textContent(),
-    /Potential social survey · TBD/,
+    /Potential social survey · Date TBD/,
   );
   assert.doesNotMatch(await admin.locator('#entries').textContent(), /Chess/);
   await admin.getByRole('button', { name: 'View survey answers' }).click();
@@ -404,7 +404,7 @@ try {
   );
   assert.match(
     await admin.locator('#survey-results').textContent(),
-    /Event date: TBD/,
+    /Date TBD/,
   );
   assert.equal(await admin.locator('#survey-results img').count(), 0);
   await admin.reload();
@@ -478,7 +478,7 @@ try {
     .click();
   await admin
     .getByRole('heading', {
-      name: '1 matching responses · all pages',
+      name: '1 matching response · all pages',
       exact: true,
     })
     .waitFor();
@@ -582,7 +582,7 @@ try {
     .click();
   await reportDialog
     .getByRole('heading', {
-      name: '1 matching responses · all pages',
+      name: '1 matching response · all pages',
       exact: true,
     })
     .waitFor();
@@ -783,6 +783,7 @@ try {
     .click();
   const anonymous = await fetch(origin + '/api/surveys');
   assert.equal(anonymous.status, 401);
+  await admin.locator('#account-button').click();
   await admin.getByRole('button', { name: 'Sign out', exact: true }).click();
   await admin.locator('#login').waitFor();
   assert.equal(await admin.locator('#survey-results').textContent(), '');

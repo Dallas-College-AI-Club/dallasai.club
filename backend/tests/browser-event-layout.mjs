@@ -561,6 +561,7 @@ try {
     path: path.join(screens, 'formatting-editor-mobile.png'),
   });
   await admin.locator('#cancel-event-edit').click();
+  await admin.locator('#account-button').click();
   await admin.getByRole('button', { name: 'Sign out', exact: true }).click();
   await admin.locator('#login').waitFor();
   assert.equal(await admin.locator('#event-overview').textContent(), '');

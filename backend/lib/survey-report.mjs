@@ -1,28 +1,99 @@
 import { csvCell } from './submission-export.mjs';
 import { RequestError } from './errors.mjs';
 import { exclusiveSurveyChoice } from './event-format.mjs';
-import { responseFilter, responseSelect } from './survey-management.mjs';
+import { uuid } from './validation.mjs';
+import {
+  responseFilter,
+  responseSelect,
+  participationJoins,
+} from './survey-management.mjs';
 const anyChoice = (value) =>
   String(value).trim().toLowerCase() === 'any of these';
 const ordinaryChoice = (value) =>
   value !== '__other__' && !exclusiveSurveyChoice(value);
 const impliedChoice = (question, values, choice) =>
   question.type === 'multiple' &&
+  question.expandAny !== false &&
   values.some(anyChoice) &&
   ordinaryChoice(choice);
 export const answerValues = (answer) =>
   (Array.isArray(answer?.value) ? answer.value : [answer?.value || ''])
     .filter(Boolean)
     .map((value) => (value === '__other__' ? 'Other: ' + answer.other : value));
-export async function reportRows(db, filter) {
+export async function reportRows(db, filter = {}) {
   const { where, values } = responseFilter(filter);
+  const type = filter.type || 'rsvp';
+  const surveyId = filter.surveyId || '';
+  if (surveyId && !uuid.test(surveyId))
+    throw new RequestError(400, 'Choose a valid feedback survey.');
+  if (!['all', 'rsvp', 'feedback'].includes(type))
+    throw new RequestError(400, 'Choose a valid response type.');
   // Never silently export or summarize only the visible page.
-  const rows = (
-    await db.query(
-      `${responseSelect} ${where} ORDER BY s.created_at DESC,s.entry_id LIMIT 10001`,
-      values,
-    )
-  ).rows;
+  const rows =
+    type === 'feedback'
+      ? []
+      : (
+          await db.query(
+            `${responseSelect} ${where} ORDER BY s.created_at DESC,s.entry_id LIMIT 10001`,
+            values,
+          )
+        ).rows;
+  if (type !== 'rsvp') {
+    const feedback = (
+      await db.query(
+        `SELECT cs.id AS survey_id,cs.title AS survey_title,cs.content_version,cs.definition,
+        s.event_id,coalesce(ev.published->>'title',ev.draft->>'title',registered.event_title,s.event_id) AS event_title,
+        coalesce(ev.published->>'date',ev.draft->>'date',registered.event_date,'') AS event_date,
+        e.name,e.email,cr.responses,cr.submitted_at AS created_at,m.archived_at,false AS starred,
+        coalesce(a.attendance,'not_recorded') AS attendance,
+        f.feedback_status,f.feedback_submitted_count,f.feedback_survey_count
+       FROM club_forms.custom_surveys cs
+       JOIN club_forms.custom_survey_members cm ON cm.survey_id=cs.id
+       JOIN club_forms.custom_survey_responses cr USING(survey_id,advisor_id)
+       CROSS JOIN LATERAL (SELECT cs.definition->>'eventId' AS event_id,NULL::uuid AS entry_id) s
+       CROSS JOIN LATERAL (SELECT cm.display_name AS name,cm.email) e
+       CROSS JOIN LATERAL (SELECT false AS starred,CASE WHEN cm.active THEN NULL::timestamptz ELSE cr.submitted_at END AS archived_at) m
+       LEFT JOIN club_forms.events ev ON ev.id=s.event_id
+       LEFT JOIN LATERAL (SELECT event_title,event_date FROM club_forms.survey_responses sr
+         WHERE sr.event_id=s.event_id ORDER BY sr.created_at DESC,sr.entry_id LIMIT 1) registered ON true
+       ${participationJoins} ${where}
+       AND s.event_id IS NOT NULL AND cs.status<>'draft' AND jsonb_array_length(cr.responses)>0
+       AND ($8='' OR cs.id::text=$8)
+       ORDER BY cr.submitted_at DESC,cs.id,cm.advisor_id LIMIT 10001`,
+        [...values, surveyId],
+      )
+    ).rows;
+    for (const row of feedback) {
+      const questions = row.definition.questions.map((q) => ({
+        ...q,
+        label: q.title,
+        allowOther: false,
+        expandAny: false,
+        type: ['single', 'multiple'].includes(q.type) ? q.type : 'text',
+      }));
+      const answers = row.responses.map((answer) => {
+        const q = questions.find((q) => q.id === answer.id);
+        return {
+          questionId: answer.id,
+          other: '',
+          value:
+            q?.type === 'multiple'
+              ? answer.value.map((index) => q.options[index])
+              : q?.type === 'single'
+                ? q.options[answer.value]
+                : answer.text,
+        };
+      });
+      const { definition, responses, content_version, ...metadata } = row;
+      rows.push({
+        ...metadata,
+        response_type: 'feedback',
+        survey_version: row.survey_id + ':' + content_version,
+        questions,
+        answers,
+      });
+    }
+  }
   if (rows.length > 10000)
     throw new RequestError(
       413,
@@ -40,6 +111,8 @@ export function summarizeResponses(rows) {
         title: row.event_title,
         date: row.event_date,
         version: row.survey_version,
+        responseType: row.response_type || 'rsvp',
+        surveyTitle: row.survey_title || '',
         count: 0,
         questions: row.questions.map((q) => ({
           ...q,
@@ -112,11 +185,17 @@ export function responsesCSV(rows) {
   const header = [
     'Event',
     'Event date',
+    'Response type',
+    'Survey',
     'Name',
     'Email',
     'Received (UTC)',
     'Starred',
     'Archived',
+    'Attendance',
+    'Feedback status',
+    'Feedback surveys submitted',
+    'Linked feedback surveys',
     'Question version',
     ...columns.map(
       ({ question: q, option }) =>
@@ -129,11 +208,17 @@ export function responsesCSV(rows) {
   const lines = rows.map((row) => [
     row.event_title,
     row.event_date || 'TBD',
+    row.response_type || 'rsvp',
+    row.survey_title || 'RSVP',
     row.name,
     row.email,
     new Date(row.created_at).toISOString(),
     row.starred ? 'Yes' : 'No',
     row.archived_at ? 'Yes' : 'No',
+    row.attendance || 'not_recorded',
+    row.feedback_status || 'no_survey',
+    row.feedback_submitted_count || 0,
+    row.feedback_survey_count || 0,
     row.survey_version,
     ...columns.map(({ question: q, option }) => {
       if (q.version !== row.survey_version) return '';

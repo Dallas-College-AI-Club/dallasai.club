@@ -96,6 +96,9 @@ test('every server action code has a label', async () => {
       'survey-unstarred',
       'survey-archived',
       'survey-restored',
+      'attendance:not_recorded:attended',
+      'attendance:attended:did_not_attend',
+      'attendance:did_not_attend:not_recorded',
       'survey-summary:all',
       'survey-export-csv:office-event',
       // Built as '<code>:<survey id>' and '<code>:<survey id>:<respondent>'.
@@ -124,6 +127,18 @@ test('every server action code has a label', async () => {
   const missing = [...codes].filter((code) => actionLabel(code) === 'Updated');
   assert.deepEqual(missing, []);
   assert.equal(actionLabel('review:closed'), 'Archived');
+  assert.equal(
+    actionLabel('attendance:not_recorded:attended'),
+    'Marked attended',
+  );
+  assert.equal(
+    actionLabel('attendance:attended:did_not_attend'),
+    'Marked did not attend',
+  );
+  assert.equal(
+    actionLabel('attendance:did_not_attend:not_recorded'),
+    'Cleared attendance',
+  );
   assert.equal(actionLabel('something-new'), 'Updated');
 });
 

@@ -7,9 +7,9 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
   slug = /^[a-z0-9][a-z0-9-]{0,99}$/;
 // The values each query key may take; anything else is dropped.
 const queries = {
-  surveys: { event: slug, copy: uuid },
+  surveys: { event: slug, copy: uuid, followup: ['1'] },
   inbox: {
-    status: ['reviewed', 'archived', 'all'],
+    status: ['active', 'new', 'reviewed', 'archived', 'all'],
     type: [...KINDS, 'rsvp-past', 'rsvp-all'],
     event: slug,
   },
@@ -135,11 +135,23 @@ export function legacy(hash) {
     return build('surveys/custom/' + encodeURIComponent(id));
   return null;
 }
-// The Inbox 'Archived' view is the API status 'closed'; New is the default.
+// The Inbox defaults to active (New + Reviewed); Archived maps to closed.
 export const apiStatus = (status) =>
-  ({ reviewed: 'reviewed', archived: 'closed', all: '' })[status] ?? 'new';
+  ({
+    active: 'active',
+    new: 'new',
+    reviewed: 'reviewed',
+    archived: 'closed',
+    all: '',
+  })[status] ?? 'active';
 export const routeStatus = (status) =>
-  ({ reviewed: 'reviewed', closed: 'archived', '': 'all' })[status] ?? '';
+  ({
+    active: '',
+    new: 'new',
+    reviewed: 'reviewed',
+    closed: 'archived',
+    '': 'all',
+  })[status] ?? '';
 
 // --- The page ---------------------------------------------------------------
 // seq numbers history entries in order, so a refused Back or Forward knows

@@ -11,7 +11,7 @@ const preview = (data) => {
 export async function homeSummary(db, published, upcoming) {
   const upcomingIds = upcoming.map((event) => event.id);
   const titles = new Map(published.map((event) => [event.id, event]));
-  // New RSVPs per event; cancelled RSVPs are not counted.
+  // Active RSVPs per event with new submissions; cancelled RSVPs are not counted.
   const rsvpGroups = (
     await db.query(
       `SELECT data->>'eventId' AS id,
@@ -19,7 +19,7 @@ export async function homeSummary(db, published, upcoming) {
         (array_agg(data->>'eventDate' ORDER BY created_at DESC))[1] AS date,
         count(*)::int AS total,
         count(*) FILTER (WHERE review_status='new')::int AS new
-      FROM club_forms.entries WHERE kind='rsvp' AND state<>'cancelled' AND data->>'eventId' IS NOT NULL
+      FROM club_forms.entries WHERE kind='rsvp' AND review_status IN ('new','reviewed') AND state<>'cancelled' AND data->>'eventId' IS NOT NULL
       GROUP BY 1 HAVING count(*) FILTER (WHERE review_status='new')>0`,
     )
   ).rows
@@ -49,7 +49,7 @@ export async function homeSummary(db, published, upcoming) {
         category: dated.category || '',
         rsvps: (
           await db.query(
-            `SELECT count(*)::int AS n FROM club_forms.entries WHERE kind='rsvp' AND state<>'cancelled' AND data->>'eventId'=$1`,
+            `SELECT count(*)::int AS n FROM club_forms.entries WHERE kind='rsvp' AND review_status IN ('new','reviewed') AND state<>'cancelled' AND data->>'eventId'=$1`,
             [dated.id],
           )
         ).rows[0].n,
@@ -97,13 +97,6 @@ export async function homeSummary(db, published, upcoming) {
     )
   ).rows;
   return {
-    deletedSubmissions: (
-      await db.query(`SELECT coalesce(sum(CASE
-        WHEN action='submission-permanently-deleted' THEN 1
-        WHEN action ~ '^contact-purged:entries=[0-9]+:'
-          THEN substring(action from '^contact-purged:entries=([0-9]+):')::bigint
-        ELSE 0 END),0)::int AS n FROM club_forms.audit`)
-    ).rows[0].n,
     rsvpGroups,
     newest,
     nextEvent,

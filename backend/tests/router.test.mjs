@@ -63,6 +63,22 @@ test('Home is the landing page; Contacts and all-event RSVPs have routes', () =>
   // Emails never reach the address, even on the Contacts tab.
   assert.deepEqual(parse('#/contacts?email=ava@example.edu').query, {});
 });
+
+test('event RSVP follow-up links preserve the event and accept only the follow-up flag', () => {
+  const href = build('surveys/events', { event: 'game-night', followup: '1' });
+  assert.equal(href, '#/surveys/events?event=game-night&followup=1');
+  const route = parse(href);
+  assert.equal(route.name, 'surveys/events');
+  assert.deepEqual(route.query, { event: 'game-night', followup: '1' });
+  for (const followup of ['0', 'true', 'member@example.edu'])
+    assert.deepEqual(
+      parse(build('surveys/events', { event: 'game-night', followup })).query,
+      { event: 'game-night' },
+    );
+  assert.deepEqual(parse('#/surveys/events?event=Bad_Id&followup=1').query, {
+    followup: '1',
+  });
+});
 test('bad ids and unknown pages are not found, before any request', () => {
   for (const [hash, from] of [
     ['#/inbox/abc', 'inbox'],
@@ -117,14 +133,21 @@ test('old links are rewritten to their routes', () => {
   // A malformed old link becomes a not-found route, never a request.
   assert.equal(parse(legacy('#entry=abc')).name, 'not-found');
 });
-test('the Archived view is the API status closed', () => {
-  assert.equal(apiStatus(undefined), 'new');
+test('Inbox defaults to Active while New, Reviewed, Archived and All remain addressable', () => {
+  assert.equal(apiStatus(undefined), 'active');
+  assert.equal(apiStatus('active'), 'active');
+  assert.equal(apiStatus('new'), 'new');
   assert.equal(apiStatus('reviewed'), 'reviewed');
   assert.equal(apiStatus('archived'), 'closed');
   assert.equal(apiStatus('all'), '');
   assert.equal(routeStatus('closed'), 'archived');
-  assert.equal(routeStatus('new'), '');
+  assert.equal(routeStatus('active'), '');
+  assert.equal(routeStatus('new'), 'new');
   assert.equal(routeStatus(''), 'all');
-  for (const status of ['reviewed', 'archived', 'all'])
+  for (const status of ['active', 'new', 'reviewed', 'archived', 'all']) {
+    assert.equal(parse(build('inbox', { status })).query.status, status);
+    assert.equal(apiStatus(routeStatus(apiStatus(status))), apiStatus(status));
+  }
+  for (const status of ['new', 'reviewed', 'archived', 'all'])
     assert.equal(routeStatus(apiStatus(status)), status);
 });

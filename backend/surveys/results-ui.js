@@ -67,9 +67,18 @@ export const fileSlug = (text) =>
     .replace(/[^a-z0-9]+/g, '-')
     .slice(0, 60)
     .replace(/^-+|-+$/g, '');
-export function responseSections(results, { definition, actions } = {}) {
+export function responseSections(
+  results,
+  { definition, actions, view = 'active' } = {},
+) {
   const root = node('div', undefined, 'response-groups'),
     groups = partitionResponses(results);
+  const shown =
+    view === 'all'
+      ? [...groups.active, ...groups.archived]
+      : view === 'archived'
+        ? groups.archived
+        : groups.active;
   const chapters = definition?.chapters || [],
     rank = answerRank(definition);
   function person(result, open) {
@@ -113,15 +122,16 @@ export function responseSections(results, { definition, actions } = {}) {
     details.append(body);
     return details;
   }
-  if (!groups.active.length)
+  if (!shown.length)
     root.append(
       node(
         'p',
-        'No active respondents have submitted answers yet.',
+        view === 'active'
+          ? 'No active respondents have submitted answers yet.'
+          : 'No matching saved responses.',
         'response-empty',
       ),
     );
-  for (const r of groups.active)
-    root.append(person(r, groups.active.length === 1));
+  for (const r of shown) root.append(person(r, shown.length === 1));
   return root;
 }

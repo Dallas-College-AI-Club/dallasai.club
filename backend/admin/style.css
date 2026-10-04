@@ -1557,7 +1557,7 @@ input::file-selector-button {
   overflow: hidden;
 }
 .response-person[open] > summary {
-  background: var(--selected);
+  background: var(--subtle);
 }
 .response-person > summary {
   padding: 20px 24px;
@@ -2690,20 +2690,104 @@ html.survey-report-open {
   margin-left: auto;
 }
 .survey-library-list {
-  padding: 8px 24px;
+  display: grid;
+  gap: 20px;
+}
+.survey-library-section {
+  padding: 20px;
   border: 1px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
 }
+.survey-library-section > h2 {
+  color: var(--muted);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
 .survey-library-row {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  margin-top: 12px;
+  min-width: 0;
+  overflow: hidden;
+}
+.survey-library-summary {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(150px, 0.5fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto auto;
   align-items: center;
   gap: 20px;
-  padding: 24px 0;
+  padding: 24px 20px;
+  cursor: pointer;
+  overflow-wrap: anywhere;
 }
-.survey-library-row + .survey-library-row {
+.survey-library-summary > div:first-child::before {
+  content: '▸';
+  margin-right: 8px;
+  color: var(--muted);
+}
+.survey-library-row[open] > .survey-library-summary > div:first-child::before {
+  content: '▾';
+}
+.survey-library-summary:hover,
+.survey-response > summary:hover,
+.response-person > summary:hover {
+  background: var(--subtle);
+}
+.survey-library-summary .survey-draft {
+  background: var(--notice);
+  color: var(--notice-text);
+}
+.custom-survey-group-body {
+  padding: 0 20px 20px;
+}
+.custom-survey-group > .button-link {
+  margin: 0 20px 16px;
+}
+.survey-response-kind {
   border-top: 1px solid var(--line);
+  margin-top: 20px;
+  padding-top: 16px;
+}
+.survey-response-kind > summary {
+  font-weight: 600;
+  cursor: pointer;
+}
+.survey-response > label {
+  display: block;
+  max-width: 290px;
+}
+.survey-response > summary .survey-participation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.survey-response > summary .participation-tag {
+  display: inline-block;
+  margin: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 12px;
+}
+.inline-event-surveys > .pagination {
+  justify-content: flex-end;
+}
+#survey-groups {
+  width: 100%;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  border-bottom: 1px solid var(--line);
+}
+#survey-groups a {
+  border-radius: 0;
+  padding: 12px 16px;
+  margin-bottom: -1px;
+}
+#survey-groups a[aria-current='page'] {
+  background: transparent;
+  color: var(--accent);
 }
 .survey-library-row h2 {
   font-size: 16px;
@@ -2731,15 +2815,19 @@ html.survey-report-open {
   height: auto;
 }
 @media (max-width: 720px) {
-  .survey-library-row {
+  .survey-library-summary {
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 12px;
   }
-  .survey-library-row > div:first-child {
+  .survey-library-summary > div:first-child {
     grid-column: 1 / -1;
   }
-  .survey-library-list {
-    padding: 4px 18px;
+  .survey-library-section,
+  .custom-survey-group-body {
+    padding: 12px;
+  }
+  #survey-groups a {
+    padding: 12px 10px;
   }
   .appearance-control {
     order: 3;

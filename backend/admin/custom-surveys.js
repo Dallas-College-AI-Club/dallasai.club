@@ -4,6 +4,7 @@ import { currentOfficer } from './session.js';
 import { mountRespondents } from './survey-respondents.js';
 import { mountSurveyBuilder } from './survey-builder.js';
 import {
+  answerRank,
   fileSlug,
   partitionResponses,
   responseSections,
@@ -18,34 +19,196 @@ const named = (results) =>
     ...result,
     display_name: result.display_name || result.email,
   }));
-export function mountCustomSurveys(root, api) {
+export async function allSurveyResponses(
+  api,
+  id,
+  first,
+  isCurrent = () => true,
+  scope = {},
+) {
+  const results = [...first.results];
+  let offset = first.nextOffset;
+  while (offset !== null && offset !== undefined && isCurrent()) {
+    const page = await api(
+      '/api/custom-surveys?' +
+        new URLSearchParams({ action: 'results', id, offset, ...scope }),
+    );
+    if (!isCurrent()) return [];
+    results.push(...page.results);
+    offset = page.nextOffset;
+  }
+  const groups = partitionResponses(results);
+  return named(
+    scope.view === 'archived'
+      ? groups.archived
+      : scope.view === 'all'
+        ? [...groups.active, ...groups.archived]
+        : groups.active,
+  );
+}
+function consolidatedAnswers(results, definition) {
+  const root = node('div', undefined, 'survey-report');
+  const questions = new Map(
+    (definition?.questions || []).map((question) => [
+      question.id,
+      { title: question.title, answers: [] },
+    ]),
+  );
+  for (const result of results)
+    for (const answer of result.responses) {
+      if (!questions.has(answer.id))
+        questions.set(answer.id, { title: answer.title, answers: [] });
+      questions.get(answer.id).answers.push({ result, answer });
+    }
+  const rank = answerRank(definition);
+  for (const [id, question] of [...questions].sort(
+    ([a], [b]) => rank({ id: a }) - rank({ id: b }),
+  )) {
+    const section = node('section', undefined, 'response-answer');
+    section.append(node('h4', question.title));
+    if (!question.answers.length) section.append(node('p', 'No answers yet.'));
+    for (const { result, answer } of question.answers)
+      section.append(
+        node('strong', result.display_name),
+        node('p', answer.text),
+      );
+    root.append(section);
+  }
+  if (!results.length) root.prepend(node('p', 'No matching saved responses.'));
+  return root;
+}
+function surveySummary(survey) {
+  const summary = node('summary', undefined, 'survey-library-summary');
+  const title = node('div');
+  title.append(node('strong', survey.title));
+  const dates = [];
+  if (survey.published_at)
+    dates.push('Published ' + dateTime(survey.published_at));
+  if (survey.status !== 'draft' && survey.expires_at)
+    dates.push('Ends ' + dateTime(survey.expires_at));
+  if (dates.length) title.append(node('p', dates.join(' · '), 'hint'));
+  const status = survey.expired
+    ? 'Expired'
+    : survey.status === 'open'
+      ? 'Published'
+      : survey.status[0].toUpperCase() + survey.status.slice(1);
+  summary.append(
+    title,
+    node(
+      'span',
+      status,
+      'chip' + (survey.status === 'draft' ? ' survey-draft' : ''),
+    ),
+    node('span', plural(survey.response_count, 'response'), 'hint'),
+  );
+  return summary;
+}
+export function mountFeedbackGroups(
+  root,
+  api,
+  {
+    surveys,
+    isCurrent = () => true,
+    onChange = () => {},
+    search = '',
+    view = 'active',
+  } = {},
+) {
+  let disposed = false,
+    expanded = null;
+  const mounted = [];
+  root.replaceChildren();
+  for (const survey of [...surveys].sort(
+    (a, b) => Number(b.status === 'draft') - Number(a.status === 'draft'),
+  )) {
+    const card = node(
+      'details',
+      undefined,
+      'survey-library-row custom-survey-group',
+    );
+    const body = node('div', undefined, 'custom-survey-group-body');
+    const open = node('a', 'Open survey →', 'button-link');
+    open.href = '#/surveys/custom/' + survey.id;
+    card.append(surveySummary(survey), open, body);
+    root.append(card);
+    let controller;
+    const entry = {
+      card,
+      dispose: () => controller?.clear(),
+      setExpanded: (value) => controller?.setExpanded(value),
+    };
+    mounted.push(entry);
+    card.ontoggle = async () => {
+      if (!card.open || controller || disposed || !isCurrent()) return;
+      controller = mountCustomSurveys(body, api, {
+        inline: true,
+        id: survey.id,
+        isCurrent: () => !disposed && isCurrent(),
+        onChange,
+        search,
+        view,
+        expanded,
+      });
+      await controller.load();
+    };
+  }
+  if (!surveys.length)
+    root.append(node('p', 'No feedback surveys yet.', 'empty-state'));
+  return {
+    setExpanded(value) {
+      expanded = value;
+      for (const entry of mounted) {
+        entry.card.open = value;
+        entry.setExpanded(value);
+      }
+    },
+    dispose() {
+      disposed = true;
+      for (const entry of mounted) entry.dispose();
+      root.replaceChildren();
+    },
+  };
+}
+export function mountCustomSurveys(root, api, options = {}) {
   let generation = 0,
-    selected = '',
+    selected = options.id || '',
     builder,
-    eventFilter = '';
+    eventFilter = '',
+    expandResponses,
+    reload = () => load();
+  const groups = [];
+  function stopGroups() {
+    for (const group of groups.splice(0)) group?.dispose?.();
+  }
   function stopBuilder() {
     builder?.dispose();
     builder = null;
   }
   async function load(filter) {
+    reload = () => load();
     if (typeof filter === 'string') eventFilter = filter;
     stopBuilder();
+    stopGroups();
     closePrintView();
     const current = ++generation;
     root.replaceChildren(node('p', 'Loading custom surveys…'));
     try {
       const catalog = await api('/api/custom-surveys?action=catalog');
       const surveys = catalog.surveys.filter(
-        (survey) => !eventFilter || survey.definition?.eventId === eventFilter,
+        (survey) =>
+          (!eventFilter || survey.definition?.eventId === eventFilter) &&
+          (!options.inline || survey.id === options.id),
       );
-      if (current !== generation) return;
-      root.replaceChildren(
-        node('h2', 'Custom surveys'),
-        node(
-          'p',
-          'Create surveys, manage respondents, and read submitted results.',
-        ),
-      );
+      if (current !== generation || options.isCurrent?.() === false) return;
+      root.replaceChildren();
+      if (!options.inline)
+        root.append(
+          node('h2', 'Custom surveys'),
+          node(
+            'p',
+            'Create surveys, manage respondents, and read submitted results.',
+          ),
+        );
       const create = node('button', 'Create custom survey', 'btn-primary');
       const edit = (id) => {
         generation++;
@@ -61,7 +224,7 @@ export function mountCustomSurveys(root, api) {
       };
       create.onclick = () =>
         go('#/surveys/new' + (eventFilter ? '?event=' + eventFilter : ''));
-      root.append(create);
+      if (!options.inline) root.append(create);
       if (!surveys.length) {
         root.append(node('p', 'No custom surveys have been opened yet.'));
         return;
@@ -81,19 +244,39 @@ export function mountCustomSurveys(root, api) {
       label.append(select);
       const refresh = node('button', 'Refresh results', 'secondary'),
         top = node('div', undefined, 'custom-survey-controls');
-      top.append(label, refresh);
-      root.append(top);
+      const responseView = node('select');
+      responseView.setAttribute('aria-label', 'Custom survey responses');
+      for (const [value, title] of [
+        ['active', 'Active'],
+        ['archived', 'Archived'],
+        ['all', 'All saved'],
+      ]) {
+        const option = node('option', title);
+        option.value = value;
+        responseView.append(option);
+      }
+      responseView.value = options.view || 'active';
+      top.append(label, responseView, refresh);
+      if (!options.inline) root.append(top);
       const content = node('div');
       root.append(content);
       let requestGeneration = 0;
       async function show() {
         const request = ++requestGeneration;
         selected = select.value;
+        const scope = {
+          view: responseView.value,
+          search: options.search?.trim() || '',
+        };
         content.replaceChildren(node('p', 'Loading shared responses…'));
         try {
           const data = await api(
-            '/api/custom-surveys?action=results&id=' +
-              encodeURIComponent(selected),
+            '/api/custom-surveys?' +
+              new URLSearchParams({
+                action: 'results',
+                id: selected,
+                ...scope,
+              }),
           );
           if (current !== generation || request !== requestGeneration) return;
           const survey = surveys.find((s) => s.id === selected);
@@ -119,7 +302,10 @@ export function mountCustomSurveys(root, api) {
             content.append(duplicate);
             if (survey.status === 'draft') {
               const resume = node('button', 'Continue editing draft');
-              resume.onclick = () => edit(survey.id);
+              resume.onclick = () =>
+                options.inline
+                  ? go('#/surveys/custom/' + survey.id)
+                  : edit(survey.id);
               content.append(resume);
             }
             const permissions = survey.definition.permissions;
@@ -164,6 +350,7 @@ export function mountCustomSurveys(root, api) {
                       return;
                     const reloadGeneration = generation + 1;
                     await load();
+                    options.onChange?.();
                     if (generation !== reloadGeneration) return;
                     const notice = node(
                       'p',
@@ -240,7 +427,10 @@ export function mountCustomSurveys(root, api) {
           const respondentContent = node('div');
           respondents.append(respondentContent);
           content.append(respondents);
-          await mountRespondents(respondentContent, selected, api, load);
+          await mountRespondents(respondentContent, selected, api, async () => {
+            await load();
+            options.onChange?.();
+          });
           if (current !== generation || request !== requestGeneration) return;
           if (survey.definition) {
             const { survey: detail } = await api(
@@ -260,7 +450,9 @@ export function mountCustomSurveys(root, api) {
             content.append(history);
           }
           const isCurrent = () =>
-            current === generation && request === requestGeneration;
+            current === generation &&
+            request === requestGeneration &&
+            options.isCurrent?.() !== false;
           // Each response downloads as a PDF made here from what is shown.
           const pdfActions = (result) => {
             const actions = node('div', undefined, 'entry-actions'),
@@ -284,39 +476,109 @@ export function mountCustomSurveys(root, api) {
             actions.append(button, status);
             return actions;
           };
+          let expanded = options.expanded ?? (options.inline ? false : null);
+          const responseList = node('div', undefined, 'custom-response-list');
+          const matches = (results) =>
+            results.filter(
+              (result) =>
+                !options.search ||
+                `${result.display_name || ''} ${result.email || ''}`
+                  .toLowerCase()
+                  .includes(options.search.trim().toLowerCase()),
+            );
+          const appendResponses = (results) => {
+            const section = responseSections(named(matches(results)), {
+              definition: data.resultsDefinition,
+              actions: pdfActions,
+              view: scope.view,
+            });
+            if (expanded !== null)
+              for (const person of section.querySelectorAll('.response-person'))
+                person.open = expanded;
+            responseList.append(section);
+          };
+          const expand = node('button', 'Expand all', 'secondary');
+          const collapse = node('button', 'Collapse all', 'secondary');
+          const setExpanded = (value) => {
+            expanded = value;
+            for (const person of responseList.querySelectorAll(
+              '.response-person',
+            ))
+              person.open = value;
+          };
+          expandResponses = setExpanded;
+          expand.onclick = () => setExpanded(true);
+          collapse.onclick = () => setExpanded(false);
+          const consolidated = node(
+            'details',
+            undefined,
+            'custom-consolidated',
+          );
+          consolidated.append(node('summary', 'Consolidated answers'));
+          const consolidatedBody = node('div');
+          consolidated.append(consolidatedBody);
+          let compiling = false,
+            compiled = false;
+          consolidated.ontoggle = async () => {
+            if (!consolidated.open || compiling || compiled) return;
+            compiling = true;
+            consolidatedBody.replaceChildren(node('p', 'Loading all answers…'));
+            try {
+              const all = await allSurveyResponses(
+                api,
+                survey.id,
+                data,
+                isCurrent,
+                scope,
+              );
+              if (!isCurrent()) return;
+              consolidatedBody.replaceChildren(
+                consolidatedAnswers(matches(all), data.resultsDefinition),
+              );
+              compiled = true;
+            } catch (error) {
+              if (isCurrent())
+                consolidatedBody.replaceChildren(node('p', error.message));
+            } finally {
+              compiling = false;
+            }
+          };
           const exportCSV = node('button', 'Export CSV', 'secondary'),
             exportStatus = node('p'),
             exportActions = node('div', undefined, 'entry-actions');
           exportStatus.setAttribute('role', 'status');
           // From these results, not the survey list, which may be older.
-          exportCSV.disabled = !partitionResponses(data.results).active.length;
+          exportCSV.disabled = !data.results.length;
           exportCSV.onclick = async () => {
             exportCSV.disabled = true;
-            exportStatus.textContent = 'Preparing CSV for all responses…';
+            exportStatus.textContent = 'Preparing CSV for matching responses…';
             try {
               const saved = await save(
                 '/api/custom-surveys?' +
-                  new URLSearchParams({ action: 'export', id: survey.id }),
+                  new URLSearchParams({
+                    action: 'export',
+                    id: survey.id,
+                    ...scope,
+                  }),
                 `${fileSlug(survey.title) || 'custom-survey'}-responses-${isoDay(new Date())}.csv`,
                 { isCurrent },
               );
               if (saved)
                 exportStatus.textContent =
-                  'CSV downloaded. It includes every active response across all pages.';
+                  'CSV downloaded. It includes every matching response across all pages.';
             } catch (error) {
               if (isCurrent()) exportStatus.textContent = error.message;
             } finally {
               exportCSV.disabled = false;
             }
           };
-          exportActions.append(exportCSV, exportStatus);
+          exportActions.append(expand, collapse, exportCSV, exportStatus);
+          appendResponses(data.results);
           content.append(
             node('h3', 'Submitted responses'),
             exportActions,
-            responseSections(named(data.results), {
-              definition: data.resultsDefinition,
-              actions: pdfActions,
-            }),
+            consolidated,
+            responseList,
           );
           let nextOffset = data.nextOffset;
           const more = node('button', 'Load more responses', 'secondary'),
@@ -332,19 +594,14 @@ export function mountCustomSurveys(root, api) {
                     action: 'results',
                     id: survey.id,
                     offset: nextOffset,
+                    ...scope,
                   }),
               );
               if (current !== generation || request !== requestGeneration)
                 return;
-              content.insertBefore(
-                responseSections(named(page.results), {
-                  definition: data.resultsDefinition,
-                  actions: pdfActions,
-                }),
-                more,
-              );
+              appendResponses(page.results);
               nextOffset = page.nextOffset;
-              more.hidden = nextOffset === null;
+              more.hidden = nextOffset === null || nextOffset === undefined;
               pageStatus.textContent = '';
             } catch (error) {
               if (current === generation && request === requestGeneration)
@@ -371,6 +628,10 @@ export function mountCustomSurveys(root, api) {
         }
       }
       select.onchange = show;
+      responseView.onchange = () => {
+        options.view = responseView.value;
+        return show();
+      };
       refresh.onclick = load;
       await show();
     } catch (error) {
@@ -385,7 +646,15 @@ export function mountCustomSurveys(root, api) {
   let dropped = false;
   return {
     load,
-    async library(target, collection = '') {
+    setExpanded(value) {
+      options.expanded = value;
+      expandResponses?.(value);
+    },
+    async library(target, collection = '', query = '') {
+      reload = () => this.library(target, collection, query);
+      stopGroups();
+      stopBuilder();
+      closePrintView();
       const request = ++generation;
       target.replaceChildren(node('p', 'Loading surveys…', 'hint'));
       try {
@@ -394,46 +663,73 @@ export function mountCustomSurveys(root, api) {
           api('/api/events?admin=1'),
         ]);
         if (request !== generation) return;
-        const matching = surveys.filter(
-          (survey) =>
-            !collection ||
-            (collection === 'events'
-              ? Boolean(survey.definition?.eventId)
-              : !survey.definition?.eventId),
-        );
+        const matching = surveys
+          .filter(
+            (survey) =>
+              (!collection ||
+                (collection === 'events'
+                  ? Boolean(survey.definition?.eventId)
+                  : !survey.definition?.eventId)) &&
+              survey.title.toLowerCase().includes(query.trim().toLowerCase()),
+          )
+          .sort(
+            (a, b) =>
+              Number(b.status === 'draft') - Number(a.status === 'draft'),
+          );
         const list = node('div', undefined, 'survey-library-list');
         for (const survey of matching) {
-          const row = node('article', undefined, 'survey-library-row');
+          const sectionName =
+            survey.status === 'draft'
+              ? 'Drafts'
+              : survey.definition?.eventId
+                ? 'Event surveys'
+                : 'Custom surveys';
+          let section = [...list.children].find(
+            (child) => child.dataset.group === sectionName,
+          );
+          if (!section) {
+            section = node('section', undefined, 'survey-library-section');
+            section.dataset.group = sectionName;
+            section.append(node('h2', sectionName));
+            list.append(section);
+          }
           const event = events.find(
             (event) => event.id === survey.definition?.eventId,
           );
-          const info = node('div');
-          info.append(
-            node('h2', survey.title),
-            node(
-              'p',
-              survey.definition?.eventId
-                ? 'Event feedback' + (event ? ' · ' + event.draft.title : '')
-                : 'Custom survey',
-              'hint',
-            ),
+          if (event && options.renderEvent) {
+            const row = node('details', undefined, 'survey-library-row');
+            const body = node('div', undefined, 'custom-survey-group-body');
+            row.append(surveySummary(survey), body);
+            section.append(row);
+            let mounted = false;
+            row.ontoggle = () => {
+              if (!row.open || mounted || request !== generation) return;
+              mounted = true;
+              groups.push(
+                options.renderEvent(body, event, {
+                  surveys: [survey],
+                  isCurrent: () => request === generation,
+                  onChange: () => this.library(target, collection, query),
+                }),
+              );
+            };
+          } else {
+            const groupRoot = node('div');
+            section.append(groupRoot);
+            groups.push(
+              mountFeedbackGroups(groupRoot, api, {
+                surveys: [survey],
+                isCurrent: () => request === generation,
+                onChange: () => this.library(target, collection, query),
+              }),
+            );
+          }
+        }
+        for (const name of ['Drafts', 'Event surveys', 'Custom surveys']) {
+          const section = [...list.children].find(
+            (child) => child.dataset.group === name,
           );
-          const status = node('div', undefined, 'survey-library-status');
-          status.append(
-            node(
-              'span',
-              survey.expired
-                ? 'Expired'
-                : survey.status[0].toUpperCase() + survey.status.slice(1),
-              'chip',
-            ),
-            node('span', plural(survey.response_count, 'response'), 'hint'),
-          );
-          const open = node('a', 'Open →', 'button-link');
-          open.href = '#/surveys/custom/' + survey.id;
-          open.setAttribute('aria-label', 'Open ' + survey.title);
-          row.append(info, status, open);
-          list.append(row);
+          if (section) list.append(section);
         }
         target.replaceChildren(
           matching.length
@@ -444,12 +740,13 @@ export function mountCustomSurveys(root, api) {
         if (request !== generation) return;
         target.replaceChildren(node('p', error.message));
         const retry = node('button', 'Try loading surveys again');
-        retry.onclick = () => this.library(target, collection);
+        retry.onclick = () => this.library(target, collection, query);
         target.append(retry);
       }
     },
     create(eventId, copyId) {
       generation++;
+      stopGroups();
       stopBuilder();
       closePrintView();
       builder = mountSurveyBuilder(
@@ -465,12 +762,13 @@ export function mountCustomSurveys(root, api) {
     reset() {
       if (builder) return;
       generation++;
+      stopGroups();
       dropped = true;
       closePrintView();
       root.replaceChildren();
     },
     refresh() {
-      if (dropped) load();
+      if (dropped) reload();
       dropped = false;
     },
     leave() {
@@ -489,6 +787,7 @@ export function mountCustomSurveys(root, api) {
     },
     clear() {
       generation++;
+      stopGroups();
       stopBuilder();
       closePrintView();
       selected = '';

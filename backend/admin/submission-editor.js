@@ -32,7 +32,7 @@ export function submissionEditor(api, onSaved) {
   });
   // Unsaved edits stay in the dialog's form, also while it is closed for
   // re-authentication; report them to the drafts store.
-  drafts.track(() =>
+  const untrack = drafts.track(() =>
     busy || dirty()
       ? [{ key: 'response:' + entryId, label: 'Edits to a submission' }]
       : [],
@@ -206,7 +206,15 @@ export function submissionEditor(api, onSaved) {
       if (version === generation) message.textContent = error.message;
     }
   }
-  return { open, clear };
+  return {
+    open,
+    clear,
+    dispose() {
+      clear();
+      untrack();
+      dialog.remove();
+    },
+  };
 }
 function input(parent, label, value, max, required) {
   const wrapper = node('label', label),

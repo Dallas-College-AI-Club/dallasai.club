@@ -1,18 +1,8 @@
+import { busy, button, focusFallback, h, keyed, node } from './ui.js';
 import { activityTime } from './event-activity.js';
 import { contactHistory } from './contact-history.js';
 import { submissionEditor } from './submission-editor.js';
-const node = (tag, text, cls) => {
-  const el = document.createElement(tag);
-  if (text !== undefined) el.textContent = text;
-  if (cls) el.className = cls;
-  return el;
-};
-const button = (text, handler) => {
-  const el = node('button', text, 'secondary');
-  el.type = 'button';
-  el.onclick = handler;
-  return el;
-};
+import { isPaused, signedInAgain } from './session.js';
 export function mountSurveyResults(api, onContactPurge = () => {}) {
   const editor = submissionEditor(api, async (result) => {
     await load();
@@ -34,6 +24,8 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
     reportGeneration = 0,
     timer,
     reportReturnFocus;
+  // The rendered page: event id → { rows, list, summary }.
+  const shown = new Map();
   const tools = node('div', undefined, 'survey-tools'),
     searchLabel = node('label', 'Name or email'),
     search = node('input'),
@@ -78,12 +70,7 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
   reportHeading.tabIndex = -1;
   reportDialog.setAttribute('aria-labelledby', reportHeading.id);
   reportStatus.setAttribute('role', 'status');
-  reportHeader.append(
-    reportHeading,
-    reportExport,
-    reportClose,
-    reportStatus,
-  );
+  reportHeader.append(reportHeading, reportExport, reportClose, reportStatus);
   reportDialog.append(reportHeader, report);
   document.body.append(reportDialog);
   function clearReport() {
@@ -107,7 +94,7 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
     clearReport();
   }
   reportDialog.addEventListener('close', () => {
-    if (!reportDialog.open) clearReport();
+    if (!reportDialog.open && !isPaused()) clearReport();
   });
   reportDialog.addEventListener('cancel', (event) => {
     event.preventDefault();
@@ -147,13 +134,17 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
     if (eventId) params.delete('entryId');
     params.set('export', 'csv');
     status.textContent = 'Preparing CSV for all matching responses…';
+    const get = () =>
+      fetch('/api/surveys?' + params, { credentials: 'same-origin' });
     try {
-      const response = await fetch('/api/surveys?' + params, {
-        credentials: 'same-origin',
-      });
+      let response = await get();
+      // The session ended: download once the officer has signed in again.
+      if (response.status === 401) {
+        await signedInAgain();
+        response = await get();
+      }
       if (!response.ok) {
-        if (response.status === 401) await api('/api/surveys');
-        const data = await response.json();
+        const data = await response.json().catch(() => ({}));
         throw Error(data.error || 'Could not export responses.');
       }
       const blob = await response.blob();
@@ -292,41 +283,47 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
       if (isCurrent()) reportStatus.textContent = error.message;
     }
   }
+  const cardVersion = (response) =>
+    response.starred + ':' + (response.archived_at || '');
+  // Star and Archive patch this card from the POST result instead of
+  // reloading, so scroll, open cards and focus stay where they were.
   function card(response) {
     const el = node('details', undefined, 'entry survey-response');
     el.dataset.entryId = response.entry_id;
     el.open = Boolean(entryId);
-    const heading = node('summary');
-    heading.append(
-      node(
-        'strong',
-        (response.starred ? '★ ' : '') + (response.name || response.email),
-      ),
-      node('span', response.email),
-      node(
-        'small',
-        activityTime(response.created_at) +
-          (response.archived_at ? ' · Archived' : ''),
+    const name = h('strong'),
+      when = h('small');
+    el.append(
+      h(
+        'summary',
+        { 'data-focus': '' },
+        name,
+        h('span', {}, response.email),
+        when,
       ),
     );
-    el.append(heading);
     const actions = node('div', undefined, 'survey-response-actions'),
       status = node('p');
     status.setAttribute('role', 'status');
     async function manage(action, value) {
-      const version = generation;
-      actions
-        .querySelectorAll('button')
-        .forEach((b) => (b.disabled = true));
+      const current = generation,
+        release = busy(actions);
       try {
-        await api('/api/surveys', {
+        const result = await api('/api/surveys', {
           entryId: response.entry_id,
           action,
           value,
         });
-        if (version !== generation) return;
-        await load();
-        q('#survey-status').textContent =
+        if (current !== generation) return;
+        release();
+        patch({
+          ...response,
+          starred: result.starred,
+          archived_at: result.archived_at,
+        });
+        // Say it beside the button while the card stays, so nothing above
+        // it changes height and the page does not shift.
+        (el.isConnected ? status : q('#survey-status')).textContent =
           action === 'star'
             ? value
               ? 'Response starred.'
@@ -335,51 +332,51 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
               ? 'Response archived. Find it under Archived to restore it.'
               : 'Response restored to Active.';
       } catch (error) {
-        if (version === generation) {
+        if (current === generation) {
           status.textContent = error.message;
-          actions
-            .querySelectorAll('button')
-            .forEach((b) => (b.disabled = false));
+          release();
         }
       }
     }
-    const mark = button(response.starred ? '★ Unstar' : '☆ Star', () =>
-      manage('star', !response.starred),
-    );
-    mark.setAttribute('aria-pressed', String(response.starred));
-    actions.append(
-      mark,
-      button(response.archived_at ? 'Restore' : 'Archive', () =>
-        manage('archive', !response.archived_at),
-      ),
-      button('Contact history', () => contacts.open(response.email)),
-      button('Edit response', () =>
-        editor.open(response.entry_id, { surface: 'survey' }),
-      ),
-    );
-    if (response.archived_at) {
-      const remove = button('Delete permanently', () =>
+    const mark = button('', () => manage('star', !response.starred)),
+      archive = button('', () => manage('archive', !response.archived_at)),
+      remove = button('Delete permanently', () =>
         editor.open(response.entry_id, {
           surface: 'survey',
           remove: true,
         }),
       );
-      remove.classList.add('danger');
-      actions.append(remove);
-    }
+    remove.classList.add('danger');
+    actions.append(
+      mark,
+      archive,
+      button('Contact history', () => contacts.open(response.email)),
+      button('Edit response', () =>
+        editor.open(response.entry_id, { surface: 'survey' }),
+      ),
+      remove,
+    );
+    el.patch = (next) => {
+      response = next;
+      name.textContent =
+        (response.starred ? '★ ' : '') + (response.name || response.email);
+      when.textContent =
+        activityTime(response.created_at) +
+        (response.archived_at ? ' · Archived' : '');
+      mark.textContent = response.starred ? '★ Unstar' : '☆ Star';
+      mark.setAttribute('aria-pressed', String(response.starred));
+      archive.textContent = response.archived_at ? 'Restore' : 'Archive';
+      remove.hidden = !response.archived_at;
+    };
+    el.patch(response);
     el.append(
       actions,
       status,
-      node(
-        'p',
-        'Event date: ' + (response.event_date?.slice(0, 10) || 'TBD'),
-      ),
+      node('p', 'Event date: ' + (response.event_date?.slice(0, 10) || 'TBD')),
     );
     const answers = node('dl');
     for (const question of response.questions) {
-      const answer = response.answers.find(
-        (a) => a.questionId === question.id,
-      );
+      const answer = response.answers.find((a) => a.questionId === question.id);
       const values = (
         Array.isArray(answer?.value) ? answer.value : [answer?.value || '']
       )
@@ -392,6 +389,39 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
     }
     el.append(answers);
     return el;
+  }
+  const matches = (response) =>
+    (view.value === 'all' ||
+      (view.value === 'archived') === Boolean(response.archived_at)) &&
+    (!star.checked || response.starred);
+  function render(group) {
+    keyed(group.list, group.rows, {
+      key: (response) => response.entry_id,
+      version: cardVersion,
+      create: card,
+      update: (el, response) => el.patch(response),
+    });
+    group.summary.textContent =
+      group.rows[0]?.event_title + ' · ' + group.rows.length + ' on this page';
+  }
+  // A card that no longer matches the filters leaves; focus moves to the
+  // next card rather than to <body>.
+  function patch(response) {
+    const group = shown.get(response.event_id);
+    if (!group) return;
+    const el = group.list.querySelector(
+      '[data-key="' + CSS.escape(response.entry_id) + '"]',
+    );
+    group.rows = group.rows
+      .map((row) => (row.entry_id === response.entry_id ? response : row))
+      .filter(matches);
+    if (el?.contains(document.activeElement) && !matches(response))
+      focusFallback(el, q('#survey-results'));
+    if (group.rows.length) render(group);
+    else {
+      group.list.closest('.survey-event-group').remove();
+      shown.delete(response.event_id);
+    }
   }
   async function load() {
     const version = ++generation,
@@ -415,35 +445,31 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
         new Option('All events, including past events', ''),
         ...data.events.map(
           (e) =>
-            new Option(
-              e.title + ' · ' + (e.date?.slice(0, 10) || 'TBD'),
-              e.id,
-            ),
+            new Option(e.title + ' · ' + (e.date?.slice(0, 10) || 'TBD'), e.id),
         ),
       );
       q('#survey-event').value = eventId;
-      const groups = new Map();
+      shown.clear();
       for (const response of data.responses) {
-        if (!groups.has(response.event_id))
-          groups.set(response.event_id, []);
-        groups.get(response.event_id).push(response);
+        if (!shown.has(response.event_id))
+          shown.set(response.event_id, {
+            rows: [],
+            list: node('div'),
+            summary: node('summary'),
+          });
+        shown.get(response.event_id).rows.push(response);
       }
-      for (const [id, rows] of groups) {
-        const group = node('details', undefined, 'survey-event-group');
-        group.open = true;
-        group.append(
-          node(
-            'summary',
-            rows[0].event_title + ' · ' + rows.length + ' on this page',
-          ),
-        );
+      for (const [id, group] of shown) {
+        const box = node('details', undefined, 'survey-event-group');
+        box.open = true;
         const actions = node('div', undefined, 'survey-response-actions');
         actions.append(
           button('Compile event summary', () => summary(id)),
           button('Export event CSV', () => download(id)),
         );
-        group.append(actions, ...rows.map(card));
-        q('#survey-results').append(group);
+        box.append(group.summary, actions, group.list);
+        render(group);
+        q('#survey-results').append(box);
       }
       q('#survey-status').textContent =
         data.total +
@@ -481,7 +507,19 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
   };
   q('#survey-all').onclick = reset;
   return {
-    canLeave: () => contacts.canLeave(),
+    reload: load,
+    // Ten minutes paused: drop the shown responses and history.
+    reset() {
+      generation++;
+      clearTimeout(timer);
+      timer = null;
+      shown.clear();
+      q('#survey-results').replaceChildren();
+      q('#survey-status').textContent = '';
+      clearReport();
+      reportStatus.textContent = 'Close this and compile the summary again.';
+      contacts.reset();
+    },
     show(id = '') {
       entryId = id;
       offset = 0;
@@ -499,6 +537,7 @@ export function mountSurveyResults(api, onContactPurge = () => {}) {
       contacts.clear();
       editor.clear();
       closeReport();
+      shown.clear();
       q('#survey-results').replaceChildren();
       q('#survey-event').replaceChildren(
         new Option('All events, including past events', ''),

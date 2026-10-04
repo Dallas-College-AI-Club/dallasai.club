@@ -1,12 +1,14 @@
+import { node } from './ui.js';
 import { mountRespondents } from './survey-respondents.js';
 import { mountSurveyBuilder } from './survey-builder.js';
 import { responseSections } from '../surveys/results-ui.js';
-function node(tag, text, className) {
-  const el = document.createElement(tag);
-  if (text !== undefined) el.textContent = text;
-  if (className) el.className = className;
-  return el;
-}
+// Self-registered respondents may have no display name; officers see the
+// email instead. Respondent-facing pages keep their own masking.
+const named = (results) =>
+  results.map((result) => ({
+    ...result,
+    display_name: result.display_name || result.email,
+  }));
 export function mountCustomSurveys(root, api) {
   let generation = 0,
     selected = '',
@@ -78,16 +80,16 @@ export function mountCustomSurveys(root, api) {
               encodeURIComponent(selected),
           );
           if (current !== generation || request !== requestGeneration) return;
+          const survey = surveys.find((s) => s.id === selected);
           content.replaceChildren(
             node(
               'p',
-              'Current shared responses · read-only. Each new submission replaces the advisor’s previous shared summary.',
+              survey.definition
+                ? 'Saved responses · read-only. Each new submission replaces the respondent’s previous response.'
+                : 'Current shared responses · read-only. Each new submission replaces the advisor’s previous shared summary.',
             ),
           );
-          const survey = surveys.find((s) => s.id === selected);
           if (survey.definition) {
-            content.firstChild.textContent =
-              'Saved responses · read-only. Each new submission replaces the respondent’s previous response.';
             if (survey.status === 'draft') {
               const resume = node('button', 'Continue editing draft');
               resume.onclick = () => edit(survey.id);
@@ -131,10 +133,7 @@ export function mountCustomSurveys(root, api) {
                       expectedRevision: latest.edit_revision,
                       requestId: crypto.randomUUID(),
                     });
-                    if (
-                      current !== generation ||
-                      request !== requestGeneration
-                    )
+                    if (current !== generation || request !== requestGeneration)
                       return;
                     const reloadGeneration = generation + 1;
                     await load();
@@ -207,8 +206,7 @@ export function mountCustomSurveys(root, api) {
                 notice.textContent =
                   'Preview link copied. Answer controls are disabled.';
               } catch {
-                notice.textContent =
-                  'Copy this preview link: ' + preview.href;
+                notice.textContent = 'Copy this preview link: ' + preview.href;
               }
             };
             const actions = node('div', undefined, 'entry-actions');
@@ -229,8 +227,7 @@ export function mountCustomSurveys(root, api) {
               '/api/custom-surveys?action=draft&id=' +
                 encodeURIComponent(selected),
             );
-            if (current !== generation || request !== requestGeneration)
-              return;
+            if (current !== generation || request !== requestGeneration) return;
             const history = node('details');
             history.append(node('summary', 'Survey activity'));
             for (const entry of detail.activity)
@@ -244,7 +241,7 @@ export function mountCustomSurveys(root, api) {
           }
           content.append(
             node('h3', 'Submitted responses'),
-            responseSections(data.results, {
+            responseSections(named(data.results), {
               definition: data.resultsDefinition,
             }),
           );
@@ -267,7 +264,7 @@ export function mountCustomSurveys(root, api) {
               if (current !== generation || request !== requestGeneration)
                 return;
               content.insertBefore(
-                responseSections(page.results, {
+                responseSections(named(page.results), {
                   definition: data.resultsDefinition,
                 }),
                 more,
@@ -311,10 +308,19 @@ export function mountCustomSurveys(root, api) {
       }
     }
   }
+  let dropped = false;
   return {
     load,
-    canLeave() {
-      return builder?.canLeave() !== false;
+    // Ten minutes paused: drop shown results unless the builder is open.
+    reset() {
+      if (builder) return;
+      generation++;
+      dropped = true;
+      root.replaceChildren();
+    },
+    refresh() {
+      if (dropped) load();
+      dropped = false;
     },
     leave() {
       if (builder?.canLeave() === false) return false;

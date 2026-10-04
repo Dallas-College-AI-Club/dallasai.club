@@ -1,0 +1,2 @@
+# Keep backend text files LF on every platform, matching Prettier and the build output.
+* text=auto eol=lf

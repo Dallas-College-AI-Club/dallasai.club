@@ -3,27 +3,13 @@ import http from 'node:http';
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { PGlite } from '@electric-sql/pglite';
+import { testDatabase } from './helpers/db.mjs';
 import { adminHandler } from '../api/admin.mjs';
 import { surveysHandler } from '../api/surveys.mjs';
 import { submit } from '../lib/submissions.mjs';
 import { surveyQuestions, surveyVersion } from '../lib/surveys.mjs';
-const db = new PGlite(),
+const db = await testDatabase(),
   root = path.resolve(import.meta.dirname, '../public');
-for (const file of [
-  '003_club_forms.sql',
-  '005_screen_confirmations.sql',
-  '007_office_tools.sql',
-  '009_submission_comments.sql',
-  '010_event_surveys.sql',
-  '014_event_response_management.sql',
-  '015_contact_identity_management.sql',
-  '016_submission_management.sql',
-  '017_contact_profile_editing.sql',
-])
-  await db.exec(
-    await readFile(new URL('../' + file, import.meta.url), 'utf8'),
-  );
 const event = {
   id: 'game-night',
   ...JSON.parse(
@@ -120,9 +106,7 @@ http
       }
       const file = path.resolve(
         root,
-        '.' +
-          url.pathname +
-          (url.pathname.endsWith('/') ? 'index.html' : ''),
+        '.' + url.pathname + (url.pathname.endsWith('/') ? 'index.html' : ''),
       );
       if (!file.startsWith(root + path.sep)) throw Error('Path');
       res.setHeader(
@@ -141,7 +125,5 @@ http
     }
   })
   .listen(port, '127.0.0.1', () =>
-    console.log(
-      'Synthetic response management fixture: ' + origin + '/admin/',
-    ),
+    console.log('Synthetic response management fixture: ' + origin + '/admin/'),
   );

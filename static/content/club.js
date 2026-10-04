@@ -9,7 +9,6 @@ export const JOIN_URL = PUBLISHED.club.JOIN_URL;
 export const PROJECT_URL = PUBLISHED.club.PROJECT_URL;
 export const SITE_URL = PUBLISHED.club.SITE_URL;
 export const SOCIAL_LINKS = PUBLISHED.club.SOCIAL_LINKS;
-export const WORKSHOP_REQUEST_URL = PUBLISHED.club.WORKSHOP_REQUEST_URL;
 
 const dateOnly = (e) => /^\d{4}-\d{2}-\d{2}$/.test(e.date);
 export const eventDate = (e) =>

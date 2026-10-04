@@ -1,8 +1,8 @@
+import { testDatabase } from './helpers/db.mjs';
 import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { PGlite } from '@electric-sql/pglite';
 import {
   contactList,
   contactHistory,
@@ -15,19 +15,7 @@ const actor = 'officer@example.edu',
   first = 'e12345@student.dcccd.edu',
   second = 'mk23@student.dallascollege.edu';
 before(async () => {
-  db = new PGlite();
-  for (const file of [
-    '003_club_forms.sql',
-    '005_screen_confirmations.sql',
-    '007_office_tools.sql',
-    '009_submission_comments.sql',
-    '010_event_surveys.sql',
-    '014_event_response_management.sql',
-    '015_contact_identity_management.sql',
-  ])
-    await db.exec(
-      await readFile(new URL('../' + file, import.meta.url), 'utf8'),
-    );
+  db = await testDatabase();
 });
 after(() => db.close());
 beforeEach(() =>
@@ -223,7 +211,6 @@ test('permanent test deletion removes linked answers, comments, notes, audit and
     'contact_notes',
     'entry_comments',
     'attachments',
-    'audit',
     'contact_activity',
     'contact_file_deletions',
   ])
@@ -233,6 +220,19 @@ test('permanent test deletion removes linked answers, comments, notes, audit and
       0,
       table,
     );
+  // Only a receipt is left: who purged, a hash prefix and counts, no address.
+  const receipt = (
+    await db.query('SELECT actor,entry_id,action FROM club_forms.audit')
+  ).rows;
+  assert.deepEqual(receipt, [
+    {
+      actor,
+      entry_id: null,
+      action: 'contact-purged:entries=2:notes=1:files=1',
+    },
+  ]);
+  for (const text of [first, second, 'student', 'dallascollege', 'Member'])
+    assert.ok(!JSON.stringify(receipt).includes(text), text);
   await assert.rejects(contact(first), { status: 404 });
 });
 test('failed file cleanup remains queued and can be retried without retaining test contact data', async () => {

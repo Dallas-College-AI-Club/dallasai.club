@@ -1,9 +1,5 @@
-const node = (tag, text, className) => {
-  const el = document.createElement(tag);
-  if (text !== undefined) el.textContent = text;
-  if (className) el.className = className;
-  return el;
-};
+import { lock, node } from './ui.js';
+import { drafts } from './session.js';
 const fields = {
   subscribe: [],
   rsvp: [],
@@ -36,33 +32,30 @@ const campuses = [
 ];
 
 export function submissionEditor(api, onSaved) {
-  const dialog = node(
-    'dialog',
-    undefined,
-    'contact-dialog submission-dialog',
-  );
+  const dialog = node('dialog', undefined, 'contact-dialog submission-dialog');
   const headingId = 'submission-dialog-' + crypto.randomUUID();
   dialog.setAttribute('aria-labelledby', headingId);
   document.body.append(dialog);
   let generation = 0,
     busy = false,
+    entryId = '',
     dirty = () => false;
   function canClose() {
     return (
-      !busy &&
-      (!dirty() || confirm('Discard your unsaved response changes?'))
+      !busy && (!dirty() || confirm('Discard your unsaved response changes?'))
     );
   }
   dialog.addEventListener('cancel', (event) => {
     event.preventDefault();
     if (canClose()) clear();
   });
-  window.addEventListener('beforeunload', (event) => {
-    if (dialog.open && (busy || dirty())) {
-      event.preventDefault();
-      event.returnValue = '';
-    }
-  });
+  // Unsaved edits stay in the dialog's form, also while it is closed for
+  // re-authentication; report them to the drafts store.
+  drafts.track(() =>
+    busy || dirty()
+      ? [{ key: 'response:' + entryId, label: 'Edits to a submission' }]
+      : [],
+  );
   function clear() {
     generation++;
     busy = false;
@@ -72,6 +65,7 @@ export function submissionEditor(api, onSaved) {
   }
   async function open(id, { surface = 'inbox', remove = false } = {}) {
     const version = ++generation;
+    entryId = id;
     const title = node(
       'h2',
       remove ? 'Permanently delete response?' : 'Edit response',
@@ -87,9 +81,7 @@ export function submissionEditor(api, onSaved) {
     dialog.replaceChildren(title, message, cancel);
     if (!dialog.open) dialog.showModal();
     try {
-      const { entry } = await api(
-        '/api/admin?edit=' + encodeURIComponent(id),
-      );
+      const { entry } = await api('/api/admin?edit=' + encodeURIComponent(id));
       if (version !== generation || !dialog.open) return;
       const form = node('form'),
         intro = node(
@@ -132,14 +124,11 @@ export function submissionEditor(api, onSaved) {
         const email = input(form, 'Email address', entry.email, 254, true);
         email.type = 'email';
         const values = {};
-        for (const [key, label, max, required] of fields[entry.kind] ||
-          []) {
+        for (const [key, label, max, required] of fields[entry.kind] || []) {
           if (key === 'campus') {
             const labelEl = node('label', label),
               select = node('select');
-            select.append(
-              ...campuses.map((value) => new Option(value, value)),
-            );
+            select.append(...campuses.map((value) => new Option(value, value)));
             select.value = entry.data[key] || '';
             select.required = true;
             labelEl.append(select);
@@ -209,13 +198,7 @@ export function submissionEditor(api, onSaved) {
           requestId = crypto.randomUUID();
         }
         busy = true;
-        const controls = [
-          ...form.querySelectorAll('input,textarea,select,button'),
-        ];
-        const disabled = controls.map((control) => control.disabled);
-        controls.forEach((control) => {
-          control.disabled = true;
-        });
+        const unlock = lock(form);
         message.textContent = remove ? 'Deleting…' : 'Saving…';
         try {
           const result = await api(
@@ -233,9 +216,7 @@ export function submissionEditor(api, onSaved) {
           if (version === generation) {
             message.textContent = error.message;
             busy = false;
-            controls.forEach((control, index) => {
-              control.disabled = disabled[index];
-            });
+            unlock();
           }
         }
       };
@@ -259,10 +240,7 @@ function input(parent, label, value, max, required) {
 function questionInput(parent, question, answer) {
   const group = node('fieldset', undefined, 'submission-question');
   group.append(
-    node(
-      'legend',
-      question.label + (question.required ? ' (required)' : ''),
-    ),
+    node('legend', question.label + (question.required ? ' (required)' : '')),
   );
   if (question.description)
     group.append(node('p', question.description, 'hint'));
@@ -291,8 +269,7 @@ function questionInput(parent, question, answer) {
       new Option('Choose an answer', ''),
       ...question.options.map((option) => new Option(option, option)),
     );
-    if (question.allowOther)
-      select.append(new Option('Other', '__other__'));
+    if (question.allowOther) select.append(new Option('Other', '__other__'));
     select.value = answer?.value || '';
     group.append(select);
   } else {
@@ -313,13 +290,7 @@ function questionInput(parent, question, answer) {
       controls.push(control);
     }
   }
-  const other = input(
-    group,
-    'Other answer',
-    answer?.other || '',
-    1000,
-    false,
-  );
+  const other = input(group, 'Other answer', answer?.other || '', 1000, false);
   const values = () =>
     select
       ? [select.value]

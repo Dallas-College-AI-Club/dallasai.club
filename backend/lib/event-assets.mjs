@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import sharp from 'sharp';
 import { put, get, del } from '@vercel/blob';
 import { RequestError } from './errors.mjs';
@@ -176,10 +176,5 @@ export async function serveEventImage(
   res.setHeader('Content-Type', 'image/webp');
   res.setHeader('Cache-Control', 'private, no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
-  await new Promise((resolve, reject) => {
-    const stream = Readable.fromWeb(blob.stream);
-    stream.on('error', reject);
-    res.on('finish', resolve);
-    stream.pipe(res);
-  });
+  await pipeline(blob.stream, res);
 }

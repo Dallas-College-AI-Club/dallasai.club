@@ -1,3 +1,4 @@
+import { node } from './ui.js';
 const central = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/Chicago',
   year: 'numeric',
@@ -20,12 +21,6 @@ export function activityTime(value) {
   const date = new Date(value);
   return Number.isFinite(date.getTime()) ? central.format(date) : '';
 }
-const node = (tag, text, className) => {
-  const element = document.createElement(tag);
-  element.textContent = text;
-  if (className) element.className = className;
-  return element;
-};
 function timeNode(value) {
   const label = activityTime(value);
   const time = node('time', label || 'Time unavailable');

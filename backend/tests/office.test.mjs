@@ -1,10 +1,9 @@
-import test, { before, after, beforeEach } from 'node:test';
+import { testDatabase } from './helpers/db.mjs';
+import test, { before, after, beforeEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import sharp from 'sharp';
-import { PGlite } from '@electric-sql/pglite';
 import { eventHandler } from '../api/events.mjs';
 import { adminHandler } from '../api/admin.mjs';
 import { addSubmissionComment } from '../lib/submission-activity.mjs';
@@ -44,25 +43,12 @@ const request = (route, body, admin = true) =>
     method: body ? 'POST' : 'GET',
     headers: {
       ...(admin ? { 'x-test-admin': admin === true ? 'yes' : admin } : {}),
-      ...(body
-        ? { 'Content-Type': 'application/json', Origin: origin }
-        : {}),
+      ...(body ? { 'Content-Type': 'application/json', Origin: origin } : {}),
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
   });
 before(async () => {
-  db = new PGlite();
-  for (const file of [
-    '003_club_forms.sql',
-    '005_screen_confirmations.sql',
-    '006_event_editor.sql',
-    '007_office_tools.sql',
-    '008_event_archive.sql',
-    '009_submission_comments.sql',
-  ])
-    await db.exec(
-      await readFile(new URL('../' + file, import.meta.url), 'utf8'),
-    );
+  db = await testDatabase();
   const handle = eventHandler({
     getDatabase: () => db,
     authorize,
@@ -180,13 +166,9 @@ test('legacy event types include Social and collapse legacy aliases without rewr
     0,
   );
   const edited = await editorEvents(db, originals);
+  assert.equal(edited.find((r) => r.id === 'old-4').draft.category, 'Talk');
   assert.equal(
-    edited.find((r) => r.id === 'old-4').draft.category,
-    'Talk',
-  );
-  assert.equal(
-    (await liveEvents(db, originals)).find((r) => r.id === 'old-5')
-      .category,
+    (await liveEvents(db, originals)).find((r) => r.id === 'old-5').category,
     'Meeting',
   );
   assert.equal(originals[4].category, 'Presentation');
@@ -221,10 +203,7 @@ test('event groups reject free text on save and reuse one canonical name across 
     event: { title: 'One', category: 'study group' },
   });
   assert.equal(response.status, 200);
-  assert.equal(
-    (await response.json()).event.draft.category,
-    'Study Group',
-  );
+  assert.equal((await response.json()).event.draft.category, 'Study Group');
   assert.equal(
     (
       await request('/api/events', {
@@ -300,10 +279,7 @@ test('uploaded images are decoded, resized, private in drafts, public only while
     false,
   );
   assert.equal(publicImage.status, 200);
-  assert.equal(
-    publicImage.headers.get('cache-control'),
-    'private, no-store',
-  );
+  assert.equal(publicImage.headers.get('cache-control'), 'private, no-store');
   assert.ok((await publicImage.arrayBuffer()).byteLength > 0);
   assert.equal(
     (
@@ -319,10 +295,7 @@ test('uploaded images are decoded, resized, private in drafts, public only while
     (await request('/api/events?image=' + image.id, null, false)).status,
     401,
   );
-  assert.equal(
-    (await request('/api/events?image=' + image.id)).status,
-    200,
-  );
+  assert.equal((await request('/api/events?image=' + image.id)).status, 200);
   assert.equal(
     (
       await request('/api/events', {
@@ -355,8 +328,7 @@ test('uploaded images are decoded, resized, private in drafts, public only while
 });
 test('image uploads reject unauthenticated clients and non-images; failed storage metadata removes the orphan', async () => {
   assert.equal(
-    (await request('/api/events?upload=1', { content: 'abc' }, false))
-      .status,
+    (await request('/api/events?upload=1', { content: 'abc' }, false)).status,
     401,
   );
   assert.equal(
@@ -443,10 +415,7 @@ test('inbox, counts and CSV separate past and upcoming RSVPs while all submissio
   const all = await (await request('/api/admin')).json();
   assert.equal(all.entries.length, 4);
   assert.equal(all.counts.find((row) => row.kind === 'rsvp').total, 2);
-  assert.equal(
-    all.counts.find((row) => row.kind === 'rsvp-past').total,
-    1,
-  );
+  assert.equal(all.counts.find((row) => row.kind === 'rsvp-past').total, 1);
   assert.equal(all.events.length, 3);
   assert.equal(all.events.find((row) => row.id === 'past').past, true);
   const past = await (await request('/api/admin?kind=rsvp-past')).json();
@@ -508,9 +477,7 @@ function parseCSV(text) {
   }
   const [headers, ...rows] = records;
   return rows.map((row) =>
-    Object.fromEntries(
-      headers.map((header, index) => [header, row[index]]),
-    ),
+    Object.fromEntries(headers.map((header, index) => [header, row[index]])),
   );
 }
 test('CSV gives all six submission types readable columns, preserves multiline text and Unicode, and neutralizes formulas', async () => {
@@ -534,11 +501,7 @@ test('CSV gives all six submission types readable columns, preserves multiline t
     entry('workshop', { topic: 'Workshop topic', details: message }),
     events,
   );
-  await submit(
-    db,
-    entry('join', { interests: 'Learning, building' }),
-    events,
-  );
+  await submit(db, entry('join', { interests: 'Learning, building' }), events);
   await submit(db, entry('subscribe'), events);
   await submit(db, entry('rsvp', { eventId: 'next' }), events);
   const response = await request('/api/admin?export=csv');
@@ -557,10 +520,7 @@ test('CSV gives all six submission types readable columns, preserves multiline t
     assert.equal(byType[kind]['Subject / title'], title);
     assert.equal(byType[kind]['Message / body'], message);
     assert.ok(!Object.hasOwn(byType[kind], 'Details'));
-    assert.equal(
-      byType[kind]['Submission state'],
-      'Received in club inbox',
-    );
+    assert.equal(byType[kind]['Submission state'], 'Received in club inbox');
     assert.ok(byType[kind].Reference);
   }
   assert.equal(byType['Club signups'].Campus, 'Richland');
@@ -613,9 +573,7 @@ test('reviewing, closing and reopening keep the submission and only change its r
       200,
     );
     const saved = (
-      await db.query('SELECT * FROM club_forms.entries WHERE id=$1', [
-        row.id,
-      ])
+      await db.query('SELECT * FROM club_forms.entries WHERE id=$1', [row.id])
     ).rows[0];
     assert.equal(saved.review_status, status);
     assert.deepEqual(saved.data, row.data);
@@ -631,11 +589,7 @@ test('reviewing, closing and reopening keep the submission and only change its r
       [row.id],
     )
   ).rows.map((r) => r.action);
-  assert.deepEqual(actions, [
-    'review:reviewed',
-    'review:closed',
-    'review:new',
-  ]);
+  assert.deepEqual(actions, ['review:reviewed', 'review:closed', 'review:new']);
 });
 
 test('admin comments persist author, time and text separately; retries do not duplicate comments or history', async () => {
@@ -648,8 +602,7 @@ test('admin comments persist author, time and text separately; retries do not du
     action: 'comment',
     id: row.id,
     commentId: randomUUID(),
-    comment:
-      '  I will follow up.\n안녕하세요 <img src=x onerror=alert(1)>  ',
+    comment: '  I will follow up.\n안녕하세요 <img src=x onerror=alert(1)>  ',
     author_email: 'spoof@example.com',
     created_at: '1999-01-01',
   };
@@ -663,8 +616,7 @@ test('admin comments persist author, time and text separately; retries do not du
   assert.ok(Date.parse(comment.created_at) >= start - 1000);
   assert.equal((await request('/api/admin', body)).status, 200);
   assert.equal(
-    (await db.query('SELECT * FROM club_forms.entry_comments')).rows
-      .length,
+    (await db.query('SELECT * FROM club_forms.entry_comments')).rows.length,
     1,
   );
   assert.equal(
@@ -717,9 +669,7 @@ test('admin comments persist author, time and text separately; retries do not du
   );
   for (const status of ['closed', 'new'])
     await request('/api/admin', { action: 'review', id: row.id, status });
-  const history = await (
-    await request('/api/admin?history=' + row.id)
-  ).json();
+  const history = await (await request('/api/admin?history=' + row.id)).json();
   assert.deepEqual(
     history.activity.map((r) => r.action),
     ['review:new', 'review:closed', 'comment-added'],
@@ -769,9 +719,7 @@ test('submission activity includes historical actions and paginates without mixi
     "INSERT INTO club_forms.audit(actor,entry_id,action) VALUES('other@example.com',$1,'download-attachment')",
     [other.id],
   );
-  const first = await (
-    await request('/api/admin?history=' + row.id)
-  ).json();
+  const first = await (await request('/api/admin?history=' + row.id)).json();
   assert.equal(first.activity.length, 50);
   const second = await (
     await request(
@@ -786,8 +734,7 @@ test('submission activity includes historical actions and paginates without mixi
   );
   assert.ok(first.activity.every((r) => r.actor !== 'other@example.com'));
   assert.equal(
-    (await request('/api/admin?history=' + row.id + '&before=oops'))
-      .status,
+    (await request('/api/admin?history=' + row.id + '&before=oops')).status,
     400,
   );
   assert.equal(
@@ -826,8 +773,7 @@ test('comment and audit writes roll back together if activity recording fails', 
     /audit unavailable/,
   );
   assert.equal(
-    (await db.query('SELECT * FROM club_forms.entry_comments')).rows
-      .length,
+    (await db.query('SELECT * FROM club_forms.entry_comments')).rows.length,
     0,
   );
 });
@@ -875,6 +821,261 @@ test('comments are shared between authorized admins with each author preserved',
   );
 });
 
+const reviewActions = async (id) =>
+  (
+    await db.query(
+      'SELECT action,actor FROM club_forms.audit WHERE entry_id=$1 ORDER BY id',
+      [id],
+    )
+  ).rows;
+test('a review from a stale status is refused with who changed it; the plain body is unchanged', async () => {
+  const row = await submit(
+    db,
+    entry('question', { subject: 'Stale', message: 'Hello' }),
+    events,
+  );
+  const plain = await request(
+    '/api/admin',
+    { action: 'review', id: row.id, status: 'reviewed' },
+    'second',
+  );
+  assert.equal(plain.status, 200);
+  assert.deepEqual(await plain.json(), { saved: true });
+  const stale = await request('/api/admin', {
+    action: 'review',
+    id: row.id,
+    status: 'closed',
+    from: 'new',
+  });
+  assert.equal(stale.status, 409);
+  const body = await stale.json();
+  assert.equal(body.code, 'stale-status');
+  assert.match(
+    body.error,
+    /^second-admin@example\.com already reviewed this at .+\d:\d\d [AP]M\.$/,
+  );
+  assert.equal(body.current.status, 'reviewed');
+  assert.equal(body.current.actor, 'second-admin@example.com');
+  assert.ok(Date.parse(body.current.at));
+  const current = async () =>
+    (
+      await db.query(
+        'SELECT review_status FROM club_forms.entries WHERE id=$1',
+        [row.id],
+      )
+    ).rows[0].review_status;
+  assert.equal(await current(), 'reviewed');
+  assert.deepEqual(
+    (await reviewActions(row.id)).map((r) => r.action),
+    ['review:reviewed'],
+  );
+  const fresh = await request('/api/admin', {
+    action: 'review',
+    id: row.id,
+    status: 'closed',
+    from: 'reviewed',
+  });
+  assert.deepEqual(await fresh.json(), { saved: true });
+  assert.equal(await current(), 'closed');
+  for (const invalid of [
+    { id: row.id, status: 'new', from: 'archived' },
+    { id: row.id, status: 'new', from: 1 },
+  ])
+    assert.equal(
+      (await request('/api/admin', { action: 'review', ...invalid })).status,
+      400,
+    );
+  assert.equal(
+    (
+      await request('/api/admin', {
+        action: 'review',
+        id: randomUUID(),
+        status: 'new',
+        from: 'closed',
+      })
+    ).status,
+    404,
+  );
+  // Without a review history (e.g. changed outside Club Office) the message is plain.
+  await db.exec('TRUNCATE club_forms.audit');
+  const unknown = await (
+    await request('/api/admin', {
+      action: 'review',
+      id: row.id,
+      status: 'new',
+      from: 'reviewed',
+    })
+  ).json();
+  assert.equal(unknown.code, 'stale-status');
+  assert.match(unknown.error, /Reload to see its current status/);
+  assert.deepEqual(unknown.current, {
+    status: 'closed',
+    actor: null,
+    at: null,
+  });
+});
+test('a stale review after a resubmission names the new details, not the older archive', async () => {
+  const signup = entry('join', { interests: 'Robotics' });
+  const row = await submit(db, signup, events);
+  await request(
+    '/api/admin',
+    { action: 'review', id: row.id, status: 'closed' },
+    'second',
+  );
+  await submit(
+    db,
+    { ...signup, requestId: randomUUID(), interests: 'Robotics and art' },
+    events,
+  );
+  const stale = await request('/api/admin', {
+    action: 'review',
+    id: row.id,
+    status: 'reviewed',
+    from: 'closed',
+  });
+  assert.equal(stale.status, 409);
+  const body = await stale.json();
+  assert.match(
+    body.error,
+    /^Updated details arrived through the website at .+, so this is New again\.$/,
+  );
+  assert.equal(body.current.status, 'new');
+  assert.equal(body.current.actor, 'website');
+});
+test('a review note and the status change commit together, or neither does', async () => {
+  const row = await submit(
+    db,
+    entry('question', { subject: 'Noted', message: 'Hello' }),
+    events,
+  );
+  const note = { id: randomUUID(), body: '  Called them back.  ' };
+  const saved = await request('/api/admin', {
+    action: 'review',
+    id: row.id,
+    status: 'reviewed',
+    from: 'new',
+    comment: note,
+  });
+  assert.equal(saved.status, 200);
+  const result = await saved.json();
+  assert.equal(result.saved, true);
+  assert.equal(result.comment.body, 'Called them back.');
+  assert.equal(result.comment.author_email, 'admin@example.com');
+  assert.deepEqual(await reviewActions(row.id), [
+    { action: 'comment-added', actor: 'admin@example.com' },
+    { action: 'review:reviewed', actor: 'admin@example.com' },
+  ]);
+  const comments = async (id) =>
+    (
+      await db.query(
+        'SELECT body FROM club_forms.entry_comments WHERE entry_id=$1',
+        [id],
+      )
+    ).rows.map((r) => r.body);
+  // A stale status discards the note with it, so the officer can decide again.
+  const other = await submit(
+    db,
+    entry('question', { subject: 'Raced', message: 'Hello' }),
+    events,
+  );
+  await request(
+    '/api/admin',
+    { action: 'review', id: other.id, status: 'closed' },
+    'second',
+  );
+  const stale = await request('/api/admin', {
+    action: 'review',
+    id: other.id,
+    status: 'reviewed',
+    from: 'new',
+    comment: { id: randomUUID(), body: 'Do not keep me' },
+  });
+  assert.equal(stale.status, 409);
+  assert.deepEqual(await comments(other.id), []);
+  for (const comment of [
+    { id: randomUUID(), body: ' ' },
+    { id: 'not-a-uuid', body: 'Hello' },
+    'Just text',
+  ])
+    assert.equal(
+      (
+        await request('/api/admin', {
+          action: 'review',
+          id: other.id,
+          status: 'new',
+          comment,
+        })
+      ).status,
+      400,
+    );
+  assert.equal(
+    (
+      await db.query(
+        'SELECT review_status FROM club_forms.entries WHERE id=$1',
+        [other.id],
+      )
+    ).rows[0].review_status,
+    'closed',
+  );
+  // A failed status write rolls back the note that was inserted before it.
+  const failingDb = {
+    query: (sql, values) => db.query(sql, values),
+    transaction: (run) =>
+      db.transaction((tx) =>
+        run({
+          query: (sql, values) =>
+            sql.startsWith('UPDATE club_forms.entries')
+              ? Promise.reject(new Error('status write failed'))
+              : tx.query(sql, values),
+        }),
+      ),
+  };
+  const handler = adminHandler({
+    getDatabase: () => failingDb,
+    authorize,
+    getEvents: async () => events,
+    storage,
+  });
+  const res = {
+    headers: {},
+    setHeader(name, value) {
+      this.headers[name] = value;
+    },
+    end(text) {
+      this.body = JSON.parse(text);
+    },
+  };
+  const logged = mock.method(console, 'error', () => {});
+  try {
+    await handler(
+      {
+        method: 'POST',
+        url: '/api/admin',
+        headers: {
+          'x-test-admin': 'yes',
+          'content-type': 'application/json',
+          origin,
+        },
+        body: {
+          action: 'review',
+          id: other.id,
+          status: 'new',
+          from: 'closed',
+          comment: { id: randomUUID(), body: 'Roll me back' },
+        },
+      },
+      res,
+    );
+  } finally {
+    logged.mock.restore();
+  }
+  assert.equal(res.statusCode, 503);
+  assert.deepEqual(await comments(other.id), []);
+  assert.deepEqual(
+    (await reviewActions(other.id)).map((r) => r.action),
+    ['review:closed'],
+  );
+});
 test('status sections and their exports isolate archived submissions and allow restoration', async () => {
   const records = {};
   for (const state of ['new', 'reviewed', 'closed']) {
@@ -894,9 +1095,7 @@ test('status sections and their exports isolate archived submissions and allow r
     records[state] = record;
   }
   for (const state of ['new', 'reviewed', 'closed']) {
-    const view = await (
-      await request('/api/admin?status=' + state)
-    ).json();
+    const view = await (await request('/api/admin?status=' + state)).json();
     assert.deepEqual(
       view.entries.map((item) => item.id),
       [records[state].id],
@@ -910,11 +1109,7 @@ test('status sections and their exports isolate archived submissions and allow r
     assert.equal(exported[0]['Subject / title'], state + ' question');
     assert.equal(
       exported[0]['Review status'],
-      state === 'closed'
-        ? 'Archived'
-        : state === 'new'
-          ? 'New'
-          : 'Reviewed',
+      state === 'closed' ? 'Archived' : state === 'new' ? 'New' : 'Reviewed',
     );
   }
   await request('/api/admin', {
@@ -929,8 +1124,7 @@ test('status sections and their exports isolate archived submissions and allow r
     status: 'new',
   });
   assert.equal(
-    (await (await request('/api/admin?status=closed')).json()).entries
-      .length,
+    (await (await request('/api/admin?status=closed')).json()).entries.length,
     0,
   );
   const restored = await (await request('/api/admin?status=new')).json();

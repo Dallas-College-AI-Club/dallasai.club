@@ -1,11 +1,7 @@
+import { button, lock, node } from './ui.js';
 import { activityTime } from './event-activity.js';
 import { contactProfile } from './contact-profile.js';
-const node = (tag, text, cls) => {
-  const el = document.createElement(tag);
-  if (text !== undefined) el.textContent = text;
-  if (cls) el.className = cls;
-  return el;
-};
+import { drafts, isPaused } from './session.js';
 const labels = {
   join: 'Club signup',
   subscribe: 'The AI Review subscription',
@@ -14,9 +10,16 @@ const labels = {
   workshop: 'Workshop request',
   contribution: 'AI Review submission',
 };
+// Unsaved notes are kept as contactNote:<email> and profile edits as
+// profile:<email> in the drafts store. A profile draft remembers the
+// contact revision it started from, so a later change can be pointed out.
+const noteKey = (address) => 'contactNote:' + address,
+  noteDraftLabel = (address) => 'Follow-up note for ' + address,
+  profileKey = (address) => 'profile:' + address;
+function forgetProfiles(addresses) {
+  for (const address of addresses) drafts.delete(profileKey(address));
+}
 export function contactHistory(api, onChange = () => {}) {
-  const drafts = new Map();
-  const profileDrafts = new Map();
   const dialog = node('dialog', undefined, 'contact-dialog');
   dialog.setAttribute('aria-labelledby', 'contact-heading');
   const close = node('button', 'Close', 'secondary'),
@@ -56,21 +59,15 @@ export function contactHistory(api, onChange = () => {}) {
   retry.hidden = true;
   retry.onclick = () => load();
   paging.append(prev, next);
-  dialog.append(
-    toolbar,
-    intro,
-    searchForm,
-    status,
-    retry,
-    content,
-    paging,
-  );
+  dialog.append(toolbar, intro, searchForm, status, retry, content, paging);
   document.body.append(dialog);
   let generation = 0,
     email = '',
     offset = 0;
   close.onclick = () => dialog.close();
   dialog.addEventListener('close', () => {
+    // Closed for re-authentication: keep everything for when it reopens.
+    if (isPaused()) return;
     generation++;
     content.replaceChildren();
     search.value = '';
@@ -98,11 +95,7 @@ export function contactHistory(api, onChange = () => {}) {
       if (!email) {
         heading.textContent = 'Contacts';
         for (const c of data.contacts) {
-          const button = node(
-            'button',
-            undefined,
-            'contact-choice secondary',
-          );
+          const button = node('button', undefined, 'contact-choice secondary');
           button.append(
             node('strong', c.name || c.email),
             node('span', c.email),
@@ -167,7 +160,7 @@ export function contactHistory(api, onChange = () => {}) {
         note.maxLength = 5000;
         note.required = true;
         const address = data.contact.email;
-        const previous = drafts.get(address);
+        const previous = drafts.get(noteKey(address));
         note.value = previous?.text || '';
         noteLabel.append(note);
         noteStatus.setAttribute('role', 'status');
@@ -180,8 +173,12 @@ export function contactHistory(api, onChange = () => {}) {
         note.oninput = () => {
           noteId = crypto.randomUUID();
           if (note.value)
-            drafts.set(address, { text: note.value, id: noteId });
-          else drafts.delete(address);
+            drafts.set(
+              noteKey(address),
+              { text: note.value, id: noteId },
+              noteDraftLabel(address),
+            );
+          else drafts.delete(noteKey(address));
         };
         form.onsubmit = async (event) => {
           event.preventDefault();
@@ -197,8 +194,8 @@ export function contactHistory(api, onChange = () => {}) {
               noteId: submittedId,
               note: note.value,
             });
-            if (drafts.get(address)?.id === submittedId)
-              drafts.delete(address);
+            if (drafts.get(noteKey(address))?.id === submittedId)
+              drafts.delete(noteKey(address));
             if (version !== generation) return;
             offset = 0;
             await load();
@@ -228,12 +225,9 @@ export function contactHistory(api, onChange = () => {}) {
               'hint',
             ),
           );
-          if (item.body)
-            card.append(node('p', item.body, 'contact-note-text'));
+          if (item.body) card.append(node('p', item.body, 'contact-note-text'));
           if (item.source_email)
-            card.append(
-              node('p', item.source_email, 'hint contact-note-text'),
-            );
+            card.append(node('p', item.source_email, 'hint contact-note-text'));
           for (const key of [
             'eventTitle',
             'eventDate',
@@ -246,13 +240,8 @@ export function contactHistory(api, onChange = () => {}) {
             'title',
             'summary',
           ])
-            if (
-              typeof item.details?.[key] === 'string' &&
-              item.details[key]
-            )
-              card.append(
-                node('p', item.details[key], 'contact-note-text'),
-              );
+            if (typeof item.details?.[key] === 'string' && item.details[key])
+              card.append(node('p', item.details[key], 'contact-note-text'));
           if (item.entry_id) {
             const link = node('a', 'Open submission');
             link.href = '#entry=' + encodeURIComponent(item.entry_id);
@@ -286,27 +275,17 @@ export function contactHistory(api, onChange = () => {}) {
       ),
       remove = node(
         'button',
-        contact.is_test
-          ? 'Permanently delete test contact'
-          : 'Delete contact',
+        contact.is_test ? 'Permanently delete test contact' : 'Delete contact',
         'secondary danger',
       ),
       restore = node('button', 'Restore contact', 'secondary'),
       merge = node('button', 'Merge with another contact', 'secondary'),
       edit = node('button', 'Edit contact', 'secondary'),
       details = node('div', undefined, 'contact-confirmation');
-    const actionButton = (text, fn, cls = 'secondary') => {
-      const el = node('button', text, cls);
-      el.type = 'button';
-      el.onclick = fn;
-      return el;
-    };
     const fresh = () => version === generation && dialog.open;
     async function save(body, message) {
       if (!fresh()) return;
-      const controls = [...panel.querySelectorAll('button, input')];
-      const disabled = controls.map((control) => control.disabled);
-      controls.forEach((el) => (el.disabled = true));
+      const unlock = lock(panel, 'button, input');
       status.textContent = 'Saving contact changes…';
       try {
         const result = await api('/api/surveys', {
@@ -314,28 +293,40 @@ export function contactHistory(api, onChange = () => {}) {
           revision: contact.revision,
           ...body,
         });
-        if (!fresh()) return;
         if (result.edited || result.purged || result.deleted)
-          for (const address of contact.emails)
-            profileDrafts.delete(address);
-        if (result.purged || result.deleted) email = '';
-        else email = result.email;
+          forgetProfiles(contact.emails);
+        // A purge deletes this person's records, so only their drafts go.
         if (result.purged)
-          for (const address of contact.emails) drafts.delete(address);
+          for (const draft of drafts.list())
+            if (
+              contact.emails.some(
+                (address) => draft.key === noteKey(address),
+              ) ||
+              (draft.key.startsWith('note:') &&
+                contact.emails.includes(draft.value?.email))
+            )
+              drafts.delete(draft.key);
         if (result.merged || result.edited) {
           const combined = [
-            drafts.get(result.email),
-            ...contact.emails.map((address) => drafts.get(address)),
+            drafts.get(noteKey(result.email)),
+            ...contact.emails.map((address) => drafts.get(noteKey(address))),
           ].filter(Boolean);
-          for (const address of contact.emails) drafts.delete(address);
+          for (const address of contact.emails) drafts.delete(noteKey(address));
           if (combined.length)
-            drafts.set(result.email, {
-              text: [...new Set(combined.map((draft) => draft.text))].join(
-                '\n\n',
-              ),
-              id: crypto.randomUUID(),
-            });
+            drafts.set(
+              noteKey(result.email),
+              {
+                text: [...new Set(combined.map((draft) => draft.text))].join(
+                  '\n\n',
+                ),
+                id: crypto.randomUUID(),
+              },
+              noteDraftLabel(result.email),
+            );
         }
+        if (!fresh()) return;
+        if (result.purged || result.deleted) email = '';
+        else email = result.email;
         offset = 0;
         await load();
         if (dialog.open)
@@ -347,7 +338,7 @@ export function contactHistory(api, onChange = () => {}) {
       } catch (error) {
         if (fresh()) {
           status.textContent = error.message;
-          controls.forEach((el, index) => (el.disabled = disabled[index]));
+          unlock();
         }
       }
     }
@@ -364,16 +355,14 @@ export function contactHistory(api, onChange = () => {}) {
       heading.tabIndex = -1;
       details.replaceChildren(heading, node('p', description));
       let input;
-      const accept = actionButton(
+      const accept = button(
         label,
         () => {
           if (requireEmail && input.value.trim() !== contact.email) return;
           save(
             {
               ...body,
-              ...(requireEmail
-                ? { confirmEmail: input.value.trim() }
-                : {}),
+              ...(requireEmail ? { confirmEmail: input.value.trim() } : {}),
             },
             message,
           );
@@ -393,7 +382,7 @@ export function contactHistory(api, onChange = () => {}) {
       }
       row.append(
         accept,
-        actionButton('Cancel', () => {
+        button('Cancel', () => {
           details.replaceChildren();
           merge.focus();
         }),
@@ -409,9 +398,7 @@ export function contactHistory(api, onChange = () => {}) {
         contact.is_test
           ? 'Deleting this contact will keep their submissions and allow restoration.'
           : 'This applies to every linked email. Deleting a test contact permanently erases its submissions, survey answers, comments, attachments and follow-up notes. Marking it does not delete anything yet.',
-        contact.is_test
-          ? 'Confirm unmark as test'
-          : 'Confirm mark as test',
+        contact.is_test ? 'Confirm unmark as test' : 'Confirm mark as test',
         { action: 'contact-test', value: !contact.is_test },
         contact.is_test
           ? 'Test flag removed.'
@@ -480,7 +467,7 @@ export function contactHistory(api, onChange = () => {}) {
           );
           results.replaceChildren();
           for (const candidate of candidates) {
-            const choose = actionButton(
+            const choose = button(
               '',
               () =>
                 confirm(
@@ -524,28 +511,34 @@ export function contactHistory(api, onChange = () => {}) {
       };
     };
     edit.onclick = () => {
+      const draft = [contact.email, ...contact.emails]
+        .map((address) => drafts.get(profileKey(address)))
+        .find(Boolean);
       details.replaceChildren(
         contactProfile(
           contact,
           save,
           () => {
-            for (const address of contact.emails)
-              profileDrafts.delete(address);
+            forgetProfiles(contact.emails);
             details.replaceChildren();
             edit.focus();
           },
-          profileDrafts.get(contact.email) ||
-            contact.emails
-              .map((address) => profileDrafts.get(address))
-              .find(Boolean),
-          (draft) => {
-            for (const address of contact.emails)
-              profileDrafts.delete(address);
-            if (draft) profileDrafts.set(contact.email, draft);
+          draft,
+          (next) => {
+            forgetProfiles([contact.email, ...contact.emails]);
+            if (next)
+              drafts.set(
+                profileKey(contact.email),
+                { ...next, revision: contact.revision },
+                'Contact changes for ' + contact.email,
+              );
           },
           () => dialog.close(),
         ),
       );
+      if (draft && draft.revision !== contact.revision)
+        status.textContent =
+          'This contact changed after you started editing. Your unsaved name and email are restored; check them before saving.';
       details.querySelector('input')?.focus();
     };
     if (!contact.deleted_at) actions.append(edit);
@@ -575,21 +568,7 @@ export function contactHistory(api, onChange = () => {}) {
     offset += 50;
     load();
   };
-  window.addEventListener('beforeunload', (event) => {
-    if (drafts.size || profileDrafts.size) {
-      event.preventDefault();
-      event.returnValue = '';
-    }
-  });
   return {
-    canLeave() {
-      return (
-        (!drafts.size && !profileDrafts.size) ||
-        confirm(
-          'Discard your unsaved contact changes and notes and sign out?',
-        )
-      );
-    },
     open(address = '') {
       email = address;
       view.value = 'active';
@@ -597,10 +576,15 @@ export function contactHistory(api, onChange = () => {}) {
       if (!dialog.open) dialog.showModal();
       load();
     },
+    // Drops the shown history after a long pause; drafts stay in the store.
+    reset() {
+      generation++;
+      content.replaceChildren();
+      status.textContent = '';
+      retry.hidden = false;
+    },
     clear() {
       generation++;
-      drafts.clear();
-      profileDrafts.clear();
       if (dialog.open) dialog.close();
       content.replaceChildren();
       search.value = '';

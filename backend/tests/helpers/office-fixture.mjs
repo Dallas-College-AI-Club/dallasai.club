@@ -7,27 +7,14 @@ import { adminHandler } from '../../api/admin.mjs';
 import { surveysHandler } from '../../api/surveys.mjs';
 import { eventHandler } from '../../api/events.mjs';
 import { saveEvent, liveEvents } from '../../lib/events.mjs';
+import { rawBody } from '../../lib/http.mjs';
 export async function officeFixture() {
   const f = await fixture(),
     db = f.db;
   const backend = path.resolve(import.meta.dirname, '../..'),
     site = path.resolve(backend, '../public');
-  for (const name of [
-    '006_event_editor.sql',
-    '007_office_tools.sql',
-    '008_event_archive.sql',
-    '009_submission_comments.sql',
-    '014_event_response_management.sql',
-    '015_contact_identity_management.sql',
-    '016_submission_management.sql',
-    '017_contact_profile_editing.sql',
-  ])
-    await db.exec(await readFile(path.join(backend, name), 'utf8'));
   const workshop = JSON.parse(
-    await readFile(
-      path.join(backend, 'tests/fixtures/workshop.json'),
-      'utf8',
-    ),
+    await readFile(path.join(backend, 'tests/fixtures/workshop.json'), 'utf8'),
   );
   const event = await saveEvent(
     db,
@@ -76,9 +63,7 @@ export async function officeFixture() {
             hasSurvey: true,
           }
         : {
-            ...(kind === 'join'
-              ? { campus: 'Richland', interests: '' }
-              : {}),
+            ...(kind === 'join' ? { campus: 'Richland', interests: '' } : {}),
             message: 'Saved ' + kind + ' example',
             topic: 'Example topic',
           };
@@ -107,39 +92,69 @@ export async function officeFixture() {
       );
     entries.push({ id, kind, email, name });
   }
+  // The officer signed in through the mocked email codes below; requests act
+  // as this address.
+  let signedIn = true,
+    sessionEmail = 'officer@example.com';
+  // Set session.expiresAt to have get-session report a session deadline.
+  const session = { expiresAt: undefined };
+  const authorize = (req) => ({ ...f.authorize(req), email: sessionEmail });
   const admin = adminHandler({
-    authorize: f.authorize,
+    authorize,
     getDatabase: () => db,
     getEvents: () => liveEvents(db, []),
   });
   const surveys = surveysHandler({
-    authorize: f.authorize,
+    authorize,
     getDatabase: () => db,
   });
   const events = eventHandler({
-    authorize: f.authorize,
+    authorize,
     getDatabase: () => db,
     originals: [],
     rateLimit: async () => {},
   });
-  let signedIn = true;
+  const json = (res, body, status = 200) => {
+    res.statusCode = status;
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify(body));
+  };
   const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, 'http://localhost');
-    if (url.pathname === '/api/auth/get-session') {
-      res.setHeader('Content-Type', 'application/json');
-      return res.end(
-        JSON.stringify(
-          signedIn ? { user: { email: 'officer@example.com' } } : null,
-        ),
+    if (url.pathname === '/api/auth/get-session')
+      return json(
+        res,
+        signedIn
+          ? {
+              user: { email: sessionEmail },
+              ...(session.expiresAt
+                ? { session: { expiresAt: session.expiresAt } }
+                : {}),
+            }
+          : null,
       );
+    // Neon Auth email codes: any address gets a code, and 123456 signs in.
+    if (url.pathname === '/api/auth/email-otp/send-verification-otp')
+      return json(res, { success: true });
+    if (url.pathname === '/api/auth/sign-in/email-otp') {
+      const body = JSON.parse(await rawBody(req));
+      if (body.otp !== '123456')
+        return json(res, { code: 'INVALID_OTP', message: 'Invalid OTP' }, 400);
+      signedIn = true;
+      sessionEmail = body.email;
+      res.setHeader(
+        'Set-Cookie',
+        'test-officer=yes; Path=/; HttpOnly; SameSite=Strict',
+      );
+      return json(res, { token: 'test', user: { email: body.email } });
     }
     if (url.pathname === '/api/auth/sign-out') {
       signedIn = false;
-      res.setHeader('Content-Type', 'application/json');
-      return res.end('{"success":true}');
+      return json(res, { success: true });
     }
     if (url.pathname === '/test-signin') {
       signedIn = true;
+      sessionEmail = 'officer@example.com';
       res.setHeader(
         'Set-Cookie',
         'test-officer=yes; Path=/; HttpOnly; SameSite=Strict',
@@ -157,15 +172,12 @@ export async function officeFixture() {
     if (url.pathname === '/api/events') return events(req, res);
     if (url.pathname === '/api/custom-surveys') return f.handler(req, res);
     const root =
-      url.pathname.startsWith('/admin/') ||
-      url.pathname.startsWith('/surveys/')
+      url.pathname.startsWith('/admin/') || url.pathname.startsWith('/surveys/')
         ? path.join(backend, 'public')
         : site;
     const file = path.resolve(
       root,
-      '.' +
-        url.pathname +
-        (url.pathname.endsWith('/') ? 'index.html' : ''),
+      '.' + url.pathname + (url.pathname.endsWith('/') ? 'index.html' : ''),
     );
     try {
       if (!file.startsWith(root + path.sep)) throw Error('Path');
@@ -204,6 +216,7 @@ export async function officeFixture() {
     event,
     entries,
     origin,
+    session,
     close: async () => {
       await new Promise((resolve) => server.close(resolve));
       await db.close();

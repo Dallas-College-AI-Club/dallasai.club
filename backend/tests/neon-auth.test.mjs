@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { requireAdmin } from '../lib/auth.mjs';
+import { requireAdmin, adminOrigin } from '../lib/auth.mjs';
 import { proxyNeonAuth } from '../lib/neon-auth.mjs';
 process.env.NEON_AUTH_URL = 'https://auth.example.com/neondb/auth';
 process.env.NEON_AUTH_COOKIE_SECRET = 'test-only-' + 'x'.repeat(40);
@@ -65,14 +65,23 @@ test('Neon authorization rechecks the upstream session, provisioned admin role, 
   assert.equal((await requireAdmin(req)).email, user.email);
   assert.ok(requests[0].url.endsWith('/get-session?disableCookieCache=true'));
   assert.equal(requests[0].headers.Cookie.includes('unrelated'), false);
+  // A valid session without officer access is told so, with a code the page
+  // can use instead of showing the sign-in form again.
+  const notOfficer = (e) =>
+    e.status === 401 &&
+    e.details.code === 'not-officer' &&
+    e.message === "This account isn't set up as a club officer.";
   data = { ...data, user: { ...user, role: 'user' } };
-  await assert.rejects(requireAdmin(req), (e) => e.status === 401);
+  await assert.rejects(requireAdmin(req), notOfficer);
   data = { ...data, user };
   process.env.ADMIN_EMAILS = 'other@example.com';
-  await assert.rejects(requireAdmin(req), (e) => e.status === 401);
+  await assert.rejects(requireAdmin(req), notOfficer);
   process.env.ADMIN_EMAILS = user.email;
   data = null;
-  await assert.rejects(requireAdmin(req), (e) => e.status === 401);
+  await assert.rejects(
+    requireAdmin(req),
+    (e) => e.status === 401 && e.details.code === undefined,
+  );
   assert.equal(requests.length, 4);
 });
 test('Neon proxy rejects public signup, password login, unsupported methods, and cross-origin code requests before forwarding', async (t) => {
@@ -239,7 +248,11 @@ test('returning officers keep access before 72 hours; renewed upstream sessions 
   };
   assert.equal((await requireAdmin(req)).email, user.email);
   age = 72 * 3600000;
-  await assert.rejects(requireAdmin(req), (e) => e.status === 401);
+  // An expired session asks for sign-in again; it is not a "not an officer" case.
+  await assert.rejects(
+    requireAdmin(req),
+    (e) => e.status === 401 && e.details.code === undefined,
+  );
   const response = {
     headers: {},
     setHeader(k, v) {
@@ -368,5 +381,14 @@ test('session refresh returns the original deadline and caps renewed cookies to 
       Date.parse(JSON.parse(response.body).session.expiresAt) -
         (now + 86400000),
     ) < 1000,
+  );
+});
+test('admin mutations require the admin origin', () => {
+  assert.throws(
+    () => adminOrigin({ headers: { origin: 'https://evil.example' } }),
+    /admin page/,
+  );
+  assert.doesNotThrow(() =>
+    adminOrigin({ headers: { origin: process.env.AUTH_BASE_URL } }),
   );
 });

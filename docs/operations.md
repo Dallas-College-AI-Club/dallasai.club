@@ -24,10 +24,11 @@ Office; historical planning notes in this repository are not publication rules.
   expired/revoked device tokens, at most 1,000 per run. Responses and audit history
   remain stored.
 
-The legacy password implementation and account tables support a deliberate
-rollback. Removing `NEON_AUTH_URL` does not give the current email-code interface a
-password screen. `provision-admins.mjs` is a legacy tool; provision current officers
-in Neon. The legacy session fallback also uses a fixed three-day window.
+Neon Auth is the only officer sign-in. The password fallback was removed on
+2026-10-03; git history keeps it. Without `NEON_AUTH_URL`, admin sign-in returns
+503. Give each officer the `admin` role in Neon and add their address to
+`ADMIN_EMAILS`. Migration 004 and the `public.club_admin_*` tables remain as history
+and are no longer read.
 
 ## Configuration
 
@@ -45,7 +46,7 @@ code. The private settings are under `%LOCALAPPDATA%/dallasai-club-website`.
 | `CRON_SECRET` | Authenticates daily maintenance; at least 32 characters |
 | `FORMS_ALLOWED_ORIGINS` | Optional exact frontend preview origins |
 | `DATABASE_URL`, `SESSION_SECRET` | Existing leaderboard runtime connection and player signing key |
-| `AUTH_DATABASE_URL`, `BETTER_AUTH_SECRET` | Legacy authentication fallback only |
+| `AUTH_DATABASE_URL`, `BETTER_AUTH_SECRET` | No longer read; still set in Vercel and safe to remove later |
 
 Keep signing secrets stable. Rotating `FORM_TOKEN_SECRET` invalidates existing
 derived survey links; coordinate that separately. Old digests must not be presented
@@ -60,7 +61,7 @@ Keep runtime connections restricted. The original leaderboard setup is retained 
 
 | Migrations | Capability |
 | --- | --- |
-| 003–005 | Forms, legacy auth, on-screen confirmations; retire email-queue trigger |
+| 003–005 | Forms, retired password-auth tables, on-screen confirmations; retire email-queue trigger |
 | 006–009 | Event editor, office tools, event archives, submission comments |
 | 010 | Event RSVP questions and answer snapshots |
 | 011–013 | Custom survey rounds, respondents, consent, and builder |
@@ -74,6 +75,15 @@ repeatable. Cleanup is bounded and retries on later daily runs if there is a bac
 The original `provision.mjs` bootstraps only part of the current schema and refuses
 to overwrite existing credentials. Never treat rerunning it as an upgrade; review
 and apply the remaining migrations. Preserve additive migrations on code rollback.
+
+## Read-only production checks
+
+From `backend/`, `node scripts/club-db-read.mjs "SELECT kind, count(*) FROM club_forms.entries GROUP BY kind"`
+runs one statement against production and prints the rows. It reads `FORMS_DATABASE_URL` from
+`%LOCALAPPDATA%/dallasai-club-website/secrets.env.forms` (created from `vercel env pull`), refuses
+any database other than `dallasai_club`, and runs inside a READ ONLY transaction that is always
+rolled back. `verify-connections.mjs` and `verify-storage.mjs` also touch production; read them
+before running.
 
 ## Verification and release
 

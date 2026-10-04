@@ -1,12 +1,8 @@
+import { button, node } from './ui.js';
 import { mountRespondents } from './survey-respondents.js';
 import { surveyTrial } from './survey-trial.js';
 import { choiceEditor } from './survey-choices.js';
-const node = (tag, text, cls) => {
-  const e = document.createElement(tag);
-  if (text !== undefined) e.textContent = text;
-  if (cls) e.className = cls;
-  return e;
-};
+import { drafts } from './session.js';
 const audienceNames = {
   students: 'Dallas College students',
   staff: 'Dallas College staff',
@@ -50,13 +46,7 @@ export function mountSurveyBuilder(root, api, onDone, id) {
     if ((await save(action)) && action !== 'publish') render();
   });
   retry.hidden = true;
-  const steps = [
-    'Template',
-    'Audience',
-    'Questions',
-    'Preview',
-    'Publish',
-  ];
+  const steps = ['Template', 'Audience', 'Questions', 'Preview', 'Publish'];
   async function initialize() {
     if (id) {
       root.replaceChildren(node('p', 'Loading survey draft…'));
@@ -80,12 +70,6 @@ export function mountSurveyBuilder(root, api, onDone, id) {
     }
     render();
   }
-  function button(label, fn, cls = 'secondary') {
-    const b = node('button', label, cls);
-    b.type = 'button';
-    b.onclick = fn;
-    return b;
-  }
   function field(
     label,
     key,
@@ -98,8 +82,7 @@ export function mountSurveyBuilder(root, api, onDone, id) {
     input.value = definition[key];
     if (multiline) input.rows = 3;
     input.oninput = () => {
-      definition[key] =
-        type === 'number' ? Number(input.value) : input.value;
+      definition[key] = type === 'number' ? Number(input.value) : input.value;
       saved = false;
     };
     l.append(input);
@@ -132,8 +115,7 @@ export function mountSurveyBuilder(root, api, onDone, id) {
     };
     const serialized = JSON.stringify(body);
     if (pending && pending.serialized !== serialized) {
-      status.textContent =
-        'Retry the previous save before changing the draft.';
+      status.textContent = 'Retry the previous save before changing the draft.';
       return false;
     }
     pending ||= {
@@ -144,8 +126,7 @@ export function mountSurveyBuilder(root, api, onDone, id) {
     root
       .querySelectorAll('button,input,textarea,select')
       .forEach((e) => (e.disabled = true));
-    status.textContent =
-      action === 'publish' ? 'Publishing…' : 'Saving draft…';
+    status.textContent = action === 'publish' ? 'Publishing…' : 'Saving draft…';
     try {
       const data = await api(
         '/api/custom-surveys?action=draft-change',
@@ -223,10 +204,7 @@ export function mountSurveyBuilder(root, api, onDone, id) {
             definition.template = value;
             if (!definition.questions.length && value === 'feedback')
               definition.questions = [
-                newQuestion(
-                  'How would you rate your experience?',
-                  'scale',
-                ),
+                newQuestion('How would you rate your experience?', 'scale'),
                 newQuestion('What worked well?'),
                 newQuestion('What would you improve?'),
               ];
@@ -249,8 +227,7 @@ export function mountSurveyBuilder(root, api, onDone, id) {
           Object.entries(audienceNames),
           (value) => {
             definition.audience = value;
-            if (value !== 'public')
-              definition.permissions.answer = 'invited';
+            if (value !== 'public') definition.permissions.answer = 'invited';
             render();
           },
         ),
@@ -441,11 +418,7 @@ export function mountSurveyBuilder(root, api, onDone, id) {
         ),
       );
       for (const q of definition.questions) {
-        const card = node(
-          'section',
-          undefined,
-          'builder-preview-question',
-        );
+        const card = node('section', undefined, 'builder-preview-question');
         card.append(
           node('strong', q.title || 'Untitled question'),
           node('p', q.description),
@@ -549,9 +522,7 @@ export function mountSurveyBuilder(root, api, onDone, id) {
     const actions = node('div', undefined, 'entry-actions');
     if (step) actions.append(button('← Back', () => go(step - 1)));
     if (step < 4)
-      actions.append(
-        button('Save and continue →', () => go(step + 1), ''),
-      );
+      actions.append(button('Save and continue →', () => go(step + 1), ''));
     actions.append(
       button('Save draft and leave', async () => {
         if (await save()) onDone(surveyId);
@@ -559,13 +530,16 @@ export function mountSurveyBuilder(root, api, onDone, id) {
     );
     root.append(actions, status, retry);
   }
-  const beforeUnload = (e) => {
-    if (active && (busy || pending || (!saved && !published))) {
-      e.preventDefault();
-      e.returnValue = '';
-    }
-  };
-  window.addEventListener('beforeunload', beforeUnload);
+  const untrack = drafts.track(() =>
+    active && (busy || pending || (!saved && !published))
+      ? [
+          {
+            key: 'survey:' + (id || 'new'),
+            label: 'Custom survey “' + definition.title + '”',
+          },
+        ]
+      : [],
+  );
   const originalDone = onDone;
   onDone = async (selected) => {
     if (!active) return;
@@ -574,9 +548,8 @@ export function mountSurveyBuilder(root, api, onDone, id) {
   };
   function dispose() {
     active = false;
-    window.removeEventListener('beforeunload', beforeUnload);
-    for (const dialog of root.querySelectorAll('dialog[open]'))
-      dialog.close();
+    untrack();
+    for (const dialog of root.querySelectorAll('dialog[open]')) dialog.close();
   }
   initialize();
   return {

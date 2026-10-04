@@ -3,6 +3,46 @@ import { put, del } from '@vercel/blob';
 import { validate } from './validation.mjs';
 import { saveSurveyResponse } from './surveys.mjs';
 import { RequestError } from './errors.mjs';
+import { insertSubmissionComment } from './submission-activity.mjs';
+
+const labels = { name: 'Name', campus: 'Campus', interests: 'Interests' };
+// Public forms do not prove who owns an address, so the note and its audit row
+// are attributed to the website, never to the email that was typed in.
+const WEBSITE = 'website';
+// A repeat signup keeps the original entry. The audit table has no details
+// column, so different details become a note on that entry ('resubmitted' in
+// its activity), and the entry returns to New so an officer sees them.
+async function recordResubmission(tx, row, input) {
+  const fresh = { name: input.name, ...input.data };
+  if (
+    Object.entries(fresh).every(
+      ([key, value]) =>
+        (key === 'name' ? row.name : (row.data[key] ?? '')) === value,
+    )
+  )
+    return;
+  const body =
+    'Unverified details submitted through the public website:\n' +
+    Object.entries(fresh)
+      .map(([key, value]) => `${labels[key] || key}: ${value || '(blank)'}`)
+      .join('\n');
+  // The same new details sent again (or a retry) add nothing new for officers.
+  const seen = await tx.query(
+    "SELECT 1 FROM club_forms.entry_comments c JOIN club_forms.audit a ON a.comment_id=c.id WHERE a.entry_id=$1 AND a.action='resubmitted' AND c.body=$2",
+    [row.id, body],
+  );
+  if (seen.rows.length) return;
+  await insertSubmissionComment(
+    tx,
+    { entryId: row.id, id: randomUUID(), body },
+    WEBSITE,
+    'resubmitted',
+  );
+  await tx.query(
+    "UPDATE club_forms.entries SET review_status='new' WHERE id=$1",
+    [row.id],
+  );
+}
 
 export async function submit(db, body, events, storage = { put, del }) {
   const input = validate(body, events);
@@ -78,6 +118,8 @@ export async function submit(db, body, events, storage = { put, del }) {
             ],
           );
       if (inserted) await saveSurveyResponse(tx, row, input.survey);
+      if (!inserted && ['join', 'subscribe'].includes(input.kind))
+        await recordResubmission(tx, row, input);
       return { ...row, alreadySubmitted: !inserted };
     });
     if (!inserted && stored.length)

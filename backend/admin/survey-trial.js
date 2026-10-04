@@ -1,9 +1,6 @@
+import { node } from './ui.js';
 import { questionFields } from '../surveys/form-ui.js';
-const node = (tag, text) => {
-  const e = document.createElement(tag);
-  if (text !== undefined) e.textContent = text;
-  return e;
-};
+import { isPaused } from './session.js';
 export function surveyTrial(definition) {
   const root = node('details');
   root.className = 'survey-trial';
@@ -56,7 +53,9 @@ export function surveyTrial(definition) {
       dialog.append(card);
     }
     root.append(dialog);
-    dialog.onclose = () => dialog.remove();
+    dialog.onclose = () => {
+      if (!isPaused()) dialog.remove();
+    };
     dialog.showModal();
   };
   root.append(preview);

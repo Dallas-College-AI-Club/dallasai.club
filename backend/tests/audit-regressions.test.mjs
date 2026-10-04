@@ -163,10 +163,9 @@ test('maintenance deletes only obsolete device tokens in bounded batches and pre
     await f.db.exec(migration);
     await f.db.exec(migration);
     const survey = (
-      await f.db.query(
-        'SELECT * FROM club_forms.custom_surveys WHERE id=$1',
-        [f.id],
-      )
+      await f.db.query('SELECT * FROM club_forms.custom_surveys WHERE id=$1', [
+        f.id,
+      ])
     ).rows[0];
     await rememberDevice(f.db, survey, {
       id: 'me',
@@ -304,10 +303,7 @@ test('custom results paginate with own answers always available and enforce acce
     assert.equal(seen.length, 22);
     assert.equal(new Set(seen).size, 22);
     assert.equal(seen.includes('person-22'), false);
-    assert.equal(
-      (await call('shared-results', { offset: '0.5' })).status,
-      400,
-    );
+    assert.equal((await call('shared-results', { offset: '0.5' })).status, 400);
     assert.equal(
       (await fetch(origin + '/api/custom-surveys?action=results&id=' + id))
         .status,
@@ -323,6 +319,16 @@ test('custom results paginate with own answers always available and enforce acce
       adminPage.results.every((r) => r.active),
       true,
     );
+    for (const malformed of ['-'.repeat(36), 'a'.repeat(36)])
+      assert.equal(
+        (
+          await fetch(
+            origin + '/api/custom-surveys?action=results&id=' + malformed,
+            { headers: { Cookie: 'test-officer=yes' } },
+          )
+        ).status,
+        400,
+      );
     await f.db.query(
       "UPDATE club_forms.custom_surveys SET definition=jsonb_set(definition,'{permissions,results}','\"admins\"') WHERE id=$1",
       [id],

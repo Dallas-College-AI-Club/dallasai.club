@@ -1,6 +1,6 @@
 # Forms and the club office
 
-Hugo serves the public website on GitHub Pages. The Vercel backend stores club signups, The AI Review subscription requests, RSVPs, AI Review submissions, workshop requests, and questions in Neon. A successful form shows an on-screen confirmation only after the database transaction commits. The form preserves its content if saving fails. Duplicate membership/subscription requests and RSVPs do not create extra records.
+Hugo serves the public website on GitHub Pages. The Vercel backend stores club signups, The AI Review subscription requests, RSVPs, AI Review submissions, workshop requests, and questions in Neon. A successful form shows an on-screen confirmation only after the database transaction commits. The form preserves its content if saving fails. Duplicate membership/subscription requests and RSVPs do not create extra records. When a repeat signup brings different details, they are added to the original entry as a note and the entry returns to New for officers to review.
 
 ## How officers learn about a signup
 
@@ -35,6 +35,13 @@ There are no email alerts, emailed confirmation links, or newsletter broadcasts 
 72-hour sessions, private settings, ordered migrations, local previews, verification,
 and deployment. Form emails and newsletters remain disabled; Neon delivers login
 codes separately. Apply all migrations required by the features below before release.
+
+When a session ends while an officer is working, Club Office hides the office and asks
+the same officer to sign in again. Typed notes, comments, contact notes and unsaved event
+or survey edits stay in that tab's memory and are not lost. Requests that were refused are
+sent once more after sign-in. Records stay in the hidden page for at most 10 minutes, then
+they are dropped. Unsaved work is never written to browser storage. Signing out, or
+signing in as a different account, discards it.
 
 ## Attachments and privacy
 
@@ -115,7 +122,8 @@ notes remain available. New submissions do not silently restore a deleted contac
 anything by itself. For a marked test contact, **Permanently delete test contact**
 shows the affected counts and requires typing its primary email. Confirmation
 erases its linked website entries, event survey answers, comments, notes, contact
-history, aliases and attachments. This cannot be restored. Regular and test
+history, aliases and attachments. This cannot be restored. The audit log keeps a
+receipt with the acting admin and the counts removed, without the address. Regular and test
 contacts cannot be merged unless their test settings are first reviewed to match.
 Concurrent changes invalidate a management confirmation and require a refresh.
 
@@ -151,7 +159,8 @@ Changes require an explicit save, are logged with the acting admin, and reject
 stale edits. Retries do not duplicate a change. Changing an email removes its old
 verification flag; existing responses with the same email/event cannot be overwritten.
 
-In Archived, **Delete permanently** opens a warning with Cancel selected first.
+Only submissions archived in the Inbox can be deleted permanently, from either the
+Inbox or Event surveys. In Archived, **Delete permanently** opens a warning with Cancel selected first.
 Confirmation removes the entry from both Inbox and Event surveys, including its
 answers, comments and attachments. Its contact and linked aliases are removed only
 when no other submission, contact note or custom survey membership uses them.

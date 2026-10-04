@@ -86,9 +86,7 @@ async function sendCode() {
   q('#survey-email-form').hidden = true;
   q('#survey-code-form').hidden = false;
   q('#code-address').textContent =
-    'If this is an approved advisor address, a code was sent to ' +
-    email +
-    '.';
+    'If this is an approved advisor address, a code was sent to ' + email + '.';
   message('Use the latest six-digit code. Check your junk folder too.');
 }
 q('#survey-email-form').onsubmit = async (event) => {

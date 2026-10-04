@@ -75,9 +75,13 @@ try {
   assert.ok(
     await page
       .locator('.footer-tagline')
-      .evaluate((el) =>
-        parseFloat(getComputedStyle(el).fontSize) <
-        parseFloat(getComputedStyle(document.querySelector('.coladde-wordmark')).fontSize),
+      .evaluate(
+        (el) =>
+          parseFloat(getComputedStyle(el).fontSize) <
+          parseFloat(
+            getComputedStyle(document.querySelector('.coladde-wordmark'))
+              .fontSize,
+          ),
       ),
   );
   await page.screenshot({ path: path.join(screens, 'coladde-footer.png') });

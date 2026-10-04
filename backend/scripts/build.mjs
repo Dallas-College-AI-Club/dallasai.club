@@ -4,8 +4,8 @@ import {
   mkdir,
   cp,
   readdir,
+  rm,
   stat,
-  unlink,
 } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -31,6 +31,12 @@ if (await stat(content).catch(() => null)) {
     ) + '\n',
   );
 }
+// public/ holds build output only. Starting empty means removed files never linger.
+await rm(path.join(root, 'public'), {
+  recursive: true,
+  force: true,
+  maxRetries: 3,
+});
 await mkdir(path.join(root, 'public/admin'), { recursive: true });
 await cp(
   path.join(root, 'admin/index.html'),
@@ -59,26 +65,15 @@ for (const file of ['index.html', 'style.css'])
     path.join(root, 'surveys', file),
     path.join(root, 'public/surveys', file),
   );
-const surveyBuild = await build({
+await build({
   entryPoints: [path.join(root, 'surveys/index.js')],
   bundle: true,
   splitting: true,
   format: 'esm',
   target: 'es2022',
   minify: true,
-  metafile: true,
   outdir: path.join(root, 'public/surveys'),
 });
-const currentSurveyFiles = new Set(
-  Object.keys(surveyBuild.metafile.outputs).map((file) => path.basename(file)),
-);
-for (const file of await readdir(path.join(root, 'public/surveys'))) {
-  if (
-    /^(advisor-ui|preview|form-ui|chunk)-[A-Z0-9]+\.js$/.test(file) &&
-    !currentSurveyFiles.has(file)
-  )
-    await unlink(path.join(root, 'public/surveys', file));
-}
 await writeFile(
   path.join(root, 'public/index.html'),
   '<!doctype html><html lang="en"><title>Dallas AI Club services</title><a href="https://dallasai.club">Club website</a> · <a href="/admin/">Club office</a></html>',

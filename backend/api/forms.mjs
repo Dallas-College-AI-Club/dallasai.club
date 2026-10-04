@@ -18,7 +18,8 @@ export const confirmations = {
 export function formsHandler({
   getDatabase = database,
   getEvents = liveEvents,
-  rateLimit = (db, req) => limit(db, req, 'forms'),
+  // Campus networks share one address, so a class can sign up together.
+  rateLimit = (db, req) => limit(db, req, 'forms', 60),
 } = {}) {
   return async function handler(req, res) {
     try {
@@ -35,6 +36,8 @@ export function formsHandler({
         : [];
       const entry = await submit(db, body, events);
       // Success is returned only after the database transaction commits.
+      // A repeat signup gets the usual reply, so the form never shows whether
+      // an address already belongs to a member.
       send(res, 200, {
         message:
           body.kind === 'rsvp'

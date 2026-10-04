@@ -1,13 +1,10 @@
+import { coreEventTypes } from '../lib/event-types.mjs';
+import { lock, node } from './ui.js';
 import { eventOverview } from './event-overview.js';
 import { mountTextFormatting } from './text-formatting.js';
 import { surveyEditor } from './survey-editor.js';
 import { mountEventActivity, activityTime } from './event-activity.js';
-const node = (tag, text, className) => {
-  const el = document.createElement(tag);
-  if (text !== undefined) el.textContent = text;
-  if (className) el.className = className;
-  return el;
-};
+import { drafts, isPaused } from './session.js';
 const blank = () => ({
   potential: false,
   requireEduEmail: false,
@@ -78,7 +75,7 @@ export function mountEventEditor(api) {
     loadGeneration = 0,
     showArchived = false;
   let images = [],
-    types = ['Workshop', 'Meeting', 'Talk', 'Hackathon', 'Social'],
+    types = [...coreEventTypes],
     previewData = null;
   const frame = q('#site-preview-frame'),
     dialog = q('#site-preview-dialog');
@@ -98,6 +95,7 @@ export function mountEventEditor(api) {
   });
   q('#close-site-preview').onclick = () => dialog.close();
   dialog.addEventListener('close', () => {
+    if (isPaused()) return;
     frame.removeAttribute('src');
     previewData = null;
   });
@@ -168,8 +166,7 @@ export function mountEventEditor(api) {
     content.images = images.map((image) => ({ ...image }));
     return content;
   }
-  const dirty = () =>
-    editing && current && JSON.stringify(values()) !== saved;
+  const dirty = () => editing && current && JSON.stringify(values()) !== saved;
   const canLeave = () =>
     !busy && (!dirty() || confirm('Discard your unsaved event changes?'));
   const state = (row) =>
@@ -181,14 +178,8 @@ export function mountEventEditor(api) {
           ? 'Published'
           : 'Published · draft changes waiting';
   function list() {
-    q('#active-events').setAttribute(
-      'aria-pressed',
-      String(!showArchived),
-    );
-    q('#archived-events').setAttribute(
-      'aria-pressed',
-      String(showArchived),
-    );
+    q('#active-events').setAttribute('aria-pressed', String(!showArchived));
+    q('#archived-events').setAttribute('aria-pressed', String(showArchived));
     q('#active-event-count').textContent = rows.filter(
       (r) => !r.archived_at,
     ).length;
@@ -226,10 +217,7 @@ export function mountEventEditor(api) {
       }
       const button = node('button', undefined, 'event-choice');
       button.classList.toggle('has-draft', isDraft);
-      button.classList.toggle(
-        'potential-choice',
-        Boolean(row.draft.potential),
-      );
+      button.classList.toggle('potential-choice', Boolean(row.draft.potential));
       button.type = 'button';
       button.setAttribute('aria-pressed', String(row.id === current?.id));
       button.append(
@@ -241,24 +229,16 @@ export function mountEventEditor(api) {
             ? 'Archived · kept for later'
             : isDraft
               ? 'DRAFT · ' +
-                (!row.published
-                  ? 'Not published'
-                  : 'Changes not published')
+                (!row.published ? 'Not published' : 'Changes not published')
               : 'Published',
-          row.archived_at
-            ? 'archived-badge'
-            : isDraft
-              ? 'draft-badge'
-              : '',
+          row.archived_at ? 'archived-badge' : isDraft ? 'draft-badge' : '',
         ),
       );
       button.onclick = () => {
         if (canLeave()) edit(row);
       };
       if (activityTime(row.updated_at))
-        button.append(
-          node('span', 'Updated ' + activityTime(row.updated_at)),
-        );
+        button.append(node('span', 'Updated ' + activityTime(row.updated_at)));
       listItems.push(button);
     }
     q('#event-list').replaceChildren(...listItems);
@@ -298,7 +278,6 @@ export function mountEventEditor(api) {
       overview.append(updatedNote, activityPanel);
     }
     q('#event-empty').hidden = true;
-    q('#event-preview').hidden = true;
     images = (row.draft.images || []).map((image) => ({ ...image }));
     renderImages();
     survey.set(row.draft.surveyQuestions);
@@ -310,10 +289,7 @@ export function mountEventEditor(api) {
       const input = form.elements.namedItem(key);
       if (!input || key === 'category') continue;
       if (input.type === 'checkbox') input.checked = value !== false;
-      else
-        input.value = Array.isArray(value)
-          ? value.join('\n')
-          : value || '';
+      else input.value = Array.isArray(value) ? value.join('\n') : value || '';
     }
     if (row.draft.requireEduEmail === undefined)
       form.elements.requireEduEmail.checked =
@@ -335,9 +311,7 @@ export function mountEventEditor(api) {
     q('#archive-event').hidden =
       Boolean(row.archived_at) || (!row.revision && !row.published);
     q('#restore-event').hidden = !row.archived_at;
-    form.querySelector('[value="publish"]').hidden = Boolean(
-      row.archived_at,
-    );
+    form.querySelector('[value="publish"]').hidden = Boolean(row.archived_at);
     q('#view-event').hidden = !row.published;
     q('#view-event').href =
       'https://dallasai.club/club.html?mode=events&event=' +
@@ -366,23 +340,14 @@ export function mountEventEditor(api) {
       const data = await api('/api/events?admin=1');
       if (version !== generation || request !== loadGeneration) return;
       rows = data.events;
-      types = data.types || [
-        'Workshop',
-        'Meeting',
-        'Talk',
-        'Hackathon',
-        'Social',
-      ];
+      types = data.types;
       typeOptions(
-        form.elements.category.value ||
-          current?.draft.category ||
-          'Workshop',
+        form.elements.category.value || current?.draft.category || 'Workshop',
       );
       list();
       say();
     } catch (e) {
-      if (version === generation && request === loadGeneration)
-        say(e.message);
+      if (version === generation && request === loadGeneration) say(e.message);
     }
   }
   async function preview(event) {
@@ -396,9 +361,7 @@ export function mountEventEditor(api) {
             { credentials: 'same-origin' },
           );
           if (!response.ok)
-            throw Error(
-              'Could not load the preview image. Please try again.',
-            );
+            throw Error('Could not load the preview image. Please try again.');
           return {
             ...image,
             previewSrc: await dataUrl(await response.blob()),
@@ -423,12 +386,7 @@ export function mountEventEditor(api) {
       revision: current.revision,
       event: values(),
     };
-    const controls = [
-      ...form.querySelectorAll('input,textarea,select,button'),
-    ];
-    controls.forEach((input) => {
-      input.disabled = true;
-    });
+    const unlock = lock(form);
     say(action === 'preview' ? 'Preparing preview…' : 'Saving…');
     try {
       const data = await api('/api/events', body);
@@ -439,9 +397,7 @@ export function mountEventEditor(api) {
       } else {
         rows = [data.event, ...rows.filter((r) => r.id !== data.event.id)];
         // Re-enable before computing the saved FormData.
-        controls.forEach((input) => {
-          input.disabled = false;
-        });
+        unlock();
         edit(data.event);
         say(
           action === 'publish'
@@ -456,11 +412,7 @@ export function mountEventEditor(api) {
                     ? 'Changes saved. This event is still archived and private.'
                     : 'Draft saved successfully. These saved changes are private until you publish. Editing is complete.',
         );
-        const confirmation = node(
-          'div',
-          undefined,
-          'event-save-confirmation',
-        );
+        const confirmation = node('div', undefined, 'event-save-confirmation');
         confirmation.setAttribute('role', 'status');
         confirmation.tabIndex = -1;
         confirmation.append(
@@ -480,9 +432,7 @@ export function mountEventEditor(api) {
       if (version === generation) say(e.message);
     } finally {
       busy = false;
-      controls.forEach((input) => {
-        input.disabled = false;
-      });
+      unlock();
     }
   }
   form.elements.category.onchange = () => {
@@ -493,6 +443,21 @@ export function mountEventEditor(api) {
     event.preventDefault();
     save(event.submitter?.value || 'draft');
   };
+  // Enter in a one-line field, checkbox or radio would submit the form, which
+  // saves the draft. Only the buttons save; Enter in the new type name adds
+  // the type.
+  form.addEventListener('keydown', (event) => {
+    if (
+      event.key !== 'Enter' ||
+      event.isComposing ||
+      !event.target.matches(
+        'input:not([type=file],[type=button],[type=submit],[type=reset],[type=image],[type=color],[type=range])',
+      )
+    )
+      return;
+    event.preventDefault();
+    if (event.target.id === 'new-type-name') q('#add-type').click();
+  });
   q('#new-event').onclick = () => {
     if (canLeave()) newEvent();
   };
@@ -524,8 +489,7 @@ export function mountEventEditor(api) {
   };
   q('#restore-event').onclick = () => {
     if (busy || !current?.archived_at) return;
-    if (dirty())
-      return say('Save your changes before restoring this event.');
+    if (dirty()) return say('Save your changes before restoring this event.');
     save('restore');
   };
   function changeCollection(archived) {
@@ -590,10 +554,7 @@ export function mountEventEditor(api) {
     }
     busy = true;
     const version = generation;
-    const controls = [
-      ...form.querySelectorAll('input,textarea,select,button'),
-    ];
-    controls.forEach((input) => (input.disabled = true));
+    const unlock = lock(form);
     q('#image-status').textContent = 'Uploading images…';
     try {
       for (const file of files) {
@@ -609,20 +570,36 @@ export function mountEventEditor(api) {
       q('#image-status').textContent = error.message;
     } finally {
       busy = false;
-      controls.forEach((input) => (input.disabled = false));
+      unlock();
       event.target.value = '';
       if (version === generation) renderImages();
     }
   };
-  window.addEventListener('beforeunload', (event) => {
-    if (dirty() || busy) {
-      event.preventDefault();
-      event.returnValue = '';
-    }
-  });
+  // The form holds the unsaved event; report it to the drafts store.
+  drafts.track(() =>
+    current && (dirty() || busy)
+      ? [
+          {
+            key:
+              'event:' +
+              (current.revision || current.published ? current.id : 'new'),
+            label:
+              'Event “' +
+              (form.elements.title.value.trim() || 'Untitled event') +
+              '”',
+          },
+        ]
+      : [],
+  );
   return {
     show: load,
     canLeave,
+    // Ten minutes paused: drop the event list, keep the editor.
+    reset() {
+      loadGeneration++;
+      rows = [];
+      q('#event-list').replaceChildren();
+    },
     leave() {
       if (!canLeave()) return false;
       discardEdits();
@@ -642,15 +619,16 @@ export function mountEventEditor(api) {
       rows = [];
       images = [];
       renderImages();
+      // A preview closed for re-authentication kept its content; drop it too.
       if (dialog.open) dialog.close();
+      frame.removeAttribute('src');
+      previewData = null;
       saved = '';
       form.reset();
       survey.set();
       form.hidden = true;
       q('#event-empty').hidden = false;
       q('#event-list').replaceChildren();
-      q('#event-preview').replaceChildren();
-      q('#event-preview').hidden = true;
       say();
     },
   };

@@ -1,8 +1,8 @@
+import { testDatabase } from './helpers/db.mjs';
 import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { randomUUID } from 'node:crypto';
-import { PGlite } from '@electric-sql/pglite';
 import { manageResponse } from '../lib/survey-management.mjs';
 import {
   reportRows,
@@ -71,19 +71,7 @@ test('summary and CSV count Any of these consistently without choosing None, Not
   );
 });
 before(async () => {
-  db = new PGlite();
-  for (const file of [
-    '003_club_forms.sql',
-    '005_screen_confirmations.sql',
-    '007_office_tools.sql',
-    '009_submission_comments.sql',
-    '010_event_surveys.sql',
-    '014_event_response_management.sql',
-    '015_contact_identity_management.sql',
-  ])
-    await db.exec(
-      await readFile(new URL('../' + file, import.meta.url), 'utf8'),
-    );
+  db = await testDatabase();
 });
 after(() => db.close());
 beforeEach(() =>
@@ -93,11 +81,7 @@ async function seed(n = 0, extra = {}) {
   const id = randomUUID();
   await db.query(
     `INSERT INTO club_forms.entries(id,kind,email,name,dedupe_key,data) VALUES($1::uuid,'rsvp',$2,$3,$1::text,'{"eventTitle":"Game night"}')`,
-    [
-      id,
-      extra.email || `person${n}@example.edu`,
-      extra.name || 'Person ' + n,
-    ],
+    [id, extra.email || `person${n}@example.edu`, extra.name || 'Person ' + n],
   );
   await db.query(
     `INSERT INTO club_forms.survey_responses(entry_id,event_id,event_title,survey_version,questions,answers) VALUES($1,'game-night','Game night',$2,$3,$4)`,
@@ -118,16 +102,8 @@ test('star/archive/restore persist separately, are retry-safe and audited; filte
   const id = await seed(),
     second = await seed(1);
   const original = (await surveyResults(db, { entryId: id })).responses[0];
-  await manageResponse(
-    db,
-    { entryId: id, action: 'star', value: true },
-    actor,
-  );
-  await manageResponse(
-    db,
-    { entryId: id, action: 'star', value: true },
-    actor,
-  );
+  await manageResponse(db, { entryId: id, action: 'star', value: true }, actor);
+  await manageResponse(db, { entryId: id, action: 'star', value: true }, actor);
   assert.equal((await surveyResults(db, { starred: true })).total, 1);
   assert.equal(
     (await surveyResults(db, { search: 'PERSON0@EXAMPLE' })).responses[0]
@@ -348,4 +324,33 @@ test('all result/contact/report endpoints require admin; mutations reject foreig
     assert.equal(r.statusCode, 401);
     assert.ok(!r.body.includes('person0'));
   }
+});
+test('event-survey summaries and CSV exports are audited once they are compiled', async () => {
+  await seed();
+  const handler = surveysHandler({
+    authorize: () => ({ email: actor }),
+    getDatabase: () => db,
+  });
+  const statuses = [];
+  for (const url of [
+    '/api/surveys?summary=1',
+    '/api/surveys?export=csv&eventId=game-night',
+    '/api/surveys?summary=1&eventId=Not%20an%20event',
+  ]) {
+    const res = { setHeader() {}, end() {} };
+    await handler({ method: 'GET', url }, res);
+    statuses.push(res.statusCode);
+  }
+  assert.deepEqual(statuses, [200, 200, 400]);
+  assert.deepEqual(
+    (
+      await db.query(
+        'SELECT actor,entry_id,action FROM club_forms.audit ORDER BY id',
+      )
+    ).rows,
+    [
+      { actor, entry_id: null, action: 'survey-summary:all' },
+      { actor, entry_id: null, action: 'survey-export-csv:game-night' },
+    ],
+  );
 });

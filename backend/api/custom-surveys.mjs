@@ -11,6 +11,7 @@ import { surveyResultPage } from '../lib/survey-results.mjs';
 import {
   respondentList,
   changeRespondent,
+  surveyId,
 } from '../lib/survey-respondents.mjs';
 import {
   linkedSurvey,
@@ -110,9 +111,7 @@ export function customSurveysHandler({
             surveys: await surveyCatalog(db),
           });
         }
-        const id = url.searchParams.get('id');
-        if (!/^[0-9a-f-]{36}$/i.test(id || ''))
-          throw new RequestError(400, 'Choose a survey.');
+        const id = surveyId(url.searchParams.get('id'));
         const survey = (
           await db.query(
             'SELECT id,title,status,content_version,definition FROM club_forms.custom_surveys WHERE id=$1',
@@ -269,8 +268,7 @@ export function customSurveysHandler({
             ...(survey.definition || definition),
             respondents: members
               .filter(
-                (m) =>
-                  !survey.definition || m.advisor_id === member.advisor_id,
+                (m) => !survey.definition || m.advisor_id === member.advisor_id,
               )
               .map((m) => ({
                 id: m.advisor_id,
@@ -287,13 +285,14 @@ export function customSurveysHandler({
             : await currentResponses(db, survey.id, member.advisor_id),
         });
       }
+      // 30 answers of 5,000 characters at up to 3 UTF-8 bytes each, plus JSON.
       if (action === 'submit' && req.method === 'POST')
         return send(res, 200, {
           receipt: await submitSurvey(
             db,
             req,
             link,
-            await jsonBody(req, 150000),
+            await jsonBody(req, 500000),
           ),
         });
       throw new RequestError(404, 'Survey action unavailable.');

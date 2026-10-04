@@ -1,9 +1,8 @@
+import { testDatabase } from './helpers/db.mjs';
 import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import http from 'node:http';
-import { PGlite } from '@electric-sql/pglite';
 import { changeSubmission } from '../lib/submission-management.mjs';
 import { adminHandler } from '../api/admin.mjs';
 import { surveysHandler } from '../api/surveys.mjs';
@@ -32,20 +31,7 @@ const questions = [
   },
 ];
 before(async () => {
-  db = new PGlite();
-  for (const file of [
-    '003_club_forms.sql',
-    '005_screen_confirmations.sql',
-    '007_office_tools.sql',
-    '009_submission_comments.sql',
-    '010_event_surveys.sql',
-    '014_event_response_management.sql',
-    '015_contact_identity_management.sql',
-    '016_submission_management.sql',
-  ])
-    await db.exec(
-      await readFile(new URL('../' + file, import.meta.url), 'utf8'),
-    );
+  db = await testDatabase();
   const config = {
     getDatabase: () => db,
     getEvents: async () => [],
@@ -129,9 +115,7 @@ const edit = (id, extra = {}) => ({
   name: 'Edited Person',
   email: 'changed@example.edu',
   data: {},
-  answers: [
-    { questionId: qid, value: [questions[0].options[1]], other: '' },
-  ],
+  answers: [{ questionId: qid, value: [questions[0].options[1]], other: '' }],
   ...extra,
 });
 const remove = (id, extra = {}) => ({
@@ -146,9 +130,7 @@ const request = (path, body, headers = {}) =>
     method: body ? 'POST' : 'GET',
     headers: {
       'x-test-admin': 'yes',
-      ...(body
-        ? { 'Content-Type': 'application/json', Origin: origin }
-        : {}),
+      ...(body ? { 'Content-Type': 'application/json', Origin: origin } : {}),
       ...headers,
     },
     ...(body ? { body: JSON.stringify(body) } : {}),
@@ -262,8 +244,7 @@ test('Inbox edits regular questions without changing event metadata and enforces
     401,
   );
   assert.equal((await request('/api/admin', body)).status, 200);
-  const entry = (await (await request('/api/admin?edit=' + id)).json())
-    .entry;
+  const entry = (await (await request('/api/admin?edit=' + id)).json()).entry;
   assert.equal(entry.data.message, 'New wording');
   assert.equal(entry.data.eventTitle, 'Game night');
   assert.equal((await request('/api/surveys', remove(id))).status, 409);
@@ -297,17 +278,14 @@ test('archive-only deletion cascades response details, retries safely, removes o
     'contact_emails',
   ])
     assert.equal(
-      (
-        await db.query(
-          `SELECT count(*)::int AS n FROM club_forms.${table}`,
-        )
-      ).rows[0].n,
+      (await db.query(`SELECT count(*)::int AS n FROM club_forms.${table}`))
+        .rows[0].n,
       0,
       table,
     );
   assert.equal(
-    (await db.query('SELECT * FROM club_forms.contact_file_deletions'))
-      .rows.length,
+    (await db.query('SELECT * FROM club_forms.contact_file_deletions')).rows
+      .length,
     1,
   );
   assert.equal(
@@ -339,18 +317,40 @@ test('archive-only deletion cascades response details, retries safely, removes o
     1,
   );
 });
-test('survey archive permits permanent deletion and removes the Inbox entry too', async () => {
+test('permanent deletion needs the Inbox archive on both surfaces; a survey archive alone is not enough', async () => {
   const id = await seed();
-  assert.equal((await request('/api/surveys', remove(id))).status, 409);
   await manageResponse(
     db,
     { action: 'archive', entryId: id, value: true },
     actor,
   );
+  for (const path of ['/api/surveys', '/api/admin']) {
+    const refused = await request(path, remove(id));
+    assert.equal(refused.status, 409, path);
+    assert.equal(
+      (await refused.json()).error,
+      'Archive this RSVP in Inbox before deleting it permanently.',
+    );
+  }
+  assert.equal((await request('/api/admin?edit=' + id)).status, 200);
+  await request('/api/admin', { action: 'review', id, status: 'closed' });
   const body = remove(id);
   assert.equal((await request('/api/surveys', body)).status, 200);
   assert.equal((await request('/api/surveys', body)).status, 200);
   assert.equal((await request('/api/admin?edit=' + id)).status, 404);
+  const question = await seed({ kind: 'question', survey: false });
+  const refused = await request('/api/admin', remove(question));
+  assert.equal(refused.status, 409);
+  assert.equal(
+    (await refused.json()).error,
+    'Archive this submission in Inbox before deleting it permanently.',
+  );
+  await request('/api/admin', {
+    action: 'review',
+    id: question,
+    status: 'closed',
+  });
+  assert.equal((await request('/api/admin', remove(question))).status, 200);
 });
 test('deletion retains identities with another alias submission or independent contact notes', async () => {
   const id = await seed({ archived: true, email: 'old@example.edu' });
@@ -378,8 +378,7 @@ test('deletion retains identities with another alias submission or independent c
   );
   await changeSubmission(db, remove(id), actor);
   assert.equal(
-    (await db.query('SELECT * FROM club_forms.contact_emails')).rows
-      .length,
+    (await db.query('SELECT * FROM club_forms.contact_emails')).rows.length,
     2,
   );
   const noteId = await seed({ archived: true, email: 'note@example.edu' });
@@ -395,6 +394,31 @@ test('deletion retains identities with another alias submission or independent c
     (
       await db.query(
         "SELECT * FROM club_forms.contacts WHERE email='note@example.edu'",
+      )
+    ).rows.length,
+    1,
+  );
+  // A custom survey respondent keeps their contact record too.
+  const memberId = await seed({ archived: true, email: 'member@example.edu' });
+  const surveyId = randomUUID();
+  await db.query(
+    `INSERT INTO club_forms.custom_surveys(id,slug,title,content_version,link_digest,expires_at)
+     VALUES($1,'retention-check','Retention check','v1','retention-digest',now()+interval '1 day')`,
+    [surveyId],
+  );
+  await db.query(
+    `INSERT INTO club_forms.custom_survey_members(survey_id,advisor_id,display_name,email)
+     VALUES($1,'member','Member','member@example.edu')`,
+    [surveyId],
+  );
+  assert.equal(
+    (await changeSubmission(db, remove(memberId), actor)).contactRemoved,
+    false,
+  );
+  assert.equal(
+    (
+      await db.query(
+        "SELECT * FROM club_forms.contacts WHERE email='member@example.edu'",
       )
     ).rows.length,
     1,
@@ -425,8 +449,5 @@ test('CSV has one line per response and explicit columns for chosen dates, inclu
     rows[1],
     /"Any of these","Yes \(Any of these\)","Yes \(Any of these\)","Yes","No","No"/,
   );
-  assert.match(
-    rows[2],
-    /"October 17 — evening","No","Yes","No","No","No"/,
-  );
+  assert.match(rows[2], /"October 17 — evening","No","Yes","No","No","No"/);
 });

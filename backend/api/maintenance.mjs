@@ -17,12 +17,7 @@ export default async function handler(req, res) {
     if (!['GET', 'POST'].includes(req.method))
       throw new RequestError(405, 'Method not allowed.');
     const db = database();
-    await db.query(
-      'DELETE FROM club_forms.rate_limits WHERE expires_at<now()',
-    );
-    await db.query(
-      "DELETE FROM club_forms.webhook_events WHERE created_at<now()-interval '30 days'",
-    );
+    await db.query('DELETE FROM club_forms.rate_limits WHERE expires_at<now()');
     const contactFilesCleaned = await cleanupContactFiles(db);
     const surveyDevicesCleaned = await cleanupSurveyDevices(db);
     send(res, 200, {

@@ -1,4 +1,4 @@
-import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 import { get, del } from '@vercel/blob';
 import { database } from '../lib/db.mjs';
 import { requireAdmin, adminOrigin } from '../lib/auth.mjs';
@@ -13,6 +13,8 @@ import { cleanupContactFiles } from '../lib/contacts.mjs';
 import {
   submissionActivity,
   addSubmissionComment,
+  insertSubmissionComment,
+  staleStatus,
 } from '../lib/submission-activity.mjs';
 export { csvCell } from '../lib/submission-export.mjs';
 export function adminHandler({
@@ -55,10 +57,9 @@ export function adminHandler({
           if (!uuid.test(id))
             throw new RequestError(400, 'Invalid attachment.');
           const file = (
-            await db.query(
-              'SELECT * FROM club_forms.attachments WHERE id=$1',
-              [id],
-            )
+            await db.query('SELECT * FROM club_forms.attachments WHERE id=$1', [
+              id,
+            ])
           ).rows[0];
           if (!file) throw new RequestError(404, 'Attachment not found.');
           const blob = await storage.get(file.pathname, {
@@ -77,12 +78,7 @@ export function adminHandler({
             'Content-Disposition',
             `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`,
           );
-          await new Promise((resolve, reject) => {
-            const stream = Readable.fromWeb(blob.stream);
-            stream.on('error', reject);
-            res.on('finish', resolve);
-            stream.pipe(res);
-          });
+          await pipeline(blob.stream, res);
           return;
         }
         const savedEvents = (
@@ -177,28 +173,44 @@ export function adminHandler({
         const comment = await addSubmissionComment(db, body, user.email);
         return send(res, 200, { comment });
       }
+      const statuses = ['new', 'reviewed', 'closed'];
       if (
         body.action !== 'review' ||
         !uuid.test(body.id || '') ||
-        !['new', 'reviewed', 'closed'].includes(body.status)
+        !statuses.includes(body.status) ||
+        (body.from != null && !statuses.includes(body.from))
       )
         throw new RequestError(400, 'Invalid update.');
-      await db.transaction(async (tx) => {
+      // An optional note and the status change commit together or not at all.
+      const comment = await db.transaction(async (tx) => {
+        const saved =
+          body.comment != null
+            ? await insertSubmissionComment(
+                tx,
+                {
+                  entryId: body.id,
+                  id: body.comment.id,
+                  body: body.comment.body,
+                },
+                user.email,
+              )
+            : undefined;
+        // `from` is the status the officer saw; a different one means someone
+        // else changed it first.
         const result = await tx.query(
-          'UPDATE club_forms.entries SET review_status=$2 WHERE id=$1 RETURNING id',
-          [body.id, body.status],
+          'UPDATE club_forms.entries SET review_status=$2 WHERE id=$1 AND ($3::text IS NULL OR review_status=$3) RETURNING id',
+          [body.id, body.status, body.from ?? null],
         );
-        if (!result.rows.length)
-          throw new RequestError(404, 'Submission not found.');
+        if (!result.rows.length) await staleStatus(tx, body.id);
         await tx.query(
           'INSERT INTO club_forms.audit(actor,entry_id,action) VALUES($1,$2,$3)',
           [user.email, body.id, 'review:' + body.status],
         );
+        return saved;
       });
-      send(res, 200, { saved: true });
+      send(res, 200, comment ? { saved: true, comment } : { saved: true });
     } catch (error) {
-      if (!res.headersSent) fail(res, error);
-      else res.destroy();
+      fail(res, error);
     }
   };
 }

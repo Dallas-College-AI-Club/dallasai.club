@@ -1,3 +1,4 @@
+import { testDatabase } from './helpers/db.mjs';
 import { adminHandler } from '../api/admin.mjs';
 import { surveysHandler } from '../api/surveys.mjs';
 import { formsHandler } from '../api/forms.mjs';
@@ -7,7 +8,6 @@ import http from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { PGlite } from '@electric-sql/pglite';
 import { eventHandler } from '../api/events.mjs';
 import { RequestError } from '../lib/errors.mjs';
 import { submit } from '../lib/submissions.mjs';
@@ -20,25 +20,7 @@ const workshop = JSON.parse(
   await readFile(new URL('./fixtures/workshop.json', import.meta.url), 'utf8'),
 );
 await mkdir(screens, { recursive: true });
-const db = new PGlite();
-await db.exec('CREATE SCHEMA club_forms');
-for (const file of [
-  '003_club_forms.sql',
-  '005_screen_confirmations.sql',
-  '007_office_tools.sql',
-  '009_submission_comments.sql',
-  '010_event_surveys.sql',
-  '014_event_response_management.sql',
-  '015_contact_identity_management.sql',
-  '016_submission_management.sql',
-])
-  await db.exec(await readFile(new URL('../' + file, import.meta.url), 'utf8'));
-await db.exec(
-  await readFile(new URL('../006_event_editor.sql', import.meta.url), 'utf8'),
-);
-await db.exec(
-  await readFile(new URL('../008_event_archive.sql', import.meta.url), 'utf8'),
-);
+const db = await testDatabase();
 const authorized = (req) => {
   if (req.headers.cookie?.includes('test-officer=signed-in'))
     return { email: 'officer@example.com' };
@@ -256,6 +238,14 @@ try {
   await admin
     .getByRole('button', { name: 'Close preview', exact: true })
     .click();
+  // Preview locks the form while it runs. Unlocking must not enable the
+  // reorder buttons that were already disabled at the ends of the list.
+  assert.equal(
+    await choiceBox
+      .getByRole('button', { name: 'Move choice 1 up', exact: true })
+      .isDisabled(),
+    true,
+  );
   await admin.getByRole('button', { name: 'Save draft', exact: true }).click();
   await admin
     .locator('#event-status')
@@ -354,7 +344,7 @@ try {
   );
   await page
     .locator('#event-rsvp [name=email]')
-    .fill('MKim23@Student.DallasCollege.edu');
+    .fill('Member23@Student.DallasCollege.edu');
   await page.evaluate(async () => {
     await (await import('/content/events.js')).refreshEvents();
   });
@@ -410,7 +400,7 @@ try {
   );
   assert.match(
     await admin.locator('#survey-results').textContent(),
-    /mkim23@student.dallascollege.edu/,
+    /member23@student.dallascollege.edu/,
   );
   assert.match(
     await admin.locator('#survey-results').textContent(),
@@ -437,12 +427,30 @@ try {
   await admin.locator('#survey-view').selectOption('active');
   await admin.locator('#survey-results .survey-response').waitFor();
   assert.equal(
-    await admin.locator('#survey-results .survey-response').getAttribute('open'),
+    await admin
+      .locator('#survey-results .survey-response')
+      .getAttribute('open'),
     null,
   );
   await admin.locator('#survey-results .survey-response > summary').click();
-  await admin.getByRole('button', { name: '☆ Star', exact: true }).click();
+  // Starring patches the card in place: scroll, open card and focus stay.
+  const starButton = admin.getByRole('button', { name: '☆ Star', exact: true });
+  await starButton.evaluate((el) => el.scrollIntoView({ block: 'center' }));
+  const scrolled = await admin.evaluate(() => scrollY);
+  assert.ok(scrolled > 0);
+  await starButton.click();
   await admin.getByText('Response starred.', { exact: true }).waitFor();
+  assert.equal(
+    await admin.evaluate(() => document.activeElement.textContent),
+    '★ Unstar',
+  );
+  assert.equal(await admin.evaluate(() => scrollY), scrolled);
+  assert.equal(
+    await admin
+      .locator('#survey-results .survey-response')
+      .evaluate((el) => el.open),
+    true,
+  );
   await admin.locator('#survey-starred').check();
   await admin.locator('#survey-results .survey-response').waitFor();
   await admin.locator('#survey-results .survey-response > summary').click();
@@ -452,7 +460,10 @@ try {
       exact: true,
     })
     .waitFor();
-  assert.equal(await admin.locator('#survey-results .survey-response').count(), 0);
+  assert.equal(
+    await admin.locator('#survey-results .survey-response').count(),
+    0,
+  );
   await admin.locator('#survey-view').selectOption('archived');
   await admin.locator('#survey-results .survey-response > summary').click();
   await admin.getByRole('button', { name: 'Restore', exact: true }).click();
@@ -460,7 +471,7 @@ try {
     .getByText('Response restored to Active.', { exact: true })
     .waitFor();
   await admin.locator('#survey-view').selectOption('active');
-  await admin.locator('#survey-search').fill('MKim23@Student');
+  await admin.locator('#survey-search').fill('Member23@Student');
   await admin.locator('#survey-results .survey-response').waitFor();
   await admin
     .getByRole('button', { name: 'Compile event summary', exact: true })
@@ -517,7 +528,7 @@ try {
     .click();
   const download = await downloading;
   const csv = await readFile(await download.path(), 'utf8');
-  assert.match(csv, /mkim23@student.dallascollege.edu/);
+  assert.match(csv, /member23@student.dallascollege.edu/);
   assert.match(csv, /Other: Chess/);
   await reportDialog
     .getByText(
@@ -589,7 +600,9 @@ try {
   await admin.getByRole('button', { name: 'Save note', exact: true }).click();
   await admin.getByText('Follow-up note saved.', { exact: true }).waitFor();
   assert.match(
-    await admin.locator('.contact-dialog:not(.submission-dialog)').textContent(),
+    await admin
+      .locator('.contact-dialog:not(.submission-dialog)')
+      .textContent(),
     /Called to confirm/,
   );
   assert.equal(
@@ -642,7 +655,7 @@ try {
     .waitFor();
   assert.match(
     await contacts.textContent(),
-    /mkim23@student.dallascollege.edu/,
+    /member23@student.dallascollege.edu/,
   );
   assert.match(await contacts.textContent(), /e0000001@student.dcccd.edu/);
   for (const [width, height] of [
@@ -753,7 +766,10 @@ try {
       { exact: true },
     )
     .waitFor();
-  assert.equal(await admin.locator('#survey-results .survey-response').count(), 0);
+  assert.equal(
+    await admin.locator('#survey-results .survey-response').count(),
+    0,
+  );
   await admin
     .getByRole('button', { name: 'Contacts & follow-up', exact: true })
     .click();

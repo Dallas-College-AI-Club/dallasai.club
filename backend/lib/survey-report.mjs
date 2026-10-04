@@ -14,9 +14,7 @@ const impliedChoice = (question, values, choice) =>
 export const answerValues = (answer) =>
   (Array.isArray(answer?.value) ? answer.value : [answer?.value || ''])
     .filter(Boolean)
-    .map((value) =>
-      value === '__other__' ? 'Other: ' + answer.other : value,
-    );
+    .map((value) => (value === '__other__' ? 'Other: ' + answer.other : value));
 export async function reportRows(db, filter) {
   const { where, values } = responseFilter(filter);
   // Never silently export or summarize only the visible page.
@@ -156,9 +154,7 @@ export function responsesCSV(rows) {
     [header, ...lines]
       .map((line) =>
         line
-          .map((value) =>
-            csvCell(String(value ?? '').replace(/[\r\n]+/g, ' ')),
-          )
+          .map((value) => csvCell(String(value ?? '').replace(/[\r\n]+/g, ' ')))
           .join(','),
       )
       .join('\r\n') +

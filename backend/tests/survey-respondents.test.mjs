@@ -300,3 +300,45 @@ test('respondent administration requires officer authentication and same origin,
     await f.db.close();
   }
 });
+
+test('a self-registered respondent with a blank name can be restored; a new one still needs a name', async () => {
+  const f = await fixture();
+  try {
+    // Self-registration stores a blank name rather than the email address.
+    await f.db.query(
+      "INSERT INTO club_forms.custom_survey_members(survey_id,advisor_id,display_name,email,active) VALUES($1,'self-registered','','joined@example.com',false)",
+      [f.id],
+    );
+    const restore = {
+      surveyId: f.id,
+      action: 'add',
+      name: '',
+      email: 'Joined@example.com',
+      expectedRevision: 0,
+      requestId: randomUUID(),
+    };
+    assert.deepEqual(await changeRespondent(f.db, actor, restore), {
+      revision: 1,
+    });
+    const list = await respondentList(f.db, f.id);
+    const member = list.members.find((m) => m.email === 'joined@example.com');
+    assert.deepEqual(
+      [member.advisor_id, member.active, member.display_name],
+      ['self-registered', true, ''],
+    );
+    assert.equal(list.activity[0].action, 'respondent_restored');
+    for (const email of ['someone-new@example.com', 'not-an-email'])
+      await assert.rejects(
+        changeRespondent(f.db, actor, {
+          ...restore,
+          email,
+          expectedRevision: 1,
+          requestId: randomUUID(),
+        }),
+        { status: 400 },
+      );
+    assert.equal((await respondentList(f.db, f.id)).revision, 1);
+  } finally {
+    await f.db.close();
+  }
+});

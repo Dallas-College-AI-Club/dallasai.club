@@ -1,9 +1,5 @@
+import { node } from './ui.js';
 import { responseSections } from '../surveys/results-ui.js';
-const node = (tag, text) => {
-  const e = document.createElement(tag);
-  if (text !== undefined) e.textContent = text;
-  return e;
-};
 export function mountSurveyArchive(root, api) {
   let generation = 0,
     offset = 0,
@@ -55,9 +51,18 @@ export function mountSurveyArchive(root, api) {
             ),
           );
         section.append(
-          responseSections([{ ...response, active: true }], {
-            definition: response.definition,
-          }),
+          responseSections(
+            [
+              {
+                ...response,
+                display_name: response.display_name || response.email,
+                active: true,
+              },
+            ],
+            {
+              definition: response.definition,
+            },
+          ),
         );
         const link = node('a', 'Manage respondent access in Custom surveys');
         link.href = '#custom-survey=' + response.survey_id;
@@ -66,7 +71,7 @@ export function mountSurveyArchive(root, api) {
       }
       const pages = node('nav');
       pages.setAttribute('aria-label', 'Archived survey response pages');
-      const pageSize = data.pageSize || 20;
+      const { pageSize } = data;
       for (const [label, disabled, next] of [
         ['Previous archived responses', offset === 0, offset - pageSize],
         ['Next archived responses', !data.hasMore, offset + pageSize],

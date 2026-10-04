@@ -1,7 +1,6 @@
+import { testDatabase } from './helpers/db.mjs';
 import test, { before, after, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
-import { PGlite } from '@electric-sql/pglite';
 import { randomUUID } from 'node:crypto';
 import {
   draftContent,
@@ -34,25 +33,7 @@ const draft = {
 const legacy = [publicContent('legacy-event', draft)];
 let db;
 before(async () => {
-  db = new PGlite();
-  await db.exec('CREATE SCHEMA club_forms');
-  for (const file of [
-    '003_club_forms.sql',
-    '005_screen_confirmations.sql',
-    '007_office_tools.sql',
-  ])
-    await db.exec(
-      await readFile(new URL('../' + file, import.meta.url), 'utf8'),
-    );
-  await db.exec(
-    await readFile(new URL('../006_event_editor.sql', import.meta.url), 'utf8'),
-  );
-  await db.exec(
-    await readFile(
-      new URL('../008_event_archive.sql', import.meta.url),
-      'utf8',
-    ),
-  );
+  db = await testDatabase();
 });
 beforeEach(() => db.exec('TRUNCATE club_forms.events CASCADE'));
 after(() => db.close());

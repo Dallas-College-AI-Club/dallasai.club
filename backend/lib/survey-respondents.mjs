@@ -57,10 +57,10 @@ export async function changeRespondent(db, actor, body) {
     email =
       typeof body.email === 'string' ? body.email.trim().toLowerCase() : '';
     name = typeof body.name === 'string' ? body.name.trim() : '';
+    // A blank name is checked below: only a restored member may have one.
     if (
       !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
       email.length > 254 ||
-      !name ||
       name.length > 120 ||
       /[\x00-\x1f]/.test(name) ||
       body.advisorId !== undefined
@@ -126,6 +126,13 @@ export async function changeRespondent(db, actor, body) {
         throw new RequestError(
           409,
           'This email is already an active respondent.',
+        );
+      // Self-registered respondents can have a blank name, so restoring them
+      // must not require one. A new respondent still needs a name.
+      if (!member && !name)
+        throw new RequestError(
+          400,
+          'Enter the respondent’s name and a valid email address.',
         );
       if (member) {
         await tx.query(

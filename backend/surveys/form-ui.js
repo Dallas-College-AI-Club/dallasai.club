@@ -338,10 +338,7 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
     main.append(node('h2', 'Review your answers'));
     for (const q of definition.questions) {
       const card = node('section', undefined, 'question');
-      card.append(
-        node('h3', q.title),
-        node('p', answerText(q), 'answer-copy'),
-      );
+      card.append(node('h3', q.title), node('p', answerText(q), 'answer-copy'));
       main.append(card);
     }
     const label = node('label', undefined, 'form-option'),

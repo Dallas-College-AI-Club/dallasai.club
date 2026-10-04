@@ -58,7 +58,8 @@ export async function proxyNeonAuth(
   req,
   res,
   {
-    approvedEmail = (email) => emailList(process.env.ADMIN_EMAILS).includes(email),
+    approvedEmail = (email) =>
+      emailList(process.env.ADMIN_EMAILS).includes(email),
     rateLimit = (request, path) =>
       limit(
         database(),

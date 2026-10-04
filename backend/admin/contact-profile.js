@@ -1,15 +1,4 @@
-const node = (tag, text, cls) => {
-  const el = document.createElement(tag);
-  if (text !== undefined) el.textContent = text;
-  if (cls) el.className = cls;
-  return el;
-};
-const button = (text, action) => {
-  const el = node('button', text, 'secondary');
-  el.type = 'button';
-  el.onclick = action;
-  return el;
-};
+import { node, button } from './ui.js';
 export function contactProfile(
   contact,
   save,
@@ -75,9 +64,7 @@ export function contactProfile(
     const row = node('div', undefined, 'contact-alias-row'),
       details = node('div');
     details.append(node('strong', alias.email));
-    const used = Boolean(
-      alias.submissions || alias.notes || alias.membership,
-    );
+    const used = Boolean(alias.submissions || alias.notes || alias.membership);
     details.append(
       node(
         'p',
@@ -121,11 +108,7 @@ export function contactProfile(
       });
       const remove = button('Remove unused address', () => {
         if (used || dirty()) return;
-        const confirmation = node(
-          'div',
-          undefined,
-          'contact-confirmation',
-        );
+        const confirmation = node('div', undefined, 'contact-confirmation');
         confirmation.append(
           node(
             'p',
@@ -156,11 +139,8 @@ export function contactProfile(
   const dirty = () =>
     name.value !== contact.name || email.value !== contact.email;
   function sync() {
-    remember(
-      dirty() ? { name: name.value, primaryEmail: email.value } : null,
-    );
-    for (const row of removeButtons)
-      row.button.disabled = row.used || dirty();
+    remember(dirty() ? { name: name.value, primaryEmail: email.value } : null);
+    for (const row of removeButtons) row.button.disabled = row.used || dirty();
     hint.textContent = dirty()
       ? 'Save or cancel the name and primary email changes before removing an address.'
       : '';

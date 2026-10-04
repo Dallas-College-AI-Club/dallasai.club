@@ -152,7 +152,7 @@ test('library combines title search with collection and keeps draft, event, cust
   ];
   const root = new Element('main');
   const controller = mountCustomSurveys(root, async (url) =>
-    url.startsWith('/api/events') ? { events: [] } : { surveys },
+    url.startsWith('/api/custom-surveys') ? { surveys } : { events: [] },
   );
   await controller.library(root, '', '  AI WORKSHOP  ');
   assert.deepEqual(

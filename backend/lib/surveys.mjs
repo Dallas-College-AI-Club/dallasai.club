@@ -149,15 +149,17 @@ export function validateSurvey(body, event) {
       if (
         question.type === 'multiple' &&
         values.length > 1 &&
-        values.some((choice) =>
-          question.exclusiveOption !== undefined
-            ? choice === question.options[question.exclusiveOption]
-            : [
-                'any of these',
-                'none of these',
-                'none of the above',
-                'any of the above',
-              ].includes(choice.trim().toLowerCase()),
+        values.some(
+          (choice) =>
+            choice === question.options[question.exclusiveOption] ||
+            [
+              'any of these',
+              'none of these',
+              'none of these times',
+              'not sure yet',
+              'none of the above',
+              'any of the above',
+            ].includes(choice.trim().toLowerCase()),
         )
       )
         throw new RequestError(

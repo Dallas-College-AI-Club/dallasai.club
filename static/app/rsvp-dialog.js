@@ -178,14 +178,15 @@ export function rsvpDialog(root, { preview = false } = {}) {
           const exclusive = inputs.find(
             (input) =>
               input.checked &&
-              (question.exclusiveOption !== undefined
-                ? input.value === question.options[question.exclusiveOption]
-                : [
-                    "any of these",
-                    "none of these",
-                    "none of the above",
-                    "any of the above",
-                  ].includes(input.value.trim().toLowerCase())),
+              (input.value === question.options[question.exclusiveOption] ||
+                [
+                  "any of these",
+                  "none of these",
+                  "none of these times",
+                  "not sure yet",
+                  "none of the above",
+                  "any of the above",
+                ].includes(input.value.trim().toLowerCase())),
           );
           for (const input of inputs) {
             input.disabled = Boolean(exclusive?.checked && input !== exclusive);

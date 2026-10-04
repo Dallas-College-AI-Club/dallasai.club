@@ -947,6 +947,8 @@ body .club-utilities > a.join-effect:active {
   }
 }
 body .club-utilities > a.join-effect {
+  --button: #185abd;
+  --accent: #7db7ff;
   background:
     radial-gradient(
       ellipse at 100% 0,

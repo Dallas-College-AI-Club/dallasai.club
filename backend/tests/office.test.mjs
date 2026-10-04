@@ -110,6 +110,79 @@ test('unpublished RSVP snapshots stay in history and cannot resurrect upcoming e
   );
 });
 
+test('the counts poll returns counts and arrivals, never rows', async () => {
+  const insert = (kind, created, data = {}) =>
+    db.query(
+      'INSERT INTO club_forms.entries(id,kind,email,dedupe_key,data,created_at) VALUES($1::uuid,$2,$3,$1::text,$4,$5)',
+      [
+        randomUUID(),
+        kind,
+        kind + '@example.edu',
+        JSON.stringify(data),
+        created,
+      ],
+    );
+  await insert('join', '2026-01-01T00:00:00Z');
+  await insert('question', '2026-01-01T01:00:00Z');
+  const first = await (await request('/api/admin?counts=1')).json();
+  assert.deepEqual(Object.keys(first).sort(), [
+    'arrived',
+    'arrivedInView',
+    'asOf',
+    'configured',
+    'counts',
+    'latest',
+    'user',
+  ]);
+  assert.equal(first.user, 'admin@example.com');
+  assert.deepEqual(first.configured, { uploads: true });
+  assert.ok(Number.isFinite(Date.parse(first.asOf)));
+  assert.equal(Date.parse(first.latest), Date.parse('2026-01-01T01:00:00Z'));
+  // Without `since` nothing counts as arrived.
+  assert.deepEqual([first.arrived, first.arrivedInView], [0, 0]);
+  assert.deepEqual(
+    Object.keys(first.counts.find((row) => row.kind === 'join')).sort(),
+    ['closed', 'kind', 'latest', 'new', 'reviewed', 'total'],
+  );
+  // Two questions and an RSVP arrive after `since`.
+  const since = '2026-01-02T00:00:00Z';
+  await insert('question', '2026-01-03T00:00:00Z');
+  await insert('question', '2026-01-03T00:01:00Z');
+  await insert('rsvp', '2026-01-03T00:02:00Z', { eventId: 'next' });
+  // An officer moves an older submission back to New: not an arrival.
+  await db.query(
+    "UPDATE club_forms.entries SET review_status='reviewed' WHERE kind='join'",
+  );
+  await db.query(
+    "UPDATE club_forms.entries SET review_status='new' WHERE kind='join'",
+  );
+  const poll = async (query) =>
+    (await request('/api/admin?counts=1&since=' + since + query)).json();
+  const all = await poll('');
+  assert.equal(all.arrived, 3);
+  assert.equal(all.arrivedInView, 3);
+  assert.equal(all.entries, undefined);
+  assert.equal(all.counts.find((row) => row.kind === 'question').total, 3);
+  assert.equal(all.counts.find((row) => row.kind === 'question').new, 3);
+  assert.equal(Date.parse(all.latest), Date.parse('2026-01-03T00:02:00Z'));
+  // arrivedInView follows the Inbox filters; arrived does not.
+  const questions = await poll('&status=new&kind=question');
+  assert.deepEqual([questions.arrived, questions.arrivedInView], [3, 2]);
+  const reviewed = await poll('&status=reviewed');
+  assert.deepEqual([reviewed.arrived, reviewed.arrivedInView], [3, 0]);
+  const rsvps = await poll('&kind=rsvp&eventId=next');
+  assert.equal(rsvps.arrivedInView, 1);
+  assert.equal(
+    (await request('/api/admin?counts=1&since=yesterday')).status,
+    400,
+  );
+  assert.equal(
+    (await request('/api/admin?counts=1&kind=everything')).status,
+    400,
+  );
+  assert.equal((await request('/api/admin?counts=1', null, false)).status, 401);
+});
+
 test('inbox rejects invalid pages and refuses a silently incomplete CSV export', async () => {
   for (const offset of ['1.5', '-1', 'Infinity', 'no', '100001'])
     assert.equal((await request('/api/admin?offset=' + offset)).status, 400);

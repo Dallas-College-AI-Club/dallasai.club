@@ -1,5 +1,5 @@
 import { testDatabase } from './helpers/db.mjs';
-import { chromium } from '@playwright/test';
+import { chromium, expect } from '@playwright/test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import { readFile, mkdir } from 'node:fs/promises';
@@ -267,7 +267,7 @@ try {
   assert.equal(records[0].draft.images.length, 1);
   assert.match(
     await page.locator('#event-updated').textContent(),
-    /Last updated by officer@example.com/,
+    /Last updated by You · /,
   );
   assert.equal(
     await page.locator('#event-updated time').getAttribute('datetime'),
@@ -284,11 +284,11 @@ try {
       .locator('#event-activity-list .activity-actor')
       .first()
       .textContent(),
-    'By officer@example.com',
+    'By You',
   );
   assert.match(
     await page.locator('#event-activity-list time').first().textContent(),
-    /C[DS]T$/,
+    / CT$/,
   );
   assert.ok(
     await page.evaluate(
@@ -618,6 +618,10 @@ try {
     .getByRole('button', { name: 'Archive event', exact: true })
     .click();
   await page
+    .locator('#confirm-dialog')
+    .getByRole('button', { name: 'Archive event', exact: true })
+    .click();
+  await page
     .locator('#event-status')
     .getByText(
       'Archived. Content, images, and RSVPs are kept. You can edit this event here or restore it as a draft.',
@@ -765,7 +769,29 @@ try {
   });
   if (!(await page.locator('#event-form').isVisible()))
     await page.locator('#edit-selected-event').click();
-  await page.getByRole('button', { name: 'Unpublish', exact: true }).click();
+  // Public changes ask in the shared dialog; Escape cancels and returns
+  // focus to the button.
+  const unpublish = page.getByRole('button', {
+    name: 'Unpublish',
+    exact: true,
+  });
+  await unpublish.click();
+  const confirmation = page.locator('#confirm-dialog');
+  await expect(confirmation).toBeVisible();
+  await expect(
+    confirmation.getByRole('button', { name: 'Unpublish event', exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(confirmation).toBeHidden();
+  await expect(unpublish).toBeFocused();
+  assert.equal(
+    (await (await fetch(origin + '/api/events')).json()).events.length,
+    1,
+  );
+  await unpublish.click();
+  await confirmation
+    .getByRole('button', { name: 'Unpublish event', exact: true })
+    .click();
   await page
     .locator('#event-status')
     .getByText('Unpublished. Your draft and existing RSVPs are kept.', {
@@ -781,6 +807,7 @@ try {
     0,
   );
   assert.equal(await publicPage.locator('#event-rsvp:visible').count(), 0);
+  await page.locator('#account-button').click();
   await page.getByRole('button', { name: 'Sign out', exact: true }).click();
   await page
     .getByRole('button', { name: 'Send sign-in code', exact: true })

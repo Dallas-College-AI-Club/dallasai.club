@@ -1,12 +1,33 @@
-import { busy, focusFallback, lock, node } from './ui.js';
+import {
+  busy,
+  button,
+  download,
+  focusFallback,
+  h,
+  lock,
+  menu,
+  node,
+  time,
+  toast,
+} from './ui.js';
 import { mountSurveyResults } from './survey-results.js';
 import { mountCustomSurveys } from './custom-surveys.js';
 import { mountSurveyArchive } from './survey-archive.js';
 import { mountEventEditor } from './event-editor.js';
 import { mountBrowserAlerts } from './browser-alerts.js';
 import { submissionActivity } from './submission-activity.js';
-import { activityTime } from './event-activity.js';
 import { submissionEditor } from './submission-editor.js';
+import {
+  KINDS,
+  clock,
+  dateTime,
+  day,
+  fieldLabel,
+  kindLabel,
+  plural,
+  statusLabel,
+} from './format.js';
+import * as router from './router.js';
 import {
   accountChanged,
   api,
@@ -14,85 +35,77 @@ import {
   isPaused,
   loadFailed,
   ready,
-  signedInAgain,
   startSession,
 } from './session.js';
 const q = (s) => document.querySelector(s);
-const labels = {
-  join: 'Club signups',
-  subscribe: 'The AI Review subscription',
-  rsvp: 'Event RSVPs (upcoming only)',
-  contribution: 'AI Review submissions',
-  workshop: 'Workshop requests',
-  question: 'Questions',
-};
 let offset = 0,
   signedIn = false,
-  loading = false,
-  reloadPending = false,
   sessionGeneration = 0;
-let lastNewCount = null,
-  lastReceived = 0,
-  // This officer's status changes being saved, and saved so far (see load).
-  reviewsSaving = 0,
-  reviewsSaved = 0;
+// The Inbox list shown: API status, kind and event, or one submission (id).
+// It comes from the route; loadedKey is the request it shows.
+let view = { status: 'new', kind: '', eventId: '', id: '' },
+  loadedKey = null,
+  listRequest = null,
+  inboxList = '#/inbox';
+// The counts poll: arrivals are submissions created after `since` (the
+// newest one the list has shown); alerts fire when the newest submission
+// time moves on, so status changes never count as arrivals.
+let since = null,
+  lastLatest = null,
+  lastCounts = null,
+  lastPoll = 0,
+  polling = false,
+  // A poll requested while one is in flight runs again afterwards, so counts
+  // read before an officer's own save are replaced straight away.
+  pollAgain = false,
+  // Counts the officer's own saved status changes; a list response read
+  // before one of them is stale and is fetched again.
+  saves = 0,
+  newCount = 0,
+  routeTitle = 'Inbox';
+const latestOf = (counts) =>
+  counts.reduce(
+    (max, row) =>
+      row.latest && (!max || Date.parse(row.latest) > Date.parse(max))
+        ? row.latest
+        : max,
+    null,
+  );
 const alerts = mountBrowserAlerts(
   q('#enable-alerts'),
   q('#notification-status'),
+  () => router.go('#/inbox'),
 );
-function status(message = '') {
-  q('#status').textContent = message;
-}
+menu(q('#account-button'), q('#account-menu'));
+// The editor's sticky action bar is a bottom bar while it shows: it joins
+// --dock, so toasts sit above it and focused fields scroll clear of it.
+new ResizeObserver(([entry]) =>
+  document.documentElement.style.setProperty(
+    '--editor-bar',
+    entry.target.offsetHeight ? entry.target.offsetHeight + 12 + 'px' : '0px',
+  ),
+).observe(q('.primary-actions'));
+q('.skip-link').onclick = (event) => {
+  event.preventDefault();
+  q('#main').focus();
+};
+const say = (text, type = 'success') => toast({ type, text });
 let exporting = false;
 q('#export').onclick = async (event) => {
   event.preventDefault();
   if (exporting) return;
   exporting = true;
-  const generation = sessionGeneration,
-    href = q('#export').href,
-    get = () =>
-      fetch(href, {
-        credentials: 'same-origin',
-        cache: 'no-store',
-        signal: AbortSignal.timeout(30000),
-      });
+  const generation = sessionGeneration;
   q('#export').setAttribute('aria-disabled', 'true');
-  status('Preparing CSV…');
   try {
-    let response = await get();
-    // The session ended: download once the officer has signed in again.
-    if (response.status === 401) {
-      await signedInAgain();
-      response = await get();
-    }
-    if (generation !== sessionGeneration) return;
-    if (!response.ok) {
-      const result = await response.json().catch(() => null);
-      throw new Error(
-        result?.error ||
-          'Could not export these submissions. Please try again.',
-      );
-    }
-    if (!response.headers.get('content-type')?.startsWith('text/csv'))
-      throw new Error(
-        'The export service is temporarily unavailable. Please try again.',
-      );
-    const blob = await response.blob();
-    if (generation !== sessionGeneration) return;
-    const url = URL.createObjectURL(blob),
-      link = node('a');
-    link.href = url;
-    link.download = 'club-submissions.csv';
-    link.click();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-    status('CSV download started.');
+    if (
+      await download(q('#export').href, 'club-submissions.csv', {
+        isCurrent: () => generation === sessionGeneration,
+      })
+    )
+      say('CSV download started.');
   } catch (error) {
-    if (generation === sessionGeneration)
-      status(
-        error.name === 'TypeError' || error.name === 'TimeoutError'
-          ? 'Could not download the CSV. Check your connection and try again.'
-          : error.message,
-      );
+    if (generation === sessionGeneration) say(error.message, 'error');
   } finally {
     exporting = false;
     q('#export').removeAttribute('aria-disabled');
@@ -102,37 +115,27 @@ q('#export').onclick = async (event) => {
 function clearOffice() {
   sessionGeneration++;
   signedIn = false;
-  lastNewCount = null;
-  lastReceived = 0;
-  q('#inbox-alert').textContent = '';
-  document.title = 'Club office · Dallas AI Club';
+  since = lastLatest = lastCounts = loadedKey = listRequest = null;
+  setNewCount(0);
+  q('#arrivals').hidden = true;
+  q('#inbox-updated').replaceChildren();
   q('#entries').replaceChildren();
-  q('#events-pane').hidden = true;
-  q('#inbox-pane').hidden = false;
-  for (const pane of ['inbox', 'events', 'surveys'])
-    q('#' + pane + '-tab').setAttribute(
-      'aria-pressed',
-      String(pane === 'inbox'),
-    );
+  shownEntry = customShown = null;
   editor.clear();
   surveys.clear();
   customSurveys.clear();
   surveyArchive.clear();
   responses.clear();
-  q('#surveys-pane').hidden = true;
 }
 function filters() {
-  const params = new URLSearchParams([
-    ...new FormData(q('#filters')).entries(),
-    ['offset', String(offset)],
-  ]);
-  const entry = new URLSearchParams(location.hash.slice(1)).get('entry');
-  if (entry) {
-    params.set('id', entry);
-    params.delete('status');
-    params.delete('kind');
-    params.delete('eventId');
+  const params = new URLSearchParams();
+  if (view.id) params.set('id', view.id);
+  else {
+    params.set('status', view.status);
+    params.set('kind', view.kind);
+    params.set('eventId', view.eventId);
   }
+  params.set('offset', String(offset));
   return params;
 }
 function renderEntry(entry) {
@@ -143,27 +146,23 @@ function renderEntry(entry) {
   heading.append(
     node('strong', entry.name || entry.email),
     node('span', entry.email),
-    node('small', activityTime(entry.created_at)),
+    h('small', {}, time(entry.created_at)),
   );
   card.append(heading);
   const top = node('div', undefined, 'entry-top');
   top.append(
     node(
       'span',
-      entry.review_status === 'closed' ? 'archived' : entry.review_status,
+      statusLabel(entry.review_status),
       'badge ' + entry.review_status,
     ),
-    node('span', entry.kind === 'rsvp' ? 'Event RSVP' : labels[entry.kind]),
-    node('span', activityTime(entry.created_at)),
+    node('span', kindLabel(entry.kind)),
+    time(entry.created_at),
   );
   card.append(top);
   if (entry.edit_revision > 0)
     card.append(
-      node(
-        'p',
-        'Edited by an admin · ' + activityTime(entry.updated_at),
-        'hint',
-      ),
+      node('p', 'Edited by an admin · ' + dateTime(entry.updated_at), 'hint'),
     );
   const address = node('a', entry.email);
   address.href = 'mailto:' + entry.email;
@@ -176,30 +175,30 @@ function renderEntry(entry) {
   );
   if (entry.kind === 'rsvp') {
     card.append(
-      node(
-        'p',
-        entry.data.eventTitle +
-          ' · ' +
-          (entry.data.eventDate?.slice(0, 10) || 'TBD'),
-      ),
+      node('p', entry.data.eventTitle + ' · ' + day(entry.data.eventDate)),
     );
-    if (entry.data.hasSurvey) {
-      const button = node('button', 'View survey answers');
-      button.onclick = () => {
-        if (showPane('surveys', true) === false) return;
-        history.replaceState({}, '', '#survey=' + entry.id);
-        surveys.show(entry.id);
-      };
-      card.append(button);
-    }
+    if (entry.data.hasSurvey)
+      card.append(
+        button(
+          'View survey answers',
+          () =>
+            router.go(
+              '#/surveys/events/' +
+                encodeURIComponent(entry.data.eventId) +
+                '/r/' +
+                entry.id,
+            ),
+          '',
+        ),
+      );
   }
   const details = node('details');
   details.append(node('summary', 'Submission details'));
   for (const [key, value] of Object.entries(entry.data)) {
-    if (['hasSurvey', 'potential'].includes(key)) continue;
+    if (['hasSurvey', 'potential', 'eventId'].includes(key)) continue;
     details.append(
-      node('strong', key.replace(/([A-Z])/g, ' $1')),
-      node('pre', key === 'eventDate' && !value ? 'TBD' : String(value)),
+      node('strong', fieldLabel(key)),
+      node('pre', key === 'eventDate' ? day(value) : String(value)),
     );
   }
   for (const file of entry.attachments) {
@@ -212,14 +211,15 @@ function renderEntry(entry) {
   details.append(node('p', 'Reference: ' + entry.id));
   card.append(details);
   const actions = node('div', undefined, 'entry-actions');
-  const edit = node('button', 'Edit response');
-  edit.onclick = () => responses.open(entry.id);
-  actions.append(edit);
-  if (entry.review_status === 'closed') {
-    const remove = node('button', 'Delete permanently', 'danger');
-    remove.onclick = () => responses.open(entry.id, { remove: true });
-    actions.append(remove);
-  }
+  actions.append(button('Edit response', () => responses.open(entry.id), ''));
+  if (entry.review_status === 'closed')
+    actions.append(
+      button(
+        'Delete permanently',
+        () => responses.open(entry.id, { remove: true }),
+        'danger',
+      ),
+    );
   // While the comment box has text, a status button also saves the note.
   const statusButtons = [];
   for (const [value, label, withNote] of [
@@ -228,8 +228,7 @@ function renderEntry(entry) {
     ['new', 'Mark new', 'Save note & mark new'],
   ])
     if (value !== entry.review_status) {
-      const b = node('button', label);
-      b.onclick = () => review(card, entry, value);
+      const b = button(label, () => review(card, entry, value), '');
       statusButtons.push([b, label, withNote]);
       actions.append(b);
     }
@@ -250,8 +249,6 @@ async function review(card, entry, value) {
     version = sessionGeneration,
     release = busy(card),
     unlock = lock(card, 'textarea');
-  let saved = false;
-  reviewsSaving++;
   try {
     await api('/api/admin', {
       action: 'review',
@@ -260,20 +257,18 @@ async function review(card, entry, value) {
       from: entry.review_status,
       ...(note ? { comment: { id: note.id, body: note.text.trim() } } : {}),
     });
-    saved = true;
+    saves++;
     if (note) drafts.delete(key);
     if (version !== sessionGeneration) return;
-    // This officer's own change moves the New count; it is not an arrival.
-    if (lastNewCount !== null)
-      lastNewCount += (value === 'new') - (entry.review_status === 'new');
     // A card dropped while the session was paused just reports the result.
     if (card.isConnected) removeEntry(card);
-    status(
+    say(
       (value === 'closed'
         ? 'Submission moved to Archived. Comments and history are kept.'
         : 'Submission moved to ' + (value === 'new' ? 'New.' : 'Reviewed.')) +
         (note ? ' Your note was saved with it.' : ''),
     );
+    poll();
   } catch (error) {
     if (version !== sessionGeneration) return;
     release();
@@ -293,12 +288,7 @@ async function review(card, entry, value) {
       card.replaceWith(fresh);
       fresh.querySelector('summary').focus();
     }
-    status(error.message);
-  } finally {
-    reviewsSaving--;
-    reviewsSaved++;
-    // Counts and the title follow the change without waiting for the poll.
-    if (saved && version === sessionGeneration) load({ background: true });
+    say(error.message, 'error');
   }
 }
 // Removes a card in place; focus moves to the next card, never to <body>.
@@ -326,7 +316,8 @@ function groupedEntries(entries) {
   return [...groups].map(([key, rows]) => {
     const group = node('details', undefined, 'survey-event-group inbox-group');
     group.dataset.group = key;
-    group.dataset.label = rows[0].data.eventTitle || labels[rows[0].kind];
+    group.dataset.label =
+      rows[0].data.eventTitle || kindLabel(rows[0].kind, 'plural');
     group.open = true;
     group.append(
       node(
@@ -338,350 +329,289 @@ function groupedEntries(entries) {
     return group;
   });
 }
-async function load({ background = false } = {}) {
-  if (loading) {
-    reloadPending ||= !background;
-    return;
-  }
-  loading = true;
-  if (location.hash === '#archived-survey-questions') selectSurveyArchive();
+// The badge, the title, the per-kind counts and the setup notice. Both the
+// list and the counts poll call this; it never touches the list itself.
+function updateCounts(data) {
+  setNewCount(data.counts.reduce((sum, row) => sum + row.new, 0));
+  q('#counts').replaceChildren(
+    ...KINDS.map((kind) => {
+      const count = data.counts.find((x) => x.kind === kind) || {
+          new: 0,
+          total: 0,
+        },
+        box = node('div', undefined, 'count');
+      box.append(
+        node('span', kindLabel(kind, 'plural')),
+        node('strong', count.new.toLocaleString('en-US')),
+        node('small', `new · ${count.total.toLocaleString('en-US')} total`),
+      );
+      return box;
+    }),
+  );
+  const missing = Object.entries(data.configured)
+    .filter(([, value]) => !value)
+    .map(([key]) => ({ uploads: 'Image uploads' })[key] || key);
+  const setup = missing.length
+    ? missing.join(', ') + ' aren’t set up on this deployment.'
+    : '';
+  q('#configuration').hidden = !setup;
+  q('#configuration').textContent = setup;
+  q('#help-setup-status').textContent = setup || 'Everything is set up.';
+  q('#account-button').classList.toggle('needs-setup', Boolean(setup));
+}
+function setNewCount(count) {
+  newCount = count;
+  const badge = q('#nav-new-count');
+  badge.hidden = !count;
+  badge.replaceChildren(
+    count.toLocaleString('en-US'),
+    node('span', ' new', 'visually-hidden'),
+  );
+  setTitle();
+}
+// People's names never go into titles: they land in browser history.
+function setTitle() {
+  document.title =
+    (signedIn && newCount > 0 ? '(' + newCount + ') ' : '') +
+    (signedIn ? routeTitle + ' · ' : '') +
+    'Club Office';
+}
+function updated(error) {
+  q('#inbox-updated').replaceChildren(
+    ...(error
+      ? ['Couldn’t update · ', button('Retry', poll, 'btn-quiet')]
+      : ['Updated ' + clock(new Date())]),
+  );
+}
+// Loads the Inbox list for the current filters. A second call for the same
+// filters joins the request already running.
+function load() {
+  const key = filters().toString();
+  if (listRequest?.key === key) return listRequest.promise;
+  const request = { key, promise: fetchList(key) };
+  listRequest = request;
+  request.promise.finally(() => {
+    if (listRequest === request) listRequest = null;
+  });
+  return request.promise;
+}
+async function fetchList(key) {
   const generation = sessionGeneration,
-    requestedFilters = filters().toString(),
-    savedBefore = reviewsSaved;
-  let overlapped = false;
+    savesBefore = saves;
   q('#entries').setAttribute('aria-busy', 'true');
-  q('#refresh').disabled = true;
+  q('#refresh').setAttribute('aria-busy', 'true');
   try {
-    const data = await api('/api/admin?' + requestedFilters);
-    if (generation !== sessionGeneration) return;
+    const data = await api('/api/admin?' + key);
+    if (generation !== sessionGeneration || filters().toString() !== key)
+      return;
+    // Read before this officer's own status change: its rows and counts are
+    // stale, so read them again rather than undo the change on screen.
+    if (saves !== savesBefore) return fetchList(key);
     // Another tab signed in as someone else: never show their data here.
     if (signedIn && accountChanged(data.user)) return;
-    if (filters().toString() !== requestedFilters) {
-      reloadPending = true;
-      return;
-    }
     if (!data.entries.length && offset > 0) {
       offset = Math.max(0, offset - 50);
-      reloadPending = true;
-      return;
+      return load();
     }
-    const linkedId = new URLSearchParams(location.hash.slice(1)).get('entry');
-    const linkedEntry =
-      linkedId && data.entries.find((entry) => entry.id === linkedId);
-    if (linkedEntry) selectInboxStatus(linkedEntry.review_status);
     if (!signedIn) {
       signedIn = true;
       ready(data.user);
     }
-    q('#identity').textContent = 'Signed in as ' + data.user;
-    const newCount = data.counts.reduce((sum, row) => sum + row.new, 0);
-    document.title =
-      (newCount ? '(' + newCount + ') ' : '') + 'Club office · Dallas AI Club';
-    const latest = Math.max(
-      0,
-      ...data.counts.map((row) => Date.parse(row.latest) || 0),
-    );
-    // Counts that overlap an officer's own save are read again after it, and
-    // that load does the arrival check.
-    overlapped = reviewsSaving > 0 || reviewsSaved !== savedBefore;
-    if (!overlapped) {
-      if (
-        lastNewCount !== null &&
-        (newCount > lastNewCount || latest > lastReceived)
-      ) {
-        q('#inbox-alert').textContent =
-          'New submissions arrived. Review the inbox below.';
-        alerts.notify();
-      }
-      lastNewCount = newCount;
-      lastReceived = latest;
-    }
+    loadedKey = key;
+    lastPoll = Date.now();
+    since = latestOf(data.counts) || since;
+    lastLatest ??= Date.parse(since) || 0;
+    lastCounts ??= data.counts;
+    q('#arrivals').hidden = true;
+    toast.resolve('inbox-load');
+    updateCounts(data);
+    updated();
     const eventSelect = q('#filters [name="eventId"]'),
-      selectedEvent = eventSelect.value,
-      past = q('#filters [name="kind"]').value === 'rsvp-past';
+      past = view.kind === 'rsvp-past';
     eventSelect.replaceChildren(
       new Option(past ? 'All past events' : 'All upcoming events', ''),
       ...(data.events || [])
         .filter((e) => Boolean(e.past) === past)
-        .map(
-          (e) =>
-            new Option(e.title + ' · ' + (e.date?.slice(0, 10) || 'TBD'), e.id),
-        ),
+        .map((e) => new Option(e.title + ' · ' + day(e.date), e.id)),
     );
-    if (
-      [...eventSelect.options].some((option) => option.value === selectedEvent)
-    )
-      eventSelect.value = selectedEvent;
-    if (location.hash === '#events' && q('#events-pane').hidden)
-      showPane('events');
-    if (
-      (location.hash === '#surveys' ||
-        location.hash.startsWith('#survey=') ||
-        location.hash.startsWith('#custom-survey=')) &&
-      q('#surveys-pane').hidden
-    )
-      showPane('surveys', true);
-    q('#counts').replaceChildren(
-      ...Object.entries(labels).map(([kind, label]) => {
-        const count = data.counts.find((x) => x.kind === kind) || {
-            new: 0,
-            total: 0,
-          },
-          box = node('div', undefined, 'count');
-        box.append(
-          node('span', label),
-          node('strong', count.new),
-          node('small', `new · ${count.total} total`),
-        );
-        return box;
-      }),
+    eventSelect.value = view.eventId;
+    const expanded = new Map(
+      [...q('#entries').querySelectorAll('[id^="entry-"]')].map((card) => [
+        card.id,
+        [
+          card.open,
+          ...[...card.querySelectorAll('details')].map((panel) => panel.open),
+        ],
+      ]),
     );
-    const missing = Object.entries(data.configured)
-      .filter(([, value]) => !value)
-      .map(([key]) => key);
-    q('#configuration').hidden = !missing.length;
-    q('#configuration').textContent =
-      'Setup still needed: ' + missing.join(', ') + '.';
-    if (
-      !background ||
-      (!drafts.list().some((draft) => draft.key.startsWith('note:')) &&
-        !q('#entries').contains(document.activeElement))
-    ) {
-      const expanded = new Map(
-        [...q('#entries').querySelectorAll('[id^="entry-"]')].map((card) => [
-          card.id,
-          [
-            card.open,
-            ...[...card.querySelectorAll('details')].map((panel) => panel.open),
-          ],
-        ]),
-      );
-      const groupStates = new Map(
-        [...q('#entries').querySelectorAll('[data-group]')].map((group) => [
-          group.dataset.group,
-          group.open,
-        ]),
-      );
-      q('#entries').replaceChildren(
-        ...(data.entries.length
-          ? groupedEntries(data.entries)
-          : [node('p', 'No submissions match these filters.')]),
-      );
-      for (const group of q('#entries').querySelectorAll('[data-group]'))
-        group.open = groupStates.get(group.dataset.group) ?? true;
-      for (const card of q('#entries').querySelectorAll('[id^="entry-"]')) {
-        card.open = expanded.get(card.id)?.[0] || false;
-        [...card.querySelectorAll('details')].forEach((panel, index) => {
-          panel.open = expanded.get(card.id)?.[index + 1] || false;
-        });
-      }
+    const groupStates = new Map(
+      [...q('#entries').querySelectorAll('[data-group]')].map((group) => [
+        group.dataset.group,
+        group.open,
+      ]),
+    );
+    q('#entries').replaceChildren(
+      ...(data.entries.length
+        ? groupedEntries(data.entries)
+        : [
+            node(
+              'p',
+              view.id
+                ? 'This submission no longer exists or the link is incomplete.'
+                : 'No submissions match these filters.',
+            ),
+          ]),
+    );
+    for (const group of q('#entries').querySelectorAll('[data-group]'))
+      group.open = groupStates.get(group.dataset.group) ?? true;
+    for (const card of q('#entries').querySelectorAll('[id^="entry-"]')) {
+      card.open = expanded.get(card.id)?.[0] || false;
+      [...card.querySelectorAll('details')].forEach((panel, index) => {
+        panel.open = expanded.get(card.id)?.[index + 1] || false;
+      });
     }
     q('#previous').disabled = offset === 0;
     q('#next').disabled = !data.hasMore;
     q('#page').textContent = 'Page ' + (offset / 50 + 1);
     q('#export').href = '/api/admin?' + filters() + '&export=csv';
-    surveyArchive.load(filters(), { background });
-    const linked = new URLSearchParams(location.hash.slice(1)).get('entry');
-    if (linked) {
-      const card = document.getElementById('entry-' + linked);
-      if (card) {
-        card.open = true;
-        card.closest('.inbox-group').open = true;
-        card.querySelector('details').open = true;
-        card.scrollIntoView({ block: 'center' });
-        history.replaceState({}, '', location.pathname);
-      }
+    surveyArchive.load(filters());
+    // A submission's own address opens its card.
+    const card = view.id && document.getElementById('entry-' + view.id);
+    if (card) {
+      selectInboxStatus(data.entries[0].review_status);
+      card.open = true;
+      card.querySelector('details').open = true;
+      card.scrollIntoView({ block: 'center' });
     }
   } catch (error) {
     if (generation !== sessionGeneration) return;
     if (!signedIn) loadFailed(error);
-    else status(error.message);
+    else
+      toast({
+        type: 'error',
+        key: 'inbox-load',
+        text: error.message,
+        action: { label: 'Retry', run: load },
+      });
   } finally {
-    loading = false;
-    q('#refresh').disabled = false;
-    q('#entries').setAttribute('aria-busy', 'false');
-    if (reloadPending) {
-      reloadPending = false;
-      load();
-    } else if (overlapped && !reviewsSaving) load({ background: true });
+    if (generation === sessionGeneration) {
+      q('#refresh').removeAttribute('aria-busy');
+      q('#entries').setAttribute('aria-busy', 'false');
+    }
   }
 }
+// The background poll: counts only. It updates the badge, the title, the
+// counts, the arrivals button and browser alerts, and never touches the
+// list, an open card or an editor, or moves focus. Failures only change
+// the 'Updated' line.
+async function poll() {
+  if (polling) pollAgain = true;
+  if (!signedIn || isPaused() || polling) return;
+  polling = true;
+  const generation = sessionGeneration,
+    params = new URLSearchParams({ counts: '1' });
+  if (since) params.set('since', since);
+  if (!view.id)
+    for (const [key, value] of [
+      ['status', view.status],
+      ['kind', view.kind],
+      ['eventId', view.eventId],
+    ])
+      if (value) params.set(key, value);
+  try {
+    const data = await api('/api/admin?' + params);
+    if (generation !== sessionGeneration || accountChanged(data.user)) return;
+    lastPoll = Date.now();
+    since ??= data.asOf;
+    updateCounts(data);
+    const latest = Date.parse(data.latest) || 0;
+    if (lastLatest !== null && latest > lastLatest)
+      alerts.notify(arrivals(data.counts));
+    lastLatest = Math.max(lastLatest ?? 0, latest);
+    lastCounts = data.counts;
+    const pill = q('#arrivals');
+    pill.hidden = !data.arrivedInView || Boolean(view.id);
+    pill.textContent = plural(data.arrivedInView, 'new submission') + ' · Show';
+    updated();
+  } catch (error) {
+    if (generation === sessionGeneration) updated(error);
+  } finally {
+    polling = false;
+    if (pollAgain) {
+      pollAgain = false;
+      poll();
+    }
+  }
+}
+// '3 new: 2 questions, 1 signup', from the counts since the last poll.
+function arrivals(counts) {
+  const lower = (word) => (/^[A-Z]{2}/.test(word) ? word : word.toLowerCase());
+  const parts = counts
+    .map((row) => [
+      row.total -
+        (lastCounts?.find((before) => before.kind === row.kind)?.total ??
+          row.total),
+      row.kind,
+    ])
+    .filter(([n]) => n > 0);
+  const total = parts.reduce((sum, [n]) => sum + n, 0);
+  return total
+    ? total.toLocaleString('en-US') +
+        ' new: ' +
+        parts
+          .map(([n, kind]) =>
+            plural(n, lower(kindLabel(kind)), lower(kindLabel(kind, 'plural'))),
+          )
+          .join(', ')
+    : 'New submissions are waiting in the Inbox.';
+}
+q('#arrivals').onclick = () => {
+  q('#inbox-pane [data-focus-fallback]').focus();
+  q('#arrivals').hidden = true;
+  offset = 0;
+  load();
+};
+setInterval(() => {
+  if (!document.hidden || alerts.enabled) poll();
+}, 60000);
+// Coming back to the tab checks at once when the last check is stale.
+const pollIfStale = () => {
+  if (!document.hidden && Date.now() - lastPoll > 15000) poll();
+};
+document.addEventListener('visibilitychange', pollIfStale);
+window.addEventListener('focus', pollIfStale);
 function selectInboxStatus(value) {
-  q('#filters [name="status"]').value = value;
   document.querySelectorAll('[data-inbox-status]').forEach((button) => {
     button.setAttribute(
       'aria-pressed',
       String(button.dataset.inboxStatus === value),
     );
   });
-  q('#inbox-view-note').textContent = {
-    new: 'New submissions awaiting review.',
-    reviewed: 'Reviewed submissions. Archive them when follow-up is complete.',
-    closed:
-      'Archived submissions. Comments and history are kept. Mark an entry new or reviewed to restore it.',
-  }[value];
 }
-for (const button of document.querySelectorAll('[data-inbox-status]')) {
+// Filters live in the address (replaceState), so Back and reload keep them.
+const showList = (changes) =>
+  router.go(
+    router.build('inbox', {
+      status: router.routeStatus(view.status),
+      type: view.kind,
+      event: view.eventId,
+      ...changes,
+    }),
+    { replace: true },
+  );
+for (const button of document.querySelectorAll('[data-inbox-status]'))
   button.onclick = () => {
-    if (button.getAttribute('aria-pressed') === 'true') return;
-    selectInboxStatus(button.dataset.inboxStatus);
-    offset = 0;
-    if (location.hash !== '#events')
-      history.replaceState({}, '', location.pathname);
-    status();
-    q('#entries').replaceChildren(node('p', 'Loading submissions…'));
-    load();
+    if (button.getAttribute('aria-pressed') === 'true' && !view.id) return;
+    showList({ status: router.routeStatus(button.dataset.inboxStatus) });
   };
-}
-const editor = mountEventEditor(api);
-const responses = submissionEditor(api, async (result) => {
-  if (result.removed) drafts.delete('note:' + result.entryId);
+q('#filters').onsubmit = (event) => event.preventDefault();
+q('#filters [name="kind"]').onchange = (event) =>
+  showList({ type: event.target.value, event: '' });
+q('#filters [name="eventId"]').onchange = (event) =>
+  showList({ event: event.target.value });
+q('#refresh').onclick = async () => {
   await load();
-  status(
-    result.removed
-      ? result.filesCleaned === false
-        ? 'Response deleted. Attachment removal is queued for retry.'
-        : 'Response permanently deleted.'
-      : 'Response updated.',
-  );
-});
-// A deleted response or a purged contact changed the inbox. Contact purge
-// removes that person's drafts itself; other drafts stay.
-const surveys = mountSurveyResults(api, (result) => {
-  offset = 0;
-  if (result?.removed) drafts.delete('note:' + result.entryId);
-  load();
-});
-const customSurveys = mountCustomSurveys(q('#custom-surveys-root'), api);
-const surveyArchive = mountSurveyArchive(q('#archived-survey-questions'), api);
-function surveyGroup(custom, id = '') {
-  const alreadyCustom = !q('#custom-surveys-root').hidden;
-  if (
-    custom === alreadyCustom &&
-    !id &&
-    !q('#surveys-pane').hidden &&
-    q(custom ? '#custom-surveys-root' : '#survey-results').childNodes.length
-  )
-    return true;
-  if ((!custom || id) && !customSurveys.leave()) return false;
-  q('#custom-surveys-root').hidden = !custom;
-  q('#event-surveys-root').hidden = custom;
-  q('#custom-surveys-group').setAttribute('aria-pressed', String(custom));
-  q('#event-surveys-group').setAttribute('aria-pressed', String(!custom));
-  if (custom) id ? customSurveys.show(id) : customSurveys.load();
-  return true;
-}
-q('#custom-surveys-group').onclick = () => surveyGroup(true);
-q('#event-surveys-group').onclick = () => {
-  if (!q('#event-surveys-root').hidden) return;
-  if (surveyGroup(false) === false) return;
-  history.replaceState({}, '', '#surveys');
-  surveys.show();
-};
-function showPane(name, keepHash = false) {
-  const currentPane = ['inbox', 'events', 'surveys'].find(
-    (pane) => !q('#' + pane + '-pane').hidden,
-  );
-  if (name === currentPane && !keepHash) return true;
-  if (name !== 'events' && !q('#events-pane').hidden && !editor.leave())
-    return false;
-  if (
-    name !== 'surveys' &&
-    !q('#surveys-pane').hidden &&
-    !customSurveys.leave()
-  )
-    return false;
-  for (const pane of ['inbox', 'events', 'surveys']) {
-    q('#' + pane + '-pane').hidden = name !== pane;
-    q('#' + pane + '-tab').setAttribute('aria-pressed', String(name === pane));
-  }
-  if (!keepHash)
-    history.replaceState(
-      {},
-      '',
-      name === 'inbox' ? location.pathname : '#' + name,
-    );
-  if (name === 'events') editor.show();
-  if (name === 'surveys') {
-    const customId = new URLSearchParams(location.hash.slice(1)).get(
-      'custom-survey',
-    );
-    if (customId) {
-      if (surveyGroup(true, customId) === false) return false;
-      return;
-    }
-    if (surveyGroup(false) === false) return false;
-    surveys.show(
-      new URLSearchParams(location.hash.slice(1)).get('survey') || '',
-    );
-  }
-}
-function selectSurveyArchive() {
-  selectInboxStatus('closed');
-  q('#filters [name="kind"]').value = 'question';
-  q('#filters [name="eventId"]').value = '';
-  q('#event-filter-label').hidden = true;
-  history.replaceState({}, '', location.pathname);
-}
-window.addEventListener('hashchange', (event) => {
-  function navigate(name) {
-    if (showPane(name, true) !== false) return true;
-    history.replaceState(
-      {},
-      '',
-      new URL(event.oldURL).hash || location.pathname,
-    );
-    return false;
-  }
-  if (signedIn && (location.hash === '#events' || !location.hash)) {
-    navigate(location.hash === '#events' ? 'events' : 'inbox');
-    return;
-  }
-  if (signedIn && location.hash === '#archived-survey-questions') {
-    if (!navigate('inbox')) return;
-    offset = 0;
-    selectSurveyArchive();
-    load();
-    return;
-  }
-  if (
-    signedIn &&
-    (location.hash === '#surveys' ||
-      location.hash.startsWith('#survey=') ||
-      location.hash.startsWith('#custom-survey='))
-  ) {
-    navigate('surveys');
-    return;
-  }
-  if (!signedIn || !new URLSearchParams(location.hash.slice(1)).get('entry'))
-    return;
-  if (!navigate('inbox')) return;
-  offset = 0;
-  q('#filters [name="kind"]').value = '';
-  q('#filters [name="eventId"]').value = '';
-  q('#event-filter-label').hidden = true;
-  load();
-});
-q('#surveys-tab').onclick = () => showPane('surveys');
-q('#events-tab').onclick = () => showPane('events');
-q('#inbox-tab').onclick = () => showPane('inbox');
-q('#refresh').onclick = () => {
-  status();
-  load();
-};
-q('#filters').onsubmit = (event) => {
-  event.preventDefault();
-  offset = 0;
-  load();
-};
-q('#filters [name="kind"]').onchange = () => {
-  const rsvp = ['rsvp', 'rsvp-past'].includes(
-    q('#filters [name="kind"]').value,
-  );
-  q('#event-filter-label').hidden = !rsvp;
-  q('#filters [name="eventId"]').value = '';
-  offset = 0;
-  load();
+  poll();
 };
 q('#previous').onclick = () => {
   offset = Math.max(0, offset - 50);
@@ -691,26 +621,207 @@ q('#next').onclick = () => {
   offset += 50;
   load();
 };
-setInterval(() => {
-  if (signedIn && !isPaused() && (!document.hidden || alerts.enabled))
-    load({ background: true });
-}, 60000);
+const editor = mountEventEditor(api);
+const responses = submissionEditor(api, async (result) => {
+  if (result.removed) drafts.delete('note:' + result.entryId);
+  await load();
+  // The list was rebuilt under the closed dialog: focus the response's
+  // Edit button again, or the list when it is gone.
+  if (document.activeElement === document.body) {
+    const card = document.getElementById('entry-' + result.entryId),
+      edit = card?.querySelector('.entry-actions button');
+    (edit?.checkVisibility()
+      ? edit
+      : card?.querySelector('summary') || q('#inbox-pane [data-focus-fallback]')
+    ).focus();
+  }
+  say(
+    result.removed
+      ? result.filesCleaned === false
+        ? 'Response deleted. Attachment removal is queued for retry.'
+        : 'Response permanently deleted.'
+      : 'Response updated.',
+  );
+});
+// A deleted response or a purged contact changed the inbox. Contact purge
+// removes that person's drafts itself; other drafts stay.
+const surveys = mountSurveyResults(
+  api,
+  (result) => {
+    offset = 0;
+    if (result?.removed) drafts.delete('note:' + result.entryId);
+    load();
+  },
+  // New filters replaced a single response: drop it from the address, but
+  // only while that response is still the page shown (the search waits
+  // 250 ms, and the officer may have moved on).
+  () => {
+    shownEntry = '';
+    if (router.route().name.startsWith('surveys/events/'))
+      router.go('#/surveys/events', { replace: true });
+  },
+);
+const customSurveys = mountCustomSurveys(q('#custom-surveys-root'), api);
+const surveyArchive = mountSurveyArchive(q('#archived-survey-questions'), api);
+// Surveys: the sub-section and what each one shows.
+let surveysSub = 'events',
+  shownEntry = null,
+  customShown = null;
+// Each section: its pane, enter(route) and leave(next) → false to stay.
+const sections = {
+  inbox: {
+    pane: q('#inbox-pane'),
+    enter(route) {
+      const next = {
+        status: router.apiStatus(route.query.status),
+        kind: route.query.type || '',
+        eventId: route.query.event || '',
+        id: route.params.id || '',
+      };
+      if (JSON.stringify(next) !== JSON.stringify(view)) offset = 0;
+      view = next;
+      if (!view.id) inboxList = router.build('inbox', route.query);
+      selectInboxStatus(view.status);
+      q('#filters [name="kind"]').value = view.kind;
+      q('#filters [name="eventId"]').value = view.eventId;
+      q('#event-filter-label').hidden = !['rsvp', 'rsvp-past'].includes(
+        view.kind,
+      );
+      if (filters().toString() !== loadedKey) {
+        q('#arrivals').hidden = true;
+        load();
+      }
+    },
+  },
+  events: {
+    pane: q('#events-pane'),
+    // Entering Events always refreshes the list; the editor keeps its form.
+    enter: () => editor.show(),
+    leave: (next) => next.section === 'events' || editor.leave(),
+  },
+  surveys: {
+    pane: q('#surveys-pane'),
+    enter(route) {
+      if (route.name === 'surveys')
+        return router.go('#/surveys/' + surveysSub, { replace: true });
+      const custom = route.name.startsWith('surveys/custom');
+      surveysSub = custom ? 'custom' : 'events';
+      q('#custom-surveys-root').hidden = !custom;
+      q('#event-surveys-root').hidden = custom;
+      for (const [link, current] of [
+        [q('#custom-surveys-group'), custom],
+        [q('#event-surveys-group'), !custom],
+      ])
+        if (current) link.setAttribute('aria-current', 'page');
+        else link.removeAttribute('aria-current');
+      if (custom) {
+        const id = route.params.id || '';
+        if (customShown === id && q('#custom-surveys-root').childNodes.length)
+          return;
+        customShown = id;
+        if (id) customSurveys.show(id);
+        else customSurveys.load();
+        return;
+      }
+      const entry = route.params.entryId || '';
+      if (shownEntry === entry) return;
+      shownEntry = entry;
+      surveys.show(entry);
+    },
+    // Leaving a custom survey asks its unsaved builder first.
+    leave: () =>
+      !router.route().name.startsWith('surveys/custom') ||
+      customSurveys.leave(),
+  },
+  help: {
+    pane: q('#help-pane'),
+    enter(route) {
+      if (route.query.topic)
+        q('#help-' + route.query.topic)?.scrollIntoView({ block: 'start' });
+    },
+  },
+  'not-found': {
+    pane: q('#not-found'),
+    enter(route) {
+      q('#not-found-message').textContent = route.message;
+    },
+  },
+};
+const titles = {
+  inbox: 'Inbox',
+  'inbox/:id': 'Submission · Inbox',
+  events: 'Events',
+  surveys: 'Surveys',
+  'surveys/events': 'Event surveys · Surveys',
+  'surveys/events/:eventId/r/:entryId': 'Response · Event surveys',
+  'surveys/custom': 'Custom surveys · Surveys',
+  'surveys/custom/:id': 'Custom survey · Surveys',
+  help: 'Help',
+  'not-found': 'Page not found',
+};
+const sectionNames = {
+  inbox: 'Inbox',
+  events: 'Events',
+  surveys: 'Surveys',
+  help: 'Help',
+  'not-found': 'Not found',
+};
+// Nav state for the route: aria-current, and each link's address. A link
+// reopens its section's last page; the current section's link goes back to
+// its list with the filters kept.
+function onRender(route, from) {
+  if (from && from.section !== route.section) toast.dismissPassing();
+  routeTitle = titles[route.name];
+  setTitle();
+  q('#app-title').textContent = sectionNames[route.section];
+  const roots = {
+    inbox: route.name === 'inbox' ? router.lastRoute('inbox') : inboxList,
+    events: '#/events',
+    surveys:
+      '#/surveys/' +
+      (route.name.startsWith('surveys/custom') ? 'custom' : 'events'),
+    help: '#/help',
+  };
+  for (const [name, root] of Object.entries(roots)) {
+    const link = q('#' + name + '-tab'),
+      current = route.section === name || route.from === name;
+    if (current) link.setAttribute('aria-current', 'page');
+    else link.removeAttribute('aria-current');
+    link.setAttribute(
+      'href',
+      (current ? root : router.lastRoute(name)) || '#/' + name,
+    );
+  }
+}
+// Opens the office: the first load, a retry, or after signing in. The list
+// load decides whether the office opens.
+let started = false;
+function open() {
+  if (started) router.refresh();
+  else {
+    started = true;
+    router.start({ sections, onRender });
+  }
+  return load();
+}
 startSession({
-  load,
-  // After signing in again: refresh the inbox in the background, which
-  // keeps cards, drafts and focus. Lists rebuild only when their records were
-  // dropped, so open cards, reports and status messages stay as they were.
+  load: open,
+  // After signing in again: the counts refresh; lists rebuild only when
+  // their records were dropped, so open cards, reports and drafts stay.
   refresh(dropped) {
-    load({ background: !dropped });
+    poll();
     if (!dropped) return;
-    if (!q('#events-pane').hidden) editor.show();
-    else if (q('#surveys-pane').hidden) return;
-    else if (q('#custom-surveys-root').hidden) surveys.reload();
+    load();
+    const route = router.route();
+    if (route.section === 'events') editor.show();
+    else if (route.section !== 'surveys') return;
+    else if (surveysSub === 'events') surveys.reload();
     else customSurveys.refresh();
   },
   // Ten minutes paused: drop member records, keep editors and drafts.
   reset() {
     q('#entries').replaceChildren();
+    loadedKey = null;
     editor.reset();
     surveys.reset();
     customSurveys.reset();

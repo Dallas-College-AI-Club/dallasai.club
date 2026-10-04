@@ -1,25 +1,6 @@
 import { lock, node } from './ui.js';
 import { drafts } from './session.js';
-const fields = {
-  subscribe: [],
-  rsvp: [],
-  join: [
-    ['campus', 'Campus', 100, true],
-    ['interests', 'Interests', 1500, false],
-  ],
-  workshop: [
-    ['topic', 'Topic', 160, true],
-    ['details', 'Details', 3000, false],
-  ],
-  contribution: [
-    ['title', 'Title', 140, true],
-    ['body', 'Draft', 40000, false],
-  ],
-  question: [
-    ['subject', 'Subject', 160, true],
-    ['message', 'Message', 5000, true],
-  ],
-};
+import { FIELD_SCHEMA } from './format.js';
 const campuses = [
   'Brookhaven',
   'Cedar Valley',
@@ -124,7 +105,8 @@ export function submissionEditor(api, onSaved) {
         const email = input(form, 'Email address', entry.email, 254, true);
         email.type = 'email';
         const values = {};
-        for (const [key, label, max, required] of fields[entry.kind] || []) {
+        for (const [key, label, max, required] of FIELD_SCHEMA[entry.kind] ||
+          []) {
           if (key === 'campus') {
             const labelEl = node('label', label),
               select = node('select');

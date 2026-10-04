@@ -1,4 +1,5 @@
 import { node } from './ui.js';
+import { dateTime } from './format.js';
 import { responseSections } from '../surveys/results-ui.js';
 export function mountSurveyArchive(root, api) {
   let generation = 0,
@@ -41,14 +42,7 @@ export function mountSurveyArchive(root, api) {
         );
         if (response.archived_at)
           section.append(
-            node(
-              'p',
-              'Archived ' +
-                new Date(response.archived_at).toLocaleString('en-US', {
-                  timeZone: 'America/Chicago',
-                }) +
-                ' Central.',
-            ),
+            node('p', 'Archived ' + dateTime(response.archived_at) + '.'),
           );
         section.append(
           responseSections(
@@ -65,7 +59,7 @@ export function mountSurveyArchive(root, api) {
           ),
         );
         const link = node('a', 'Manage respondent access in Custom surveys');
-        link.href = '#custom-survey=' + response.survey_id;
+        link.href = '#/surveys/custom/' + response.survey_id;
         section.append(link);
         root.append(section);
       }

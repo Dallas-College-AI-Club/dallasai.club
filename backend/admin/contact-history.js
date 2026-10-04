@@ -1,15 +1,13 @@
 import { button, lock, node } from './ui.js';
-import { activityTime } from './event-activity.js';
+import {
+  actionLabel,
+  actorLabel,
+  dateTime,
+  kindLabel,
+  plural,
+} from './format.js';
 import { contactProfile } from './contact-profile.js';
-import { drafts, isPaused } from './session.js';
-const labels = {
-  join: 'Club signup',
-  subscribe: 'The AI Review subscription',
-  rsvp: 'Event RSVP',
-  question: 'Question',
-  workshop: 'Workshop request',
-  contribution: 'AI Review submission',
-};
+import { currentOfficer, drafts, isPaused } from './session.js';
 // Unsaved notes are kept as contactNote:<email> and profile edits as
 // profile:<email> in the drafts store. A profile draft remembers the
 // contact revision it started from, so a later change can be pointed out.
@@ -99,15 +97,17 @@ export function contactHistory(api, onChange = () => {}) {
           button.append(
             node('strong', c.name || c.email),
             node('span', c.email),
-            node('small', c.submissions + ' website submissions'),
+            node('small', plural(c.submissions, 'submission')),
           );
           if (c.emails.length > 1)
             button.append(
               node(
                 'small',
-                new Set(c.emails).size -
-                  1 +
-                  ' additional linked email address(es)',
+                plural(
+                  new Set(c.emails).size - 1,
+                  'more linked email address',
+                  'more linked email addresses',
+                ),
               ),
             );
           if (c.is_test)
@@ -214,14 +214,18 @@ export function contactHistory(api, onChange = () => {}) {
             node(
               'h3',
               item.type === 'submission'
-                ? labels[item.label] || item.label
+                ? kindLabel(item.label)
                 : item.type === 'comment'
                   ? 'Officer comment'
-                  : item.label,
+                  : item.type === 'activity'
+                    ? actionLabel(item.label)
+                    : item.label,
             ),
             node(
               'p',
-              activityTime(item.created_at) + ' · ' + item.actor,
+              dateTime(item.created_at) +
+                ' · ' +
+                actorLabel(item.actor, currentOfficer()),
               'hint',
             ),
           );
@@ -244,7 +248,7 @@ export function contactHistory(api, onChange = () => {}) {
               card.append(node('p', item.details[key], 'contact-note-text'));
           if (item.entry_id) {
             const link = node('a', 'Open submission');
-            link.href = '#entry=' + encodeURIComponent(item.entry_id);
+            link.href = '#/inbox/' + encodeURIComponent(item.entry_id);
             link.onclick = () => dialog.close();
             card.append(link);
           }
@@ -412,7 +416,7 @@ export function contactHistory(api, onChange = () => {}) {
           ? 'Permanently delete this test contact?'
           : 'Delete this contact from the directory?',
         contact.is_test
-          ? `${contact.name || contact.email}: ${contact.emails.length} linked email address(es), ${contact.submissions} website submission(s), ${contact.notes} follow-up note(s) and ${contact.attachments} attachment(s). Their survey answers and comments will also be deleted. This cannot be undone.`
+          ? `${contact.name || contact.email}: ${plural(contact.emails.length, 'linked email address', 'linked email addresses')}, ${plural(contact.submissions, 'submission')}, ${plural(contact.notes, 'follow-up note')} and ${plural(contact.attachments, 'attachment')}. Their survey answers and comments will also be deleted. This cannot be undone.`
           : 'Their submissions, survey answers and notes will stay saved. Find this person under Deleted to restore them.',
         contact.is_test
           ? 'Delete test contact permanently'
@@ -472,7 +476,7 @@ export function contactHistory(api, onChange = () => {}) {
               () =>
                 confirm(
                   'Confirm these contacts are the same person',
-                  `Keep ${candidate.name || candidate.email} (${candidate.email}) and link ${contact.emails.join(', ')}. ${candidate.submissions + contact.submissions} website submission(s) will appear together. No original answers, emails or notes will be rewritten.`,
+                  `Keep ${candidate.name || candidate.email} (${candidate.email}) and link ${contact.emails.join(', ')}. ${plural(candidate.submissions + contact.submissions, 'submission')} will appear together. No original answers, emails or notes will be rewritten.`,
                   'Confirm merge',
                   {
                     action: 'contact-merge',

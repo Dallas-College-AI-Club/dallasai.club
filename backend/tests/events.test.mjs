@@ -14,7 +14,7 @@ import {
   editorEvents,
   eventActivity,
 } from '../lib/events.mjs';
-import { activityTime } from '../admin/event-activity.js';
+import { dateTime } from '../admin/format.js';
 import { eventHandler } from '../api/events.mjs';
 import { RequestError } from '../lib/errors.mjs';
 import { validate } from '../lib/validation.mjs';
@@ -85,17 +85,12 @@ test('activity pages retain attribution in revision order without exposing conte
     (e) => e.status === 400,
   );
 });
-test('activity timestamps always use Central with the correct winter and summer offsets', () => {
-  assert.match(
-    activityTime('2026-01-02T20:00:00Z'),
-    /Jan 2, 2026, 2:00:00 PM CST/,
-  );
-  assert.match(
-    activityTime('2026-07-02T20:00:00Z'),
-    /Jul 2, 2026, 3:00:00 PM CDT/,
-  );
-  assert.equal(activityTime(null), '');
-  assert.equal(activityTime('not a date'), '');
+test('activity timestamps always use Central across winter and summer time', () => {
+  const now = new Date('2026-10-03T12:00:00Z');
+  assert.equal(dateTime('2026-01-02T20:00:00Z', now), 'Fri, Jan 2, 2:00 PM CT');
+  assert.equal(dateTime('2026-07-02T20:00:00Z', now), 'Thu, Jul 2, 3:00 PM CT');
+  assert.equal(dateTime(null), '');
+  assert.equal(dateTime('not a date'), '');
 });
 test('archive preserves drafts and live history; edits remain archived; restore stays private until explicitly published', async () => {
   await save('publish', 0);

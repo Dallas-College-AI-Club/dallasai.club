@@ -1,21 +1,6 @@
-import { node } from './ui.js';
-import { activityTime } from './event-activity.js';
-import { drafts } from './session.js';
-const actions = {
-  'review:new': 'Marked new',
-  'review:reviewed': 'Marked reviewed',
-  'review:closed': 'Archived submission',
-  'download-attachment': 'Downloaded an attachment',
-  'comment-added': 'Added a comment',
-  'submission-edited': 'Edited response',
-  resubmitted: 'Updated details from the website (unverified)',
-  'survey-summary': 'Compiled a survey summary',
-  'survey-export-csv': 'Exported survey responses',
-  'contact-purged': 'Permanently deleted a test contact',
-};
-// Codes such as survey-export-csv:<event> carry details after the colon.
-const actionLabel = (action) =>
-  actions[action] || actions[action.split(':')[0]] || action;
+import { node, time } from './ui.js';
+import { actionLabel, actorLabel } from './format.js';
+import { currentOfficer, drafts } from './session.js';
 // The comment draft lives in the drafts store as note:<entryId>, so it
 // survives re-renders and re-authentication. onDraft runs when it changes.
 export function submissionActivity(entry, api, onDraft = () => {}) {
@@ -68,18 +53,18 @@ export function submissionActivity(entry, api, onDraft = () => {}) {
         // New details sent through the website are a system event, not an
         // officer's comment.
         const system = item.action === 'resubmitted',
-          row = node('li', undefined, 'activity-item'),
-          time = node('time', activityTime(item.created_at));
-        time.dateTime = item.created_at;
+          row = node('li', undefined, 'activity-item');
         row.classList.toggle('system-event', system);
         row.append(
           node('strong', actionLabel(item.action)),
           node(
             'span',
-            system ? 'From the website' : 'By ' + item.actor,
+            system
+              ? 'From the website'
+              : 'By ' + actorLabel(item.actor, currentOfficer()),
             'activity-actor',
           ),
-          time,
+          time(item.created_at),
         );
         if (item.comment !== null && item.comment !== undefined)
           row.append(

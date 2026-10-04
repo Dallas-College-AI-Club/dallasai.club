@@ -3,14 +3,36 @@
 // open dialogs close with their values kept, failed requests wait, and
 // signing in again as the same officer retries them. Only sign-out or a
 // different account discards work.
-import { createAuthClient } from 'better-auth/client';
-import { emailOTPClient } from 'better-auth/client/plugins';
-const auth = createAuthClient({ plugins: [emailOTPClient()] }),
-  q = (s) => document.querySelector(s),
-  // quiet: announce without the visible banner, when the page already says it.
-  status = (message = '', quiet = false) => {
-    q('#status').textContent = message;
-    q('#status').classList.toggle('visually-hidden', quiet);
+import { announce, cancelConfirm, toast } from './ui.js';
+import { clock, dateTime } from './format.js';
+// The four sign-in calls, through the /api/auth proxy (lib/neon-auth.mjs).
+// Resolves { data } or { error: { status } }; error.offline when the request
+// never got an answer. Never api(): a 401 here is a wrong code, not a pause.
+async function auth(path, body) {
+  try {
+    const response = await fetch('/api/auth/' + path, {
+      credentials: 'same-origin',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(15000),
+      ...(body && {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }),
+    });
+    const data = await response.json().catch(() => null);
+    return response.ok ? { data } : { error: { status: response.status } };
+  } catch {
+    return { error: { offline: true } };
+  }
+}
+const q = (s) => document.querySelector(s),
+  // A toast that #status also announces; quiet only announces, when the
+  // page already says it.
+  status = (message = '', quiet = false, type = 'info') => {
+    if (!message) return;
+    if (quiet) announce(message);
+    else toast({ type, text: message });
   };
 const offline =
     'Couldn’t reach Club Office. Check your connection and try again.',
@@ -68,6 +90,22 @@ let hooks,
   loadTries = 0,
   loadTimer;
 export const isPaused = () => Boolean(paused);
+// The officer whose work is on the page, for 'You' in activity lists.
+export const currentOfficer = () => account;
+// Other Club Office tabs in this browser: a sign-out here signs them out, and
+// signing in again resumes the tabs paused for the same officer.
+const tabs =
+  'BroadcastChannel' in window ? new BroadcastChannel('club-office') : null;
+// The office's view heading, where focus starts when nothing else holds it.
+const viewHeading = () =>
+  [...q('#office').querySelectorAll('h1')].find(
+    (heading) => heading.getClientRects().length,
+  );
+const setOffline = (value) => {
+  q('#offline-chip').hidden = !value;
+};
+window.addEventListener('offline', () => setOffline(true));
+window.addEventListener('online', () => setOffline(false));
 // The last control focused in the office. Dialogs reopened after signing in
 // again return focus here when they close, instead of to <body>.
 let opener = null;
@@ -100,6 +138,8 @@ async function send(path, body) {
         : {}),
     });
   } catch (error) {
+    // A transport failure shows the Offline chip until a request succeeds.
+    if (error.name !== 'TimeoutError') setOffline(true);
     throw error.name === 'TimeoutError'
       ? new ApiError(
           'timeout',
@@ -110,6 +150,7 @@ async function send(path, body) {
           'Could not connect to Club Office. Check your connection and try again.',
         );
   }
+  setOffline(false);
   const data = await response.json().catch(() => null);
   if (response.status === 401) {
     if (data?.code === 'not-officer') {
@@ -165,6 +206,9 @@ export function signedInAgain() {
 }
 function pause() {
   if (paused) return;
+  // A pending confirmation is answered no; it would act for the old session.
+  cancelConfirm();
+  toast.resolve('session-ending');
   paused = {
     queue: [],
     dialogs: [...document.querySelectorAll('dialog[open]')],
@@ -179,7 +223,7 @@ function pause() {
   }, 600000);
   q('#office').hidden = true;
   q('#office').inert = true;
-  q('#signout').hidden = true;
+  closeAccountMenu();
   showForm(true);
   status(
     'Your session ended. Sign in again to continue — your unsaved work is kept.',
@@ -195,15 +239,14 @@ async function resume() {
   q('#login').hidden = true;
   q('#office').inert = false;
   q('#office').hidden = false;
-  q('#signout').hidden = false;
   if (dialogs.length && opener?.isConnected)
     opener.focus({ preventScroll: true });
   for (const dialog of dialogs)
     if (dialog.isConnected && !dialog.open) dialog.showModal();
   if (focus?.isConnected) focus.focus();
   if (!document.activeElement || document.activeElement === document.body)
-    q('.office-tabs [aria-pressed="true"]').focus();
-  status('Signed in again. Nothing was lost.');
+    viewHeading()?.focus();
+  status('Signed in again. Nothing was lost.', false, 'success');
   // Requests that met the 401 never ran on the server, so each is sent once
   // more, in order. The view reloads after them so it shows their results.
   for (const item of queue) {
@@ -229,13 +272,65 @@ function discard(message) {
   clearTimeout(paused?.timer);
   paused = null;
   round++;
-  account = '';
+  account = identity = '';
+  cancelConfirm();
   stored.clear();
   hooks.clear();
   for (const item of queue) item.reject(new ApiError('auth', message, 401));
   q('#office').inert = false;
+  setExpiry(null);
   showLogin();
   return queue.length;
+}
+function closeAccountMenu() {
+  q('#account-menu').hidden = true;
+  q('#account-button').setAttribute('aria-expanded', 'false');
+}
+
+// Production sessions end at a fixed time. Thirty minutes before, and again
+// at five, a toast offers to sign in again while the office stays open.
+let expiresAt = null,
+  expiryTimers = [],
+  renewing = false,
+  // A load right after a code sign-in: a 401 there needs a reason.
+  openingAfterCode = false;
+function setExpiry(value) {
+  for (const timer of expiryTimers) clearTimeout(timer);
+  toast.resolve('session-ending');
+  expiresAt = value ? new Date(value) : null;
+  if (!Number.isFinite(expiresAt?.getTime())) expiresAt = null;
+  q('#account-until').hidden = !expiresAt;
+  if (!expiresAt) return;
+  q('#account-until').textContent = 'Signed in until ' + dateTime(expiresAt);
+  expiryTimers = [30, 5].map((minutes) =>
+    setTimeout(
+      () =>
+        toast({
+          type: 'info',
+          key: 'session-ending',
+          persist: true,
+          text:
+            'Your session ends at ' +
+            clock(expiresAt) +
+            '. Sign in again now to keep working without interruption.',
+          action: { label: 'Sign in again', run: renew },
+        }),
+      Math.max(0, expiresAt - Date.now() - minutes * 60000),
+    ),
+  );
+}
+// The sign-in card opens above the office, which stays visible.
+function renew() {
+  if (paused || !account) return;
+  renewing = true;
+  showForm(true);
+  q('#login h1').textContent = 'Sign in again';
+  q('#login').scrollIntoView({ block: 'start' });
+  q('#login-form [type="submit"]').focus();
+}
+async function readSession() {
+  const { data } = await auth('get-session');
+  if (data?.user) setExpiry(data.session?.expiresAt);
 }
 
 function showForm(reauth) {
@@ -258,10 +353,18 @@ function showForm(reauth) {
   emailStep();
   describe(email);
 }
-export function showLogin() {
+// The session check and the first load can both find the visitor signed
+// out: the second call must not reset a code step already under way.
+export function showLogin(force = false) {
   clearTimeout(loadTimer);
+  renewing = false;
   q('#office').hidden = true;
-  q('#signout').hidden = true;
+  closeAccountMenu();
+  const showing =
+    !account &&
+    !q('#login').hidden &&
+    !q('#login-form [name="email"]').readOnly;
+  if (showing && !force) return;
   showForm(false);
   q('#login-form [name="email"]').focus();
 }
@@ -277,27 +380,30 @@ export function ready(email) {
     '#not-officer',
   ])
     q(id).hidden = true;
+  q('#account-identity').textContent = 'Signed in as ' + email;
+  // 'ava.lee@…' → 'AL'
+  q('#account-initials').textContent = email
+    .split('@')[0]
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join('');
   if (paused) return;
   q('#office').inert = false;
   q('#office').hidden = false;
-  q('#signout').hidden = false;
-  // Focus left with the sign-in card or a panel: start at the office heading.
+  // Focus left with the sign-in card or a panel: start at the view heading.
   const active = document.activeElement;
   if (!active || active === document.body || !active.checkVisibility())
-    q('#office h1').focus({ preventScroll: true });
+    viewHeading()?.focus({ preventScroll: true });
 }
 // A failed first load never shows the sign-in form, except for a 401.
 export function loadFailed(error) {
   if (error.kind === 'not-officer') return;
+  // Signed out: the sign-in form, with a reason only right after a code.
   if (error.kind === 'auth') {
-    showLogin();
-    return status(error.message);
-  }
-  // A refused request, such as a malformed #entry= link, fails again on
-  // retry: drop the link and open the plain inbox instead.
-  if (error.kind === 'invalid' && location.hash) {
-    history.replaceState(null, '', location.pathname + location.search);
-    return hooks.load();
+    showLogin(openingAfterCode);
+    return openingAfterCode && status(error.message);
   }
   const delay = ['network', 'timeout', 'server'].includes(error.kind)
     ? [2, 5, 10][loadTries++]
@@ -311,9 +417,7 @@ export function loadFailed(error) {
   q('#load-error-message').textContent =
     'This is usually a brief server hiccup. ' +
     (delay ? 'Retrying in ' + delay + '\u00a0s…' : 'Try again in a moment.');
-  q('#load-error-identity').textContent = identity
-    ? 'Signed in as ' + identity + '.'
-    : '';
+  sayIdentity();
   clearTimeout(loadTimer);
   if (delay) loadTimer = setTimeout(boot, delay * 1000);
 }
@@ -343,19 +447,27 @@ export function accountChanged(email) {
   discard(otherAccount);
   status('Now signed in as ' + email + ' from another tab.');
   hooks.load();
+  readSession();
   return true;
 }
 function showNotOfficer() {
   for (const id of ['#session-loading', '#login', '#load-error'])
     q(id).hidden = true;
   q('#office').hidden = true;
-  q('#signout').hidden = true;
+  closeAccountMenu();
+  sayIdentity();
+  q('#not-officer').hidden = false;
+  q('#not-officer h1').focus();
+}
+// The signed-in email may arrive after the panel shows.
+function sayIdentity() {
   q('#not-officer-message').textContent =
     'You’re signed in as ' +
     (identity || 'this account') +
     ', but this account isn’t set up as a club officer. Ask an existing officer to add the admin role.';
-  q('#not-officer').hidden = false;
-  q('#not-officer h1').focus();
+  q('#load-error-identity').textContent = identity
+    ? 'Signed in as ' + identity + '.'
+    : '';
 }
 
 function emailStep() {
@@ -399,9 +511,10 @@ function describe(field, error) {
   else field.removeAttribute('aria-describedby');
 }
 async function sendCode(email) {
-  const result = await auth.emailOtp
-    .sendVerificationOtp({ email, type: 'sign-in' })
-    .catch(() => ({ error: { offline: true } }));
+  const result = await auth('email-otp/send-verification-otp', {
+    email,
+    type: 'sign-in',
+  });
   if (result.error)
     throw new Error(
       result.error.offline
@@ -418,9 +531,9 @@ async function sendCode(email) {
   q('#code-form').hidden = false;
   q('#code-form').reset();
   q('#code-instructions').textContent =
-    'If this is an approved admin address, a code will arrive at ' +
+    'Enter the 6-digit code we sent to ' +
     email +
-    '.';
+    '. Check junk too; use the newest code.';
   resendAt = Date.now() + 60000;
   q('#resend-code').textContent = 'Send a new code (wait 1 minute)';
   clearTimeout(resendTimer);
@@ -438,24 +551,58 @@ const confirmSignOut = () => {
 };
 async function signOut() {
   if (!confirmSignOut()) return;
-  const result = await auth.signOut().catch(() => ({ error: true }));
-  if (result.error) return status('Could not sign out. Please try again.');
+  const result = await auth('sign-out', {});
+  if (result.error)
+    return status('Couldn’t sign out. Please try again.', false, 'error');
   discard('Signed out.');
+  tabs?.postMessage('signed-out');
   q('#login-form').reset();
   status('Signed out.');
 }
+// Another tab signed out: a tab with unsaved work pauses and keeps it until
+// the officer signs in again; any other tab clears. Another tab signed in
+// again as this officer: resume, and read the new session end.
+tabs?.addEventListener('message', ({ data }) => {
+  if (data === 'signed-out' && (account || paused)) {
+    if (drafts.dirtyCount()) pause();
+    else {
+      discard('Signed out.');
+      q('#login-form').reset();
+    }
+    status('You signed out in another tab.');
+  } else if (account && data === 'signed-in:' + account) {
+    if (paused) {
+      emailStep();
+      resume();
+    }
+    readSession();
+  }
+});
+// A page restored from the back/forward cache may show records from a
+// session that has since ended: check it again.
+window.addEventListener('pageshow', async (event) => {
+  if (!event.persisted || !account || paused) return;
+  const { data, error } = await auth('get-session');
+  if (error) return;
+  if (!data?.user) {
+    if (drafts.dirtyCount()) pause();
+    else discard('Signed out.');
+  } else if (!accountChanged(data.user.email))
+    setExpiry(data.session?.expiresAt);
+});
+// The session check and the first inbox load start together; the load opens
+// the office, or shows why it can't.
 function boot() {
   clearTimeout(loadTimer);
-  auth.getSession({ fetchOptions: { timeout: 15000 } }).then(
-    ({ data, error }) => {
-      if (data?.user) {
-        identity = data.user.email;
-        hooks.load();
-      } else if (error) loadFailed({ kind: 'server' });
-      else showLogin();
-    },
-    () => loadFailed({ kind: 'network' }),
-  );
+  const session = auth('get-session');
+  hooks.load();
+  session.then(({ data, error }) => {
+    if (data?.user) {
+      identity ||= data.user.email;
+      sayIdentity();
+      setExpiry(data.session?.expiresAt);
+    } else if (!error && !account) showLogin();
+  });
 }
 
 // hooks: load() opens the office; refresh(dropped) re-runs the current view
@@ -487,12 +634,10 @@ export function startSession(options) {
     clearLoginError();
     status();
     try {
-      const result = await auth.signIn
-        .emailOtp({
-          email: pendingEmail,
-          otp: field.value.replace(/\D/g, '').slice(0, 6),
-        })
-        .catch(() => ({ error: { offline: true } }));
+      const result = await auth('sign-in/email-otp', {
+        email: pendingEmail,
+        otp: field.value.replace(/\D/g, '').slice(0, 6),
+      });
       if (result.error)
         throw new Error(
           result.error.offline
@@ -505,12 +650,26 @@ export function startSession(options) {
                 'That code is wrong or has expired. Use the newest email, or send a new code.',
         );
       identity = pendingEmail;
+      tabs?.postMessage('signed-in:' + pendingEmail);
       if (paused) {
+        renewing = false;
         emailStep();
         resume();
+        readSession();
+      } else if (renewing) {
+        renewing = false;
+        emailStep();
+        q('#login').hidden = true;
+        readSession();
+        viewHeading()?.focus();
+        status('Signed in again.', false, 'success');
       } else {
-        await hooks.load();
+        openingAfterCode = true;
+        await hooks.load().finally(() => {
+          openingAfterCode = false;
+        });
         if (account) emailStep();
+        readSession();
       }
     } catch (error) {
       loginError(field, error.message);
@@ -554,11 +713,11 @@ export function startSession(options) {
     if (!confirmSignOut()) return;
     discard('Signed out.');
     status('Signed out. Unsaved work was discarded.');
-    await auth.signOut().catch(() => {});
+    if (!(await auth('sign-out', {})).error) tabs?.postMessage('signed-out');
   };
   q('#signout').onclick = signOut;
   q('#not-officer-signout').onclick = async () => {
-    await auth.signOut().catch(() => {});
+    if (!(await auth('sign-out', {})).error) tabs?.postMessage('signed-out');
     if (account) discard('Signed out.');
     else showLogin();
     q('#login-form').reset();

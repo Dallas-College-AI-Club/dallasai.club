@@ -86,7 +86,7 @@ export function contactProfile(
       );
       for (const response of alias.responses || []) {
         const link = node('a', 'Open response: ' + response.title);
-        link.href = '#entry=' + encodeURIComponent(response.id);
+        link.href = '#/inbox/' + encodeURIComponent(response.id);
         link.onclick = () => openResponse();
         links.append(link);
       }

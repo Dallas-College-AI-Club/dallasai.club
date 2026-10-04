@@ -44,6 +44,30 @@ async function recordResubmission(tx, row, input) {
   );
 }
 
+// An officer recorded this RSVP as cancelled or this newsletter request as
+// withdrawn, and the person has now signed up again: the entry is active and
+// New, with a website note saying why. The public reply does not change.
+const withdrawnStates = { rsvp: 'cancelled', subscribe: 'unsubscribed' };
+async function reactivate(tx, row) {
+  if (withdrawnStates[row.kind] !== row.state) return;
+  await tx.query(
+    "UPDATE club_forms.entries SET state='active',review_status='new' WHERE id=$1",
+    [row.id],
+  );
+  await insertSubmissionComment(
+    tx,
+    {
+      entryId: row.id,
+      id: randomUUID(),
+      body:
+        row.kind === 'rsvp'
+          ? 'RSVPed again through the public website (unverified). The RSVP had been recorded as cancelled; it is active again.'
+          : 'Signed up again through the public website (unverified). The newsletter request had been recorded as withdrawn; it is active again.',
+    },
+    WEBSITE,
+    'resubmitted',
+  );
+}
 export async function submit(db, body, events, storage = { put, del }) {
   const input = validate(body, events);
   const id = randomUUID();
@@ -120,6 +144,7 @@ export async function submit(db, body, events, storage = { put, del }) {
       if (inserted) await saveSurveyResponse(tx, row, input.survey);
       if (!inserted && ['join', 'subscribe'].includes(input.kind))
         await recordResubmission(tx, row, input);
+      if (!inserted) await reactivate(tx, row);
       return { ...row, alreadySubmitted: !inserted };
     });
     if (!inserted && stored.length)

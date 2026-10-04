@@ -384,9 +384,12 @@ try {
       }
     };
   });
+  // Like the real server: the admin API answers 401 until a code signs in.
   let testSignedIn = false;
-  await admin.route('**/api/auth/**', (route) =>
-    route.fulfill({
+  await admin.route('**/api/auth/**', (route) => {
+    if (route.request().url().endsWith('/sign-in/email-otp'))
+      testSignedIn = true;
+    return route.fulfill({
       contentType: 'application/json',
       body:
         route.request().url().endsWith('get-session') && !testSignedIn
@@ -395,8 +398,8 @@ try {
               success: true,
               user: { email: 'officer@example.com', emailVerified: true },
             }),
-    }),
-  );
+    });
+  });
   const fixture = {
     user: 'officer@example.com',
     entries: [
@@ -434,6 +437,12 @@ try {
     staleLoad = null;
   const postedComments = [];
   await admin.route('**/api/admin*', async (route) => {
+    if (!testSignedIn)
+      return route.fulfill({
+        status: 401,
+        contentType: 'application/json',
+        body: '{"error":"Sign in again."}',
+      });
     if (new URL(route.request().url()).searchParams.has('history'))
       return route.fulfill({
         contentType: 'application/json',
@@ -472,6 +481,24 @@ try {
       });
     }
     const params = new URL(route.request().url()).searchParams;
+    // The background poll: counts only.
+    if (params.get('counts') === '1')
+      return route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          user: fixture.user,
+          counts: fixture.counts,
+          latest: fixture.counts
+            .map((row) => row.latest)
+            .filter(Boolean)
+            .sort()
+            .at(-1),
+          arrived: 0,
+          arrivedInView: 0,
+          asOf: new Date().toISOString(),
+          configured: fixture.configured,
+        }),
+      });
     if (slowReview && params.get('status') === 'reviewed') {
       const hold = slowReview;
       slowReview = null;
@@ -510,9 +537,15 @@ try {
     'true',
   );
   assert.equal(await admin.locator('select[name="status"]').count(), 0);
+  // The inbox explainers live in Help, not above the list.
+  assert.equal(
+    await admin.locator('#inbox-pane .submission-sources').count(),
+    0,
+  );
+  await admin.locator('#help-tab').click();
   await admin
-    .getByText('How people submit to the inbox', { exact: true })
-    .click();
+    .getByRole('heading', { name: 'How people reach the inbox', exact: true })
+    .waitFor();
   assert.equal(await admin.locator('.submission-sources li').count(), 7);
   for (const target of ['join', 'subscribe', 'contribute', 'events', 'about'])
     assert.ok(
@@ -521,34 +554,30 @@ try {
         .count(),
     );
   await admin
+    .getByText('stored in the club’s Neon database', { exact: false })
+    .waitFor();
+  await admin.locator('#inbox-tab').click();
+  await admin
     .locator('#counts')
-    .getByText('The AI Review subscription', { exact: true })
+    .getByText('Newsletter', { exact: true })
     .waitFor();
   await admin.locator('#entries .entry > summary').click();
   await admin.getByText('Received in club inbox', { exact: true }).waitFor();
-  await admin
-    .getByText('What do the inbox statuses mean?', { exact: true })
-    .click();
-  await admin
-    .getByText('stored in the club’s Neon database', { exact: false })
-    .waitFor();
   assert.equal(await admin.locator('input[type="password"]').count(), 0);
   assert.equal(await admin.locator('#filters [name="search"]').count(), 0);
   await admin.locator('#filters [name="kind"]').selectOption('rsvp');
   await admin.getByLabel('Event', { exact: true }).selectOption('future');
-  await admin.getByRole('button', { name: 'Apply', exact: true }).click();
   await admin.waitForFunction(() =>
     document.querySelector('#export').href.includes('eventId=future'),
   );
   await admin.locator('#filters [name="kind"]').selectOption('join');
-  await admin.getByRole('button', { name: 'Apply', exact: true }).click();
   await admin.locator('#entries .entry > summary').click();
   await admin.getByText('Submission details', { exact: true }).click();
   assert.equal(await admin.locator('.entry img').count(), 0);
   await admin.getByRole('button', { name: 'Mark reviewed' }).click();
   await expect(admin.locator('#entries .entry')).toHaveCount(0);
   // Counts and the title follow an officer's own change without a Refresh.
-  await expect(admin).toHaveTitle('(1) Club office · Dallas AI Club');
+  await expect(admin).toHaveTitle('(1) Inbox · Club Office');
   await expect(admin.locator('#counts .count strong').first()).toHaveText('0');
   await admin.locator('[data-inbox-status="reviewed"]').click();
   await admin.locator('#entries .entry').waitFor();
@@ -571,27 +600,26 @@ try {
   await admin.getByText('Activity & comments', { exact: true }).click();
   await admin.getByRole('button', { name: 'Mark new', exact: true }).click();
   await expect(admin.locator('#entries .entry')).toHaveCount(0);
-  await expect(admin).toHaveTitle('(2) Club office · Dallas AI Club');
+  await expect(admin).toHaveTitle('(2) Inbox · Club Office');
   await admin.locator('[data-inbox-status="new"]').click();
   await admin.locator('#entries .entry').waitFor();
   if (!(await admin.locator('#entries .entry').evaluate((el) => el.open)))
     await admin.locator('#entries .entry > summary').click();
   await admin.locator('.badge').filter({ hasText: 'new' }).waitFor();
   // Reopening an entry is not an arrival.
-  await expect(admin.locator('#inbox-alert')).toHaveText('');
+  await expect(admin.locator('#arrivals')).toBeHidden();
   await admin.getByText('Activity & comments', { exact: true }).click();
   await admin
     .getByText('Visible to all authorized club admins.', { exact: false })
     .waitFor();
-  await admin.getByText('Marked reviewed', { exact: true }).waitFor();
-  await admin.getByText('Archived submission', { exact: true }).waitFor();
+  const timeline = admin.locator('.submission-timeline');
+  await timeline.getByText('Marked reviewed', { exact: true }).waitFor();
+  await timeline.getByText('Archived', { exact: true }).waitFor();
   await admin
     .getByLabel('Add a comment', { exact: true })
     .fill('Follow up tomorrow. <img src=x onerror=alert(1)>');
   await admin.getByRole('button', { name: 'Refresh', exact: true }).click();
-  await admin.waitForFunction(
-    () => !document.querySelector('#refresh').disabled,
-  );
+  await expect(admin.locator('#entries')).toHaveAttribute('aria-busy', 'false');
   assert.equal(
     await admin.getByLabel('Add a comment', { exact: true }).inputValue(),
     'Follow up tomorrow. <img src=x onerror=alert(1)>',
@@ -615,7 +643,7 @@ try {
   );
   assert.ok(
     (await admin.locator('.submission-timeline').textContent()).includes(
-      '5:00:00 PM CDT',
+      'Fri, Oct 2, 5:00 PM CT',
     ),
   );
   // A load that read the counts before this officer's change, but returns
@@ -639,9 +667,9 @@ try {
     .getByText('Submission moved to Archived.', { exact: false })
     .waitFor();
   releaseLoad();
-  await expect(admin).toHaveTitle('(1) Club office · Dallas AI Club');
+  await expect(admin).toHaveTitle('(1) Inbox · Club Office');
   await expect(admin.locator('#entries')).toHaveAttribute('aria-busy', 'false');
-  await expect(admin.locator('#inbox-alert')).toHaveText('');
+  await expect(admin.locator('#arrivals')).toBeHidden();
   await expect(admin.locator('#entries .entry')).toHaveCount(0);
   await admin.locator('[data-inbox-status="closed"]').click();
   await admin.locator('#entries .entry').waitFor();
@@ -672,34 +700,36 @@ try {
   await expect(admin.locator('#export')).toHaveAttribute('href', /status=new/);
   await expect(admin.locator('#entries .entry')).toHaveCount(0);
   await expect(admin.locator('#entries')).toHaveAttribute('aria-busy', 'false');
-  await admin
-    .getByRole('button', { name: 'Enable browser alerts', exact: true })
-    .click();
+  const alertsSwitch = admin.getByRole('switch', {
+    name: 'Browser alerts',
+    exact: true,
+  });
+  await admin.locator('#account-button').click();
+  await alertsSwitch.click();
+  await expect(alertsSwitch).toHaveAttribute('aria-checked', 'true');
   await admin.reload();
   await admin.locator('#inbox-pane').waitFor();
-  assert.equal(
-    await admin
-      .getByRole('button', { name: 'Turn off browser alerts', exact: true })
-      .getAttribute('aria-pressed'),
+  await expect(admin.locator('#enable-alerts')).toHaveAttribute(
+    'aria-checked',
     'true',
   );
+  // A newer submission time alerts; Refresh also checks the counts.
   fixture.counts[0].latest = '2099-01-01T00:00:00Z';
   await admin.getByRole('button', { name: 'Refresh', exact: true }).click();
   await admin.waitForFunction(() => window.testAlerts.length === 1);
-  await admin
-    .getByRole('button', { name: 'Turn off browser alerts', exact: true })
-    .click();
-  await admin
-    .getByText(
-      'Browser alerts are off. New counts still appear here. Email alerts are not connected.',
-      { exact: true },
-    )
-    .waitFor();
-  fixture.counts[0].latest = '2099-01-02T00:00:00Z';
-  await admin.getByRole('button', { name: 'Refresh', exact: true }).click();
-  await admin.waitForFunction(
-    () => !document.querySelector('#refresh').disabled,
+  await admin.locator('#account-button').click();
+  await alertsSwitch.click();
+  await expect(alertsSwitch).toHaveAttribute('aria-checked', 'false');
+  await expect(admin.locator('#notification-status')).toHaveText(
+    'Pop-ups while this tab is open. Email alerts aren’t available.',
   );
+  await admin.keyboard.press('Escape');
+  fixture.counts[0].latest = '2099-01-02T00:00:00Z';
+  const polled = admin.waitForResponse((response) =>
+    response.url().includes('counts=1'),
+  );
+  await admin.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await polled;
   assert.equal(await admin.evaluate(() => window.testAlerts.length), 1);
   assert.equal(
     await admin.locator('#office-theme, #office-font, #office-layout').count(),
@@ -707,10 +737,8 @@ try {
   );
   await admin.reload();
   await admin.locator('#inbox-pane').waitFor();
-  assert.equal(
-    await admin
-      .getByRole('button', { name: 'Enable browser alerts', exact: true })
-      .getAttribute('aria-pressed'),
+  await expect(admin.locator('#enable-alerts')).toHaveAttribute(
+    'aria-checked',
     'false',
   );
   await expect(admin.locator('#entries .entry')).toHaveCount(0);

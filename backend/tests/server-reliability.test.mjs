@@ -116,10 +116,15 @@ test('an admin POST rejected with 401 writes nothing, in every admin handler', a
   process.env.AUTH_BASE_URL = 'https://office.example.com';
   process.env.FORM_TOKEN_SECRET = 'reauth-retry-test-' + 'x'.repeat(40);
   const entry = randomUUID(),
+    rsvp = randomUUID(),
     survey = randomUUID();
   await store.query(
     "INSERT INTO club_forms.entries(id,kind,email,name,data,dedupe_key) VALUES($1,'workshop','member@example.edu','Member','{}',$2)",
     [entry, 'workshop:' + entry],
+  );
+  await store.query(
+    "INSERT INTO club_forms.entries(id,kind,email,name,data,dedupe_key) VALUES($1,'rsvp','member@example.edu','Member','{\"eventId\":\"next\"}',$2)",
+    [rsvp, 'rsvp:next:member@example.edu'],
   );
   await store.query(
     "INSERT INTO club_forms.custom_surveys(id,slug,title,content_version,status,link_digest,expires_at) VALUES($1,'roster-test','Roster test','test','draft',$2,now()+interval '30 days')",
@@ -152,6 +157,23 @@ test('an admin POST rejected with 401 writes nothing, in every admin handler', a
   };
   const writes = [
     ['admin', '/api/admin', { action: 'review', id: entry, status: 'closed' }],
+    [
+      'admin',
+      '/api/admin',
+      { action: 'review', status: 'reviewed', items: [{ id: entry }] },
+    ],
+    [
+      'admin',
+      '/api/admin',
+      {
+        action: 'review-kinds',
+        kinds: ['rsvp'],
+        from: 'new',
+        status: 'reviewed',
+        before: '2999-01-01T00:00:00Z',
+      },
+    ],
+    ['admin', '/api/admin', { action: 'state', id: rsvp, state: 'cancelled' }],
     [
       'admin',
       '/api/admin',

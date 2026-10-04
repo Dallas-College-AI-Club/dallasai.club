@@ -1,32 +1,6 @@
-import { node } from './ui.js';
-const central = new Intl.DateTimeFormat('en-US', {
-  timeZone: 'America/Chicago',
-  year: 'numeric',
-  month: 'short',
-  day: 'numeric',
-  hour: 'numeric',
-  minute: '2-digit',
-  second: '2-digit',
-  timeZoneName: 'short',
-});
-const actions = {
-  draft: 'Draft saved',
-  publish: 'Published',
-  unpublish: 'Unpublished',
-  archive: 'Archived',
-  restore: 'Restored as draft',
-};
-export function activityTime(value) {
-  if (!value) return '';
-  const date = new Date(value);
-  return Number.isFinite(date.getTime()) ? central.format(date) : '';
-}
-function timeNode(value) {
-  const label = activityTime(value);
-  const time = node('time', label || 'Time unavailable');
-  if (label) time.dateTime = new Date(value).toISOString();
-  return time;
-}
+import { node, time } from './ui.js';
+import { actionLabel, actorLabel } from './format.js';
+import { currentOfficer } from './session.js';
 export function mountEventActivity(api) {
   const panel = document.getElementById('event-activity');
   const list = document.getElementById('event-activity-list');
@@ -55,9 +29,13 @@ export function mountEventActivity(api) {
       for (const item of data.activity) {
         const row = node('li', '', 'activity-item');
         row.append(
-          node('strong', actions[item.action] || 'Updated'),
-          node('span', 'By ' + item.actor, 'activity-actor'),
-          timeNode(item.created_at),
+          node('strong', actionLabel(item.action)),
+          node(
+            'span',
+            'By ' + actorLabel(item.actor, currentOfficer()),
+            'activity-actor',
+          ),
+          time(item.created_at),
         );
         list.append(row);
       }
@@ -100,8 +78,12 @@ export function mountEventActivity(api) {
       current = row;
       if (row.updated_at && row.updated_by) {
         updated.append(
-          document.createTextNode('Last updated by ' + row.updated_by + ' · '),
-          timeNode(row.updated_at),
+          document.createTextNode(
+            'Last updated by ' +
+              actorLabel(row.updated_by, currentOfficer()) +
+              ' · ',
+          ),
+          time(row.updated_at),
         );
       } else
         updated.textContent = row.published

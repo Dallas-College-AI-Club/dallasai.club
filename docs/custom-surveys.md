@@ -13,6 +13,30 @@ results**; their own saved answers are always available on the first load.
 The archived response view also loads ten responses per page. Invalid or closed
 invitations show a neutral unavailable screen with the club contact address.
 
+## Downloads
+
+**Export CSV** under Submitted responses downloads every active response across
+all pages, like the event survey export: one row per respondent with name, email,
+submitted time (Central) and status, then one column per question in survey
+order. Rankings read `1. … 2. …`, chosen options are joined with semicolons, and
+dials read `65 of 100 — <wording>`. Builder surveys have a column for every
+question; Advisor Studio has a column for each answer respondents shared.
+Archived responses stay in Inbox → Archived → Questions. Formula values are
+escaped. The file is `<survey>-responses-<YYYY-MM-DD>.csv`.
+
+Each response has **Download PDF**: one respondent's answers as a Letter-size
+PDF, made in the browser from the results on screen. It has the club name,
+survey title, respondent name and email, submitted time (Central) and number of
+answers, then each chapter and question in survey order, formatted as on screen.
+Builder questions the respondent skipped read **No answer**. Pages are numbered
+and a question title is kept with its answer. The file is
+`<survey>-<respondent>-<YYYY-MM-DD>.pdf`, dated by the Central submission day.
+The PDF uses the built-in Helvetica font, so emoji and characters outside
+Western European text print as `?`.
+
+Both downloads write an audit row with the officer's email:
+`custom-survey-export-csv:<survey id>` or `custom-survey-pdf:<survey id>`.
+
 Advisor Studio is a private collection round with a 30-day deadline. The
 deadline appears in the welcome page, question preview, respondent navigation,
 and officer view. The invitation secret stays in the URL fragment and a
@@ -33,7 +57,8 @@ request bodies or private link headers to logs or analytics.
 - Officers keep the existing ADMIN_EMAILS plus Neon admin-role check. Advisor
   survey membership grants no inbox or event-editor access. An account may
   already have officer privileges independently of its advisor membership.
-- Officer result routes are GET-only. Advisors can submit only their own
+- Officer result and CSV routes are GET-only; a PDF download records its
+  audit row with a same-origin POST. Advisors can submit only their own
   responses and see only the shared summaries in their assigned survey.
 - Cookie-authenticated writes require the configured same origin. No endpoint
   grants roles or accepts a client-selected advisor identity as authorization.
@@ -112,7 +137,9 @@ from the authenticated office.
 
 `npm test` in `backend/` covers request boundaries, scope, remembered devices,
 revocation, preview privacy, atomic persistence/rollback, replacement snapshots,
-idempotency, and the scoped Neon proxy. Build with `npm run build`.
+idempotency, the scoped Neon proxy, and the CSV and PDF downloads. Build with
+`npm run build`; the PDF code (jsPDF) is a separate file that loads on the
+first **Download PDF**.
 `node backend/tests/serve-custom-survey.mjs` starts an isolated PGlite UI fixture
 at port 4187, with synthetic advisor addresses and code `123456`. The fixture
 prints the temporary test URLs. It is not included in the deployed public build.

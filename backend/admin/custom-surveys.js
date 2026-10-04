@@ -1,9 +1,10 @@
-import { copyText, node } from './ui.js';
-import { actionLabel, actorLabel, dateTime, plural } from './format.js';
+import { copyText, download as save, node } from './ui.js';
+import { actionLabel, actorLabel, dateTime, isoDay, plural } from './format.js';
 import { currentOfficer } from './session.js';
 import { mountRespondents } from './survey-respondents.js';
 import { mountSurveyBuilder } from './survey-builder.js';
-import { responseSections } from '../surveys/results-ui.js';
+import { fileSlug, responseSections } from '../surveys/results-ui.js';
+import { responseDocument, responseFilename } from './response-document.js';
 // Self-registered respondents may have no display name; officers see the
 // email instead. Respondent-facing pages keep their own masking.
 const named = (results) =>
@@ -230,10 +231,81 @@ export function mountCustomSurveys(root, api) {
               );
             content.append(history);
           }
+          const isCurrent = () =>
+            current === generation && request === requestGeneration;
+          // Each response downloads as a PDF made here from what is shown;
+          // jsPDF loads on first use.
+          const pdfActions = (result) => {
+            const actions = node('div', undefined, 'entry-actions'),
+              button = node('button', 'Download PDF', 'secondary'),
+              status = node('p');
+            button.setAttribute(
+              'aria-label',
+              'Download PDF for ' + result.display_name,
+            );
+            status.setAttribute('role', 'status');
+            button.onclick = async () => {
+              button.disabled = true;
+              status.textContent = 'Preparing PDF…';
+              try {
+                const [{ responsePdf }] = await Promise.all([
+                  import('./response-pdf.js').catch(() => {
+                    throw new Error(
+                      'Couldn’t prepare the PDF. Check your connection and try again.',
+                    );
+                  }),
+                  api('/api/custom-surveys?action=response-pdf', {
+                    id: survey.id,
+                  }),
+                ]);
+                if (!isCurrent()) return;
+                responsePdf(
+                  responseDocument(result, {
+                    title: survey.title,
+                    definition: data.resultsDefinition,
+                  }),
+                ).save(responseFilename(survey.title, result));
+                status.textContent = 'PDF downloaded.';
+              } catch (error) {
+                if (isCurrent()) status.textContent = error.message;
+              } finally {
+                button.disabled = false;
+              }
+            };
+            actions.append(button, status);
+            return actions;
+          };
+          const exportCSV = node('button', 'Export CSV', 'secondary'),
+            exportStatus = node('p'),
+            exportActions = node('div', undefined, 'entry-actions');
+          exportStatus.setAttribute('role', 'status');
+          exportCSV.disabled = !survey.response_count;
+          exportCSV.onclick = async () => {
+            exportCSV.disabled = true;
+            exportStatus.textContent = 'Preparing CSV for all responses…';
+            try {
+              const saved = await save(
+                '/api/custom-surveys?' +
+                  new URLSearchParams({ action: 'export', id: survey.id }),
+                `${fileSlug(survey.title) || 'custom-survey'}-responses-${isoDay(new Date())}.csv`,
+                { isCurrent },
+              );
+              if (saved)
+                exportStatus.textContent =
+                  'CSV downloaded. It includes every active response across all pages.';
+            } catch (error) {
+              if (isCurrent()) exportStatus.textContent = error.message;
+            } finally {
+              exportCSV.disabled = false;
+            }
+          };
+          exportActions.append(exportCSV, exportStatus);
           content.append(
             node('h3', 'Submitted responses'),
+            exportActions,
             responseSections(named(data.results), {
               definition: data.resultsDefinition,
+              actions: pdfActions,
             }),
           );
           let nextOffset = data.nextOffset;
@@ -257,6 +329,7 @@ export function mountCustomSurveys(root, api) {
               content.insertBefore(
                 responseSections(named(page.results), {
                   definition: data.resultsDefinition,
+                  actions: pdfActions,
                 }),
                 more,
               );

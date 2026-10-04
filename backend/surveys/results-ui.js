@@ -11,23 +11,63 @@ export function partitionResponses(results) {
     archived: submitted.filter((r) => r.active === false),
   };
 }
-export function responseSections(results, { definition } = {}) {
-  const root = node('div', undefined, 'response-groups'),
-    groups = partitionResponses(results);
-  const questions = definition?.questions || [],
-    chapters = definition?.chapters || [];
+// An answer's place in the survey: chapter by chapter for Advisor Studio,
+// question by question for builder surveys. Unknown answers go last.
+export function answerRank(definition) {
+  const chapters = definition?.chapters || [];
   const order = chapters.length
     ? chapters.flatMap((c) =>
         [...(c.core || []), ...(c.optional || [])]
           .map((id) => 'q-' + id)
           .concat('note-' + c.id),
       )
-    : questions.map((q) => q.id);
-  const rank = (a) => {
+    : (definition?.questions || []).map((q) => q.id);
+  return (a) => {
     let i = order.indexOf(a.id);
     if (i < 0 && a.questionId) i = order.indexOf('q-' + a.questionId);
     return i < 0 ? order.length : i;
   };
+}
+// How a saved answer reads: a numbered ranking ('1. …' lines), a list of
+// chosen options, or text, plus the dial position when there is one. The
+// downloads use this so they match the screen.
+export function answerFormat(answer, definition) {
+  const question = definition?.questions?.find(
+      (q) => q.id === (answer.questionId ?? answer.id),
+    ),
+    structured = answer.mode === 'structured' || answer.mode === 'form';
+  return {
+    kind: !structured
+      ? 'text'
+      : question?.type === 'rank' && answer.answer?.mode === 'rank'
+        ? 'ranked'
+        : ['multi_choice', 'multiple'].includes(question?.type)
+          ? 'choices'
+          : 'text',
+    lines: String(answer.text ?? '')
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean),
+    dial:
+      answer.mode === 'structured' && answer.answer?.mode === 'value'
+        ? answer.answer.value
+        : undefined,
+  };
+}
+// 'Advisor Studio — Fall 2026' → 'advisor-studio-fall-2026', for file names.
+export const fileSlug = (text) =>
+  String(text ?? '')
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .slice(0, 60)
+    .replace(/^-+|-+$/g, '');
+export function responseSections(results, { definition, actions } = {}) {
+  const root = node('div', undefined, 'response-groups'),
+    groups = partitionResponses(results);
+  const chapters = definition?.chapters || [],
+    rank = answerRank(definition);
   function person(result, open) {
     const details = node('details', undefined, 'response-person');
     details.open = open;
@@ -42,6 +82,7 @@ export function responseSections(results, { definition } = {}) {
     );
     details.append(summary);
     const body = node('div', undefined, 'response-body');
+    if (actions) body.append(actions(result));
     let lastGroup;
     for (const answer of [...result.responses].sort(
       (a, b) => rank(a) - rank(b),

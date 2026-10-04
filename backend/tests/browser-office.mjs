@@ -1,10 +1,16 @@
 import { chromium, expect } from '@playwright/test';
 import assert from 'node:assert/strict';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { officeFixture } from './helpers/office-fixture.mjs';
+import {
+  advisorResponses,
+  builderSample,
+} from './helpers/survey-response-samples.mjs';
+import { pdfLines } from './helpers/pdf-text.mjs';
 import { changeDraft } from '../lib/survey-builder.mjs';
 import { privateSurveyToken } from '../lib/custom-surveys.mjs';
+import { definition } from '../lib/survey-contract.mjs';
 import { randomUUID } from 'node:crypto';
 const fixture = await officeFixture();
 const browser = await chromium.launch({
@@ -2170,6 +2176,161 @@ try {
           );
         }
       }
+    },
+  );
+  // Synthetic surveys for the downloads: one in the original Advisor Studio
+  // design (no builder definition) and one builder survey.
+  const studio = randomUUID(),
+    feedback = randomUUID(),
+    sample = builderSample();
+  await fixture.db.query(
+    `INSERT INTO club_forms.custom_surveys(id,slug,title,content_version,status,link_digest,expires_at) VALUES($1,'advisor-studio-sample','Advisor Studio sample',$2,'closed',$3,now())`,
+    [studio, definition.content_version, randomUUID()],
+  );
+  for (const [action, expectedRevision] of [
+    ['save', 0],
+    ['publish', 1],
+  ])
+    await changeDraft(
+      fixture.db,
+      { email: 'officer@example.com' },
+      {
+        id: feedback,
+        definition: sample.definition,
+        action,
+        expectedRevision,
+        requestId: randomUUID(),
+      },
+    );
+  for (const [survey, id, name, responses] of [
+    [studio, 'avery', 'Avery Sample', advisorResponses()],
+    [feedback, 'jordan', 'Jordan Example', sample.answers('Clear examples')],
+  ]) {
+    await fixture.db.query(
+      'INSERT INTO club_forms.custom_survey_members(survey_id,advisor_id,display_name,email) VALUES($1,$2,$3,$4)',
+      [survey, id, name, id + '@example.com'],
+    );
+    await fixture.db.query(
+      "INSERT INTO club_forms.custom_survey_responses(survey_id,advisor_id,revision,responses,submitted_at) VALUES($1,$2,1,$3,'2026-10-03T03:30:00Z')",
+      [survey, id, JSON.stringify(responses)],
+    );
+  }
+  const openCustomSurvey = async (page, id) => {
+    await page.locator('#surveys-tab').click();
+    await page.locator('#custom-surveys-group').click();
+    await page.getByLabel('Custom survey', { exact: true }).selectOption(id);
+  };
+  await check('Custom survey responses download as PDF files', async (page) => {
+    const scripts = () =>
+      page.evaluate(() =>
+        performance
+          .getEntriesByType('resource')
+          .map((entry) => new URL(entry.name).pathname)
+          .filter((path) => path.endsWith('.js')),
+      );
+    await openCustomSurvey(page, studio);
+    const button = page.getByRole('button', {
+      name: 'Download PDF for Avery Sample',
+      exact: true,
+    });
+    await button.waitFor();
+    // jsPDF is not part of the first download.
+    assert.deepEqual(await scripts(), ['/admin/index.js']);
+    let download = page.waitForEvent('download');
+    await button.click();
+    let file = await download;
+    assert.equal(
+      file.suggestedFilename(),
+      'advisor-studio-sample-avery-sample-2026-10-02.pdf',
+    );
+    let bytes = await readFile(await file.path());
+    assert.equal(bytes.subarray(0, 5).toString(), '%PDF-');
+    let lines = pdfLines(bytes);
+    for (const text of [
+      'Dallas College AI Club',
+      'Avery Sample',
+      '1.',
+      'Build or review an AI prototype together',
+      'Dial position: 65 of 100.',
+    ])
+      assert.ok(lines.includes(text), text);
+    await expect(
+      page.getByText('PDF downloaded.', { exact: true }),
+    ).toBeVisible();
+    assert.match(
+      (await scripts()).join(' '),
+      /^\/admin\/index\.js \/admin\/response-pdf-\w+\.js$/,
+    );
+    assert.deepEqual(
+      (
+        await fixture.db.query(
+          'SELECT actor FROM club_forms.audit WHERE action=$1',
+          ['custom-survey-pdf:' + studio],
+        )
+      ).rows,
+      [{ actor: 'officer@example.com' }],
+    );
+    // Builder surveys list a skipped question as 'No answer'.
+    await page
+      .getByLabel('Custom survey', { exact: true })
+      .selectOption(feedback);
+    download = page.waitForEvent('download');
+    await page
+      .getByRole('button', { name: 'Download PDF for Jordan Example' })
+      .click();
+    file = await download;
+    assert.equal(
+      file.suggestedFilename(),
+      'workshop-feedback-sample-jordan-example-2026-10-02.pdf',
+    );
+    lines = pdfLines(await readFile(await file.path()));
+    for (const text of ['Jordan Example', '•', 'Agents', 'No answer'])
+      assert.ok(lines.includes(text), text);
+    // The response and its button fit a phone.
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page
+      .getByRole('heading', { name: 'Submitted responses', exact: true })
+      .evaluate((heading) => heading.scrollIntoView());
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      true,
+    );
+    await page.screenshot({
+      path: path.join(screens, 'custom-survey-pdf-375.png'),
+    });
+  });
+  await check(
+    'Custom survey CSV export downloads every active response',
+    async (page) => {
+      await openCustomSurvey(page, studio);
+      const download = page.waitForEvent('download');
+      await page
+        .locator('#custom-surveys-root')
+        .getByRole('button', { name: 'Export CSV', exact: true })
+        .click();
+      const file = await download;
+      assert.match(
+        file.suggestedFilename(),
+        /^advisor-studio-sample-responses-\d{4}-\d{2}-\d{2}\.csv$/,
+      );
+      const csv = await readFile(await file.path(), 'utf8');
+      assert.match(
+        csv,
+        /^\uFEFF"Name","Email","Submitted \(Central\)","Status","What would you actually look forward to\?"/,
+      );
+      assert.match(csv, /\r\n"Avery Sample","avery@example.com","Oct 2, 2026/);
+      assert.match(
+        csv,
+        /"Active","1\. Build or review an AI prototype together 2\. Shape/,
+      );
+      await expect(
+        page.getByText(
+          'CSV downloaded. It includes every active response across all pages.',
+          { exact: true },
+        ),
+      ).toBeVisible();
     },
   );
 } finally {

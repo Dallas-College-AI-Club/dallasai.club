@@ -7,7 +7,12 @@ import { RequestError } from '../lib/errors.mjs';
 import { definition } from '../lib/survey-contract.mjs';
 import { getDraft, changeDraft } from '../lib/survey-builder.mjs';
 import { surveyCatalog } from '../lib/survey-catalog.mjs';
-import { surveyResultPage } from '../lib/survey-results.mjs';
+import {
+  surveyResultPage,
+  surveyExportRows,
+  surveyResultsCSV,
+  surveyExportFilename,
+} from '../lib/survey-results.mjs';
 import {
   respondentList,
   changeRespondent,
@@ -101,8 +106,20 @@ export function customSurveysHandler({
           );
         throw new RequestError(405, 'Method not allowed.');
       }
-      if (action === 'catalog' || action === 'results') {
-        await authorize(req);
+      // The PDF of one response is made in the browser from the results it
+      // already shows. Like the CSV export, it records who downloaded it.
+      if (action === 'response-pdf') {
+        const actor = await authorize(req);
+        if (req.method !== 'POST') throw new RequestError(405, 'Use POST.');
+        const id = surveyId((await jsonBody(req, 1000)).id);
+        await getDatabase().query(
+          'INSERT INTO club_forms.audit(actor,action) VALUES($1,$2)',
+          [actor.email, 'custom-survey-pdf:' + id],
+        );
+        return send(res, 200, { recorded: true });
+      }
+      if (action === 'catalog' || action === 'results' || action === 'export') {
+        const actor = await authorize(req);
         if (req.method !== 'GET')
           throw new RequestError(405, 'Survey results are read-only.');
         const db = getDatabase();
@@ -119,6 +136,24 @@ export function customSurveysHandler({
           )
         ).rows[0];
         if (!survey) throw new RequestError(404, 'Survey not found.');
+        if (action === 'export') {
+          const rows = await surveyExportRows(db, id);
+          // Like the event survey export, record who read the full set.
+          await db.query(
+            'INSERT INTO club_forms.audit(actor,action) VALUES($1,$2)',
+            [actor.email, 'custom-survey-export-csv:' + id],
+          );
+          res.statusCode = 200;
+          res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+          res.setHeader(
+            'Content-Disposition',
+            `attachment; filename="${surveyExportFilename(survey.title)}"`,
+          );
+          res.setHeader('X-Content-Type-Options', 'nosniff');
+          return res.end(
+            surveyResultsCSV(rows, survey.definition || definition),
+          );
+        }
         return send(res, 200, {
           survey,
           resultsDefinition: survey.definition || definition,

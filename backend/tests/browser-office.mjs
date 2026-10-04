@@ -3379,10 +3379,7 @@ try {
           );
         return rows;
       };
-      await page.goto(fixture.origin + '/admin/#/surveys/custom');
-      await page
-        .getByLabel('Custom survey', { exact: true })
-        .selectOption(fixture.id);
+      await page.goto(fixture.origin + '/admin/#/surveys/custom/' + fixture.id);
       const link = page.getByRole('link', {
         name: 'Preview sample comparison',
         exact: true,
@@ -3411,7 +3408,10 @@ try {
         sample.locator('.sidebar').getByText('Welcome', { exact: true }),
       ).toHaveCount(1);
       await expect(sample.locator('#progress')).toHaveText('Page 0 of 5');
-      await expect(sample.locator('#progress .progress > div')).toHaveCSS('width', '0px');
+      await expect(sample.locator('#progress .progress > div')).toHaveCSS(
+        'width',
+        '0px',
+      );
       await expect(sample.locator('.heroart')).toBeVisible();
       await expect(sample.locator('.welcome h1')).toContainText(
         'worth your time?',

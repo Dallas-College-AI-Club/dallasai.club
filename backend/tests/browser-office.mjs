@@ -1643,8 +1643,16 @@ try {
     'Focus stays in the inbox after signing in again',
     async (page) => {
       await page.clock.install();
-      await page.goto(fixture.origin + '/admin/#/inbox?status=new');
+      // Recreate the poll interval under the installed clock. A hash-only
+      // navigation would keep the interval created before clock.install().
+      await page.reload();
       await page.locator('#office').waitFor();
+      await page.locator('#inbox-pane [data-inbox-status="new"]').click();
+      await expect(page.locator('#entries')).toHaveAttribute(
+        'aria-busy',
+        'false',
+      );
+      await page.locator('#entries .entry').first().waitFor();
       const [first, second, third] = await page
         .locator('#entries .entry')
         .evaluateAll((cards) => cards.map((card) => card.id));

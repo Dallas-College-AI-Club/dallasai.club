@@ -425,6 +425,56 @@ try {
   );
 
   await check(
+    'Inbox status actions retain matching Active and All cards and remove New-only matches',
+    async (page, fixture, ids) => {
+      await page.goto(
+        fixture.origin + '/admin/#/inbox?type=rsvp-all&event=' + ids.event,
+      );
+      const alex = page.locator('#entry-' + ids.alex);
+      await expect(page.locator('#entries .entry')).toHaveCount(2);
+      await alex.locator(':scope > summary').click();
+      await alex
+        .getByRole('button', { name: 'Mark reviewed', exact: true })
+        .click();
+      await expect(alex.locator('.badge.reviewed')).toBeVisible();
+      await expect(page.locator('#entries .entry')).toHaveCount(2);
+      await expect(page.locator('.inbox-group > summary')).toHaveText(
+        'Office audit event · 2 RSVPs',
+      );
+      await alex.getByRole('button', { name: 'Mark new', exact: true }).click();
+      await expect(alex.locator('.badge.new')).toBeVisible();
+      await alex
+        .getByRole('button', { name: 'Archive submission', exact: true })
+        .click();
+      await expect(alex).toHaveCount(0);
+      await expect(page.locator('.inbox-group > summary')).toHaveText(
+        'Office audit event · 1 RSVP',
+      );
+      await page.locator('[data-inbox-status=""]').click();
+      await expect(page.locator('#entries .entry')).toHaveCount(2);
+      await alex.locator(':scope > summary').click();
+      await alex.getByRole('button', { name: 'Mark new', exact: true }).click();
+      await expect(alex.locator('.badge.new')).toBeVisible();
+      await alex
+        .getByRole('button', { name: 'Archive submission', exact: true })
+        .click();
+      await expect(alex.locator('.badge.closed')).toBeVisible();
+      await expect(page.locator('#entries .entry')).toHaveCount(2);
+      await page.locator('[data-inbox-status="new"]').click();
+      const jordan = page.locator('#entry-' + ids.jordan);
+      await expect(page.locator('#entries .entry')).toHaveCount(1);
+      await jordan.locator(':scope > summary').click();
+      await jordan
+        .getByRole('button', { name: 'Mark reviewed', exact: true })
+        .click();
+      await expect(jordan).toHaveCount(0);
+      await expect(page.locator('#entries')).toContainText(
+        'No submissions match these filters.',
+      );
+    },
+  );
+
+  await check(
     'Phone themes preserve grouped survey search without horizontal overflow',
     async (page) => {
       await page.setViewportSize({ width: 375, height: 812 });

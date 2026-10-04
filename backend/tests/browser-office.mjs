@@ -3729,6 +3729,13 @@ try {
     'Survey sign-in explains upstream code errors and recovers with a fresh code',
     async (page) => {
       await page.goto(fixture.origin + '/surveys/#invite=' + fixture.token);
+      const originalWelcome = await page
+        .locator('.welcome')
+        .evaluate((node) =>
+          ['.heroart', '.eyebrow', 'h1', '.welcome-copy', '.start-guide'].map(
+            (selector) => node.querySelector(selector).innerHTML,
+          ),
+        );
       await page
         .getByLabel('Email address', { exact: true })
         .fill('pearlman@example.com');
@@ -3796,6 +3803,42 @@ try {
           exact: true,
         }),
       ).toBeEnabled();
+      await page.locator('#comments-spark summary').click();
+      await page
+        .locator('#note-spark')
+        .fill('Draft survives the welcome page.');
+      await page.getByRole('button', { name: 'Welcome', exact: true }).click();
+      await expect(page.locator('.heroart')).toBeVisible();
+      assert.deepEqual(
+        await page
+          .locator('.welcome')
+          .evaluate((node) =>
+            ['.heroart', '.eyebrow', 'h1', '.welcome-copy', '.start-guide'].map(
+              (selector) => node.querySelector(selector).innerHTML,
+            ),
+          ),
+        originalWelcome,
+      );
+      await expect(page.locator('.auth-panel')).toHaveCount(0);
+      await expect(page.locator('#progress')).toHaveText('Page 0 of 5');
+      await expect(page.locator('#progress .progress > div')).toHaveCSS(
+        'width',
+        '0px',
+      );
+      for (const width of [1440, 390, 320]) {
+        await page.setViewportSize({ width, height: 844 });
+        assert.ok(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth <= innerWidth,
+          ),
+        );
+      }
+      await page
+        .getByRole('button', { name: 'Continue my playbook →', exact: true })
+        .click();
+      await expect(page.locator('#note-spark')).toHaveValue(
+        'Draft survives the welcome page.',
+      );
     },
   );
 } finally {

@@ -190,43 +190,57 @@ async function openQuestions() {
       }) +
       ' Central.';
     q('.sidebar').append(expiry);
-    editor = mountAdvisor(bootstrap, {
-      submit: async (data) => {
-        const serialized = JSON.stringify(data);
-        if (pending && pending.serialized !== serialized)
-          throw new Error(
-            'The previous save has not been confirmed. Retry that same selection, or keep a personal copy and reload to check the saved summary.',
-          );
-        pending ||= {
-          serialized,
-          body: {
-            ...data,
-            requestId: crypto.randomUUID(),
-            expectedRevision: revision,
-          },
-        };
-        let result;
-        try {
-          result = await request('submit', pending.body);
-        } catch (error) {
-          if (error.status === 400) pending = null;
-          throw error;
-        }
-        if (!result.receipt?.id || !Number.isInteger(result.receipt.revision))
-          throw new Error(
-            'The save could not be confirmed. Retry with the same selection.',
-          );
-        revision = result.receipt.revision;
-        pending = null;
-        // A failed refresh does not turn a committed save into a failed save.
-        try {
-          bootstrap = await request('bootstrap');
-          editor.updateResults(bootstrap.results);
-          savedResults(bootstrap.results);
-        } catch {}
-        return result.receipt;
+    const welcome = q('#main .welcome').cloneNode(true);
+    welcome.querySelector('.auth-panel').remove();
+    const title = welcome.querySelector('h1');
+    title.id = 'title';
+    title.tabIndex = -1;
+    const footer = document.createElement('div');
+    footer.className = 'footer';
+    footer.innerHTML =
+      '<button id="begin" class="primary">Continue my playbook →</button>';
+    welcome.append(footer);
+    editor = mountAdvisor(
+      bootstrap,
+      {
+        submit: async (data) => {
+          const serialized = JSON.stringify(data);
+          if (pending && pending.serialized !== serialized)
+            throw new Error(
+              'The previous save has not been confirmed. Retry that same selection, or keep a personal copy and reload to check the saved summary.',
+            );
+          pending ||= {
+            serialized,
+            body: {
+              ...data,
+              requestId: crypto.randomUUID(),
+              expectedRevision: revision,
+            },
+          };
+          let result;
+          try {
+            result = await request('submit', pending.body);
+          } catch (error) {
+            if (error.status === 400) pending = null;
+            throw error;
+          }
+          if (!result.receipt?.id || !Number.isInteger(result.receipt.revision))
+            throw new Error(
+              'The save could not be confirmed. Retry with the same selection.',
+            );
+          revision = result.receipt.revision;
+          pending = null;
+          // A failed refresh does not turn a committed save into a failed save.
+          try {
+            bootstrap = await request('bootstrap');
+            editor.updateResults(bootstrap.results);
+            savedResults(bootstrap.results);
+          } catch {}
+          return result.receipt;
+        },
       },
-    });
+      { welcomeHTML: welcome.outerHTML },
+    );
     savedResults(bootstrap.results);
   } finally {
     opening = false;

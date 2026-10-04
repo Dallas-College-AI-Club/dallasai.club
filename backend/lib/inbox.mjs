@@ -32,7 +32,7 @@ export function inboxFilter(params, events, { search = false } = {}) {
   if (
     (kind &&
       !kinds.includes(kind) &&
-      !['rsvp-past', 'rsvp-all'].includes(kind)) ||
+      !['rsvp-past', 'rsvp-all', 'questions-requests'].includes(kind)) ||
     (status && !['active', 'new', 'reviewed', 'closed'].includes(status)) ||
     (id && !uuid.test(id)) ||
     (eventId && !/^[a-z0-9][a-z0-9-]{0,99}$/.test(eventId))
@@ -48,7 +48,7 @@ export function inboxFilter(params, events, { search = false } = {}) {
       search ? [q] : [],
     ),
     where:
-      `WHERE ($1='' OR e.kind=$1 OR ($1 IN ('rsvp-past','rsvp-all') AND e.kind='rsvp')) AND ($2='' OR e.review_status=$2 OR ($2='active' AND e.review_status IN ('new','reviewed'))) AND ($3='' OR e.id::text=$3)
+      `WHERE ($1='' OR e.kind=$1 OR ($1 IN ('rsvp-past','rsvp-all') AND e.kind='rsvp') OR ($1='questions-requests' AND e.kind IN ('question','workshop'))) AND ($2='' OR e.review_status=$2 OR ($2='active' AND e.review_status IN ('new','reviewed'))) AND ($3='' OR e.id::text=$3)
       AND ($4='' OR (e.kind='rsvp' AND e.data->>'eventId'=$4))
       AND ($1 NOT IN ('rsvp','rsvp-past') OR (coalesce(e.data->>'eventId','')=ANY($5::text[]))=($1='rsvp'))` +
       (search ? ` AND ($6='' OR strpos(${searchText},lower($6))>0)` : ''),

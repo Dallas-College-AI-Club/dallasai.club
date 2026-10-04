@@ -18,7 +18,11 @@ import { dateTime } from '../admin/format.js';
 import { eventHandler } from '../api/events.mjs';
 import { RequestError } from '../lib/errors.mjs';
 import { validate } from '../lib/validation.mjs';
-import { createEventShareLink, eventURL } from '../lib/event-share-link.mjs';
+import {
+  createEventShareLink,
+  eventURL,
+  eventShortAlias,
+} from '../lib/event-share-link.mjs';
 import qrcode from 'qrcode-generator';
 const actor = 'officer@example.com';
 const draft = {
@@ -128,7 +132,10 @@ test('event short links are stable through retries, editing, archive, and restor
   let creates = 0;
   const create = async (url) => {
     creates++;
-    assert.equal(url, 'https://dallasai.club/club.html?mode=events&event=new-event');
+    assert.equal(
+      url,
+      'https://dallasai.club/club.html?mode=events&event=new-event',
+    );
     return 'https://go.dallasai.club/test-event';
   };
   const results = await Promise.all(
@@ -222,6 +229,161 @@ test('event Short link failures leave saved event data intact and allow a clean 
 });
 const save = (action, revision, event = draft, id = 'new-event') =>
   saveEvent(db, { action, id, revision, event }, actor, legacy);
+
+test('readable event paths retain meaning and only replace legacy links on explicit request', async () => {
+  const event = {
+    ...draft,
+    title: 'AI Club Members Game Night',
+    potential: true,
+    date: '',
+    startTime: '',
+    endTime: '',
+    rsvpDeadline: '2026-10-11',
+  };
+  assert.equal(eventShortAlias(event, 'new-event'), 'dai-game-night-2026');
+  assert.match(
+    eventShortAlias({ title: 'É'.repeat(80), date: '2026-10-11' }, 'new-event'),
+    /^dai-e{21}-2026$/,
+  );
+  await save('publish', 0, event);
+  const old = 'https://tinyurl.com/dai-' + 'a'.repeat(24);
+  await createEventShareLink(db, 'new-event', actor, async () => old);
+  const fail = () => assert.fail('Existing links must survive routine retries');
+  assert.equal(
+    (await createEventShareLink(db, 'new-event', actor, fail)).published
+      .shortLink,
+    old,
+  );
+  const calls = [];
+  const create = async (target, alias) => {
+    calls.push([target, alias]);
+    if (calls.length === 1) throw new RequestError(409, 'Occupied alias');
+    return 'https://tinyurl.com/' + alias;
+  };
+  const updated = await createEventShareLink(
+    db,
+    'new-event',
+    actor,
+    create,
+    true,
+  );
+  assert.equal(calls[0][1], 'dai-game-night-2026');
+  assert.match(calls[1][1], /^dai-game-night-2026-[a-f0-9]{6}$/);
+  assert.equal(calls[0][0], eventURL('new-event'));
+  assert.equal(calls[1][0], calls[0][0]);
+  assert.equal(updated.draft.shortLink, updated.published.shortLink);
+  assert.equal(
+    (await createEventShareLink(db, 'new-event', actor, fail, true)).published
+      .shortLink,
+    updated.published.shortLink,
+  );
+});
+
+test('custom short-link names replace only on explicit save, validate before provider calls, and retain links on collision', async () => {
+  await save('publish', 0);
+  const create = async (target, alias) => {
+    assert.equal(target, eventURL('new-event'));
+    return 'https://tinyurl.com/' + alias;
+  };
+  const initial = await createEventShareLink(db, 'new-event', actor, create);
+  for (const alias of [
+    null,
+    42,
+    {},
+    'four',
+    'a'.repeat(31),
+    'bad/path',
+    'https://tinyurl.com/hello',
+  ])
+    await assert.rejects(
+      createEventShareLink(
+        db,
+        'new-event',
+        actor,
+        () => assert.fail('Invalid custom name reached provider'),
+        false,
+        alias,
+      ),
+      { status: 400 },
+    );
+  const updated = await createEventShareLink(
+    db,
+    'new-event',
+    actor,
+    create,
+    false,
+    '  game-night-signup  ',
+  );
+  assert.equal(
+    updated.published.shortLink,
+    'https://tinyurl.com/game-night-signup',
+  );
+  assert.equal(updated.draft.shortLink, updated.published.shortLink);
+  assert.equal(
+    (
+      await createEventShareLink(db, 'new-event', actor, () =>
+        assert.fail('Routine retry replaced saved custom name'),
+      )
+    ).published.shortLink,
+    updated.published.shortLink,
+  );
+  const beforeAudit = (
+    await db.query('SELECT count(*)::int n FROM club_forms.audit')
+  ).rows[0].n;
+  let calls = 0;
+  await assert.rejects(
+    createEventShareLink(
+      db,
+      'new-event',
+      actor,
+      async (_, alias) => {
+        calls++;
+        assert.equal(alias, 'occupied-name');
+        throw new RequestError(409, 'That short-link path is already in use.');
+      },
+      false,
+      'occupied-name',
+    ),
+    { status: 409 },
+  );
+  assert.equal(calls, 1);
+  assert.equal(
+    (await editorEvents(db, [])).find((e) => e.id === 'new-event').published
+      .shortLink,
+    updated.published.shortLink,
+  );
+  assert.equal(
+    (await db.query('SELECT count(*)::int n FROM club_forms.audit')).rows[0].n,
+    beforeAudit,
+  );
+  const reset = await createEventShareLink(
+    db,
+    'new-event',
+    actor,
+    create,
+    false,
+    '  ',
+  );
+  assert.equal(reset.published.shortLink, initial.published.shortLink);
+});
+
+test('readable event links never retry ambiguous provider failures with another alias', async () => {
+  await save('publish', 0);
+  let calls = 0;
+  await assert.rejects(
+    createEventShareLink(db, 'new-event', actor, async () => {
+      calls++;
+      throw new RequestError(503, 'Provider unavailable');
+    }),
+    { status: 503 },
+  );
+  assert.equal(calls, 1);
+  assert.equal(
+    (await editorEvents(db, [])).find((e) => e.id === 'new-event').published
+      .shortLink,
+    undefined,
+  );
+});
 test('activity pages retain attribution in revision order without exposing content or mixing events', async () => {
   await save('draft', 0);
   await db.query(`INSERT INTO club_forms.event_history(event_id,revision,action,actor,content,created_at)

@@ -23,11 +23,6 @@
   gap: 8px;
   margin-top: 10px;
 }
-.event-share-address {
-  display: block;
-  overflow-wrap: anywhere;
-  padding-top: 8px;
-}
 .event-sharing button,
 .event-sharing a {
   min-height: 44px;

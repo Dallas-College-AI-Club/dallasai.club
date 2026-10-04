@@ -121,7 +121,8 @@ async function createShortIo(target, alias, fetchImpl, signal) {
     });
     // Short.io reuses a matching path and destination. On a conflict, inspect
     // that exact path; never update its destination or choose a random fallback.
-    if (response.status === 409)
+    const conflict = response.status === 409;
+    if (conflict)
       response = await fetchImpl(
         'https://api.short.io/links/expand?' +
           new URLSearchParams({ domain, path: alias }),
@@ -134,6 +135,14 @@ async function createShortIo(target, alias, fetchImpl, signal) {
       );
     if (response.status !== 200) throw new Error();
     const data = await response.json();
+    if (
+      conflict &&
+      typeof data?.originalURL === 'string' &&
+      data.originalURL !== target &&
+      data.path === alias &&
+      data.secureShortURL === link
+    )
+      throw new RequestError(409, 'That short-link path is already in use.');
     if (
       data?.originalURL !== target ||
       data.path !== alias ||
@@ -149,7 +158,8 @@ async function createShortIo(target, alias, fetchImpl, signal) {
         !(new Date(data.expiresAt).getTime() > Date.now()))
     )
       throw new Error();
-  } catch {
+  } catch (error) {
+    if (error instanceof RequestError && error.status === 409) throw error;
     // Provider errors can contain the token or private invitation. Neither is
     // copied into the response, audit, or general request-error logger.
     throw new RequestError(
@@ -178,7 +188,8 @@ async function createTinyUrl(target, alias, fetchImpl, signal) {
       redirect: 'error',
       body: JSON.stringify({ url: target, domain: 'tinyurl.com', alias }),
     });
-    if (response.status === 422)
+    const conflict = response.status === 422;
+    if (conflict)
       response = await fetchImpl(
         'https://api.tinyurl.com/alias/tinyurl.com/' + alias,
         {
@@ -191,6 +202,16 @@ async function createTinyUrl(target, alias, fetchImpl, signal) {
     if (response.status !== 200) throw new Error();
     const payload = await response.json(),
       data = payload?.data;
+    if (
+      conflict &&
+      payload?.code === 0 &&
+      typeof data?.url === 'string' &&
+      data.url !== target &&
+      data.alias === alias &&
+      data.domain === 'tinyurl.com' &&
+      data.tiny_url === link
+    )
+      throw new RequestError(409, 'That short-link path is already in use.');
     if (
       payload?.code !== 0 ||
       !Array.isArray(payload.errors) ||
@@ -206,7 +227,8 @@ async function createTinyUrl(target, alias, fetchImpl, signal) {
     )
       throw new Error();
     return link;
-  } catch {
+  } catch (error) {
+    if (error instanceof RequestError && error.status === 409) throw error;
     throw new RequestError(
       503,
       'Could not create the short link. Try again or enter one.',
@@ -227,8 +249,23 @@ export async function createShortLink(targetUrl, alias, fetchImpl = fetch) {
       AbortSignal.any([deadline, AbortSignal.timeout(4000)]);
   try {
     return await createShortIo(target, alias, fetchImpl, providerSignal());
-  } catch {
-    return await createTinyUrl(target, alias, fetchImpl, providerSignal());
+  } catch (primaryError) {
+    try {
+      return await createTinyUrl(target, alias, fetchImpl, providerSignal());
+    } catch (fallbackError) {
+      if (primaryError.status === 409 && !process.env.TINYURL_API_TOKEN)
+        throw primaryError;
+      // An uncertain acknowledgement may have created the original alias.
+      // Only report a collision when every configured provider confirmed it.
+      if (
+        fallbackError.status === 409 &&
+        primaryError.status !== 409 &&
+        process.env.SHORT_IO_API_KEY &&
+        process.env.SHORT_IO_DOMAIN
+      )
+        throw primaryError;
+      throw fallbackError;
+    }
   }
 }
 

@@ -831,7 +831,12 @@ export function mountSurveyResults(
       clearReport();
       reportStatus.textContent = 'Close this and compile the summary again.';
     },
-    show(id = '', eventId = options.eventId || '', followupOnly = false) {
+    show(
+      id = '',
+      eventId = options.eventId || '',
+      followupOnly = false,
+      responseType = '',
+    ) {
       entryId = id;
       offset = 0;
       search.value = '';
@@ -839,7 +844,11 @@ export function mountSurveyResults(
       star.checked = false;
       attendance.value = 'all';
       feedback.value = 'all';
-      type.value = followupOnly ? 'rsvp' : 'all';
+      type.value = followupOnly
+        ? 'rsvp'
+        : responseType === 'feedback'
+          ? 'feedback'
+          : 'all';
       followup.hidden = Boolean(options.host);
       if (
         eventId &&

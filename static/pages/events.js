@@ -208,6 +208,7 @@ export function mountEvents(root) {
     const past = selected.date ? eventIsPast(selected) : false;
     const canRSVP =
       !past && !privatePreview && selected.registrationOpen !== false;
+    const feedbackUrl = past && !privatePreview ? selected.feedbackUrl : '';
     panel.innerHTML = /* HTML */ `<button class="event-calendar-back">
         ← Back to calendar
       </button>
@@ -252,12 +253,26 @@ export function mountEvents(root) {
       }
       <div class="event-detail-actions">
         ${selected.meetingUrl ? '<a class="outline-link" target="_blank" rel="noopener" href="' + escapeHTML(selected.meetingUrl) + '">Open meeting link ↗</a>' : ''}
+        ${feedbackUrl ? '<a id="event-feedback-action" class="solid-link" href="' + escapeHTML(feedbackUrl) + '">Event feedback</a>' : ''}
         ${past || privatePreview ? '' : /* HTML */ `${canRSVP ? '<button id="event-rsvp-action" class="solid-link">RSVP for this event</button>' : ''}${selected.date ? '<button id="save-event" class="outline-link">Add to calendar ↓</button>' : ''}`}${privatePreview ? '' : '<button id="ask-event-question" class="outline-link">Ask about this event</button>'}
       </div>`;
-    q('.event-registration').before(eventSharing(selected));
+    if (selected.registrationOpen !== false) {
+      const sharing = eventSharing(selected);
+      const registration = q('.event-registration');
+      registration.before(sharing);
+      sharing.querySelector('.event-share-actions').after(registration);
+    }
     if (q('#ask-event-question'))
       q('#ask-event-question').onclick = () => questions.open(selected);
-    if (privatePreview || (!past && selected.registrationOpen !== false)) {
+    if (feedbackUrl) {
+      q('.event-registration').innerHTML =
+        '<a class="solid-link" href="' +
+        escapeHTML(feedbackUrl) +
+        '">Event feedback</a>';
+    } else if (
+      (privatePreview || !past) &&
+      selected.registrationOpen !== false
+    ) {
       q('.event-registration').insertAdjacentHTML(
         'beforeend',
         '<button id="open-rsvp" class="solid-link">' +

@@ -508,9 +508,23 @@
   min-height: 0;
   margin: 0 0 16px;
   padding: 18px;
-  background: #f3f7ef;
-  border: 1px solid #d3dfcd;
+  background: #dcebd2;
+  border: 1px solid #b6cda9;
   border-radius: 16px;
+  transition: background-color 160ms ease;
+}
+.potential-events:focus-within {
+  background: transparent;
+}
+@media (hover: hover) {
+  .potential-events:hover {
+    background: transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .potential-events {
+    transition: none;
+  }
 }
 .potential-notice {
   padding: 14px;
@@ -550,7 +564,7 @@ body:not(.reading) .content .potential-events h2 {
   scroll-margin-top: 24px;
 }
 .event-registration {
-  margin: 0 0 22px;
+  margin-top: 10px;
 }
 .event-registration:empty {
   display: none;

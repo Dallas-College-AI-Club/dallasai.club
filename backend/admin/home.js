@@ -3,7 +3,6 @@
 // this module only draws it. Every value is set as text.
 import { button, h, node, time } from './ui.js';
 import {
-  KINDS,
   actionLabel,
   actorLabel,
   dateTime,
@@ -169,14 +168,24 @@ export function renderHome(root, data, actions) {
       ? data.unpublished.map((event) => draftCard(event, openEvent))
       : [node('p', 'Everything is published.', 'hint')]),
   );
-  // Active submissions only; past and upcoming RSVPs share one category.
+  // Active submissions and event feedback; past and upcoming RSVPs share a tile.
   const totals = tile('Inbox totals'),
     grid = node('div', undefined, 'tile-totals');
-  for (const kind of KINDS) {
+  for (const kind of [
+    'join',
+    'questions-requests',
+    'subscribe',
+    'rsvp',
+    'feedback',
+    'contribution',
+  ]) {
     const count = data.counts
         .filter(
           (row) =>
-            row.kind === kind || (kind === 'rsvp' && row.kind === 'rsvp-past'),
+            row.kind === kind ||
+            (kind === 'rsvp' && row.kind === 'rsvp-past') ||
+            (kind === 'questions-requests' &&
+              ['question', 'workshop'].includes(row.kind)),
         )
         .reduce(
           (sum, row) => ({
@@ -187,18 +196,26 @@ export function renderHome(root, data, actions) {
         ),
       cell = link(
         '',
-        build('inbox', {
-          type: kind === 'rsvp' ? 'rsvp-all' : kind,
-          status: 'active',
-        }),
+        kind === 'feedback'
+          ? build('surveys/events', { type: 'feedback' })
+          : build('inbox', {
+              type: kind === 'rsvp' ? 'rsvp-all' : kind,
+              status: 'active',
+            }),
         'total',
       );
     cell.classList.toggle('has-new', count.new > 0);
     cell.append(
-      node('strong', count.total.toLocaleString('en-US')),
+      node(
+        'strong',
+        (kind === 'feedback'
+          ? data.eventFeedback || 0
+          : count.total
+        ).toLocaleString('en-US'),
+      ),
       node(
         'span',
-        kindLabel(kind, 'plural') +
+        (kind === 'feedback' ? 'Event feedback' : kindLabel(kind, 'plural')) +
           (count.new ? ' · ' + count.new.toLocaleString('en-US') + ' new' : ''),
       ),
     );
@@ -206,7 +223,7 @@ export function renderHome(root, data, actions) {
   }
   const active = data.counts.reduce(
     (sum, row) => sum + row.new + row.reviewed,
-    0,
+    data.eventFeedback || 0,
   );
   totals.append(
     number(active, active === 1 ? 'active submission' : 'active submissions'),

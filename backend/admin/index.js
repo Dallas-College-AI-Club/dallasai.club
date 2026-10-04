@@ -1016,10 +1016,22 @@ const sections = {
       }
       const entry = route.params.entryId || '',
         event = route.query.event || route.params.eventId || '',
-        key = entry + ':' + event + ':' + (route.query.followup || '');
+        key =
+          entry +
+          ':' +
+          event +
+          ':' +
+          (route.query.followup || '') +
+          ':' +
+          (route.query.type || '');
       if (shownEntry === key) return;
       shownEntry = key;
-      surveys.show(entry, event, route.query.followup === '1');
+      surveys.show(
+        entry,
+        event,
+        route.query.followup === '1',
+        route.query.type || '',
+      );
     },
     // Leaving a custom survey asks its unsaved builder first.
     leave() {

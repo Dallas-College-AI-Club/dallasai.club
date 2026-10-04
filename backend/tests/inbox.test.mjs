@@ -91,6 +91,34 @@ after(async () => {
   await db.close();
 });
 
+test('questions and requests filter combines questions and workshops across list, poll and CSV', async () => {
+  const question = await insert({ name: 'Question member' });
+  const requestId = await insert({
+    kind: 'workshop',
+    name: 'Workshop member',
+    status: 'reviewed',
+  });
+  await insert({ kind: 'join', name: 'Signup member' });
+  await insert({
+    kind: 'workshop',
+    name: 'Archived workshop',
+    status: 'closed',
+  });
+  const query = 'kind=questions-requests&status=active';
+  const result = await list('?' + query);
+  assert.equal(result.total, 2);
+  assert.deepEqual(
+    new Set(result.entries.map((entry) => entry.id)),
+    new Set([question, requestId]),
+  );
+  assert.equal((await list('?counts=1&' + query)).newInView, 1);
+  const csv = await (await request('/api/admin?export=csv&' + query)).text();
+  for (const name of ['Question member', 'Workshop member'])
+    assert.ok(csv.includes(name));
+  for (const name of ['Signup member', 'Archived workshop'])
+    assert.ok(!csv.includes(name));
+});
+
 test('search matches message text across statuses; total counts the whole filtered set', async () => {
   const parking = await insert({
     data: { subject: 'Venue', message: 'Is there Parking near the venue?' },

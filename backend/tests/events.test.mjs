@@ -243,7 +243,7 @@ test('readable event paths retain meaning and only replace legacy links on expli
   assert.equal(eventShortAlias(event, 'new-event'), 'dai-game-night-2026');
   assert.match(
     eventShortAlias({ title: 'É'.repeat(80), date: '2026-10-11' }, 'new-event'),
-    /^dai-e{21}-2026$/,
+    /^dai-event-2026$/,
   );
   await save('publish', 0, event);
   const old = 'https://tinyurl.com/dai-' + 'a'.repeat(24);
@@ -277,6 +277,62 @@ test('readable event paths retain meaning and only replace legacy links on expli
       .shortLink,
     updated.published.shortLink,
   );
+});
+
+test('automatic short-link names use known topic words without raw unknown words or partial words', async () => {
+  for (const title of [
+    'damn hell',
+    'Mystery Unrecognized',
+    '😀'.repeat(80),
+    'É'.repeat(80),
+  ])
+    assert.equal(
+      eventShortAlias({ title, date: '2026-10-11' }, 'unknown-event'),
+      'dai-event-2026',
+    );
+  assert.equal(
+    eventShortAlias(
+      {
+        title: 'Damned AI Club Members Game Night',
+        rsvpDeadline: '2026-10-11',
+      },
+      'unknown-event',
+    ),
+    'dai-ai-game-night-2026',
+  );
+  assert.equal(
+    eventShortAlias(
+      { title: 'AI Club Members Gáme Night!!!', rsvpDeadline: '2026-10-11' },
+      'unknown-event',
+    ),
+    'dai-game-night-2026',
+  );
+  assert.equal(
+    eventShortAlias(
+      { title: 'Programming Learning Workshop Showcase', date: '2026-10-11' },
+      'unknown-event',
+    ),
+    'dai-programming-learning-2026',
+  );
+  await save('publish', 0, {
+    ...draft,
+    title: 'Programming Learning Workshop Showcase',
+    date: '2026-10-11',
+  });
+  let calls = 0;
+  const row = await createEventShareLink(
+    db,
+    'new-event',
+    actor,
+    async (_, alias) => {
+      calls++;
+      if (calls === 1) throw new RequestError(409, 'Occupied');
+      assert.match(alias, /^dai-programming-2026-[a-f0-9]{6}$/);
+      assert.ok(alias.length <= 30);
+      return 'https://tinyurl.com/' + alias;
+    },
+  );
+  assert.match(row.published.shortLink, /dai-programming-2026-/);
 });
 
 test('custom short-link names replace only on explicit save, validate before provider calls, and retain links on collision', async () => {

@@ -6,17 +6,27 @@ export const legacyEventShortLink = (link) =>
   typeof link === 'string' && /^https:\/\/[^/]+\/dai-[a-f0-9]{24}$/.test(link);
 
 export function eventShortAlias(event, id) {
-  const words =
-    (event.title || id)
-      .normalize('NFKD')
-      .replace(/[\u0300-\u036f]/g, '')
-      .toLowerCase()
-      .replace(/^ai\s+club\s+(?:members?\s+)?/, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '') || 'event';
+  const safeWords = new Set(
+    'ai programming game night workshop meeting talk hackathon social project sprint planning check in github git python data learning study demo career networking coding robotics design research innovation welcome orientation beginner advanced showcase'.split(
+      ' ',
+    ),
+  );
+  const words = (event.title || id)
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/^ai\s+club\s+(?:members?\s+)?/, '')
+    .split(/[^a-z0-9]+/)
+    .filter((word) => safeWords.has(word));
   const year = /^(\d{4})/.exec(event.date || event.rsvpDeadline || '')?.[1];
-  const ending = year && !words.endsWith(year) ? '-' + year : '';
-  return 'dai-' + words.slice(0, 26 - ending.length).replace(/-$/, '') + ending;
+  const ending = year ? '-' + year : '';
+  let name = '';
+  for (const word of words) {
+    const next = name ? name + '-' + word : word;
+    if (next.length > 26 - ending.length) break;
+    name = next;
+  }
+  return 'dai-' + (name || 'event') + ending;
 }
 
 export const eventURL = (id) =>
@@ -75,10 +85,13 @@ export async function createEventShareLink(
         .update(target)
         .digest('hex')
         .slice(0, 6);
-      link = await createLink(
-        target,
-        alias.slice(0, 23).replace(/-$/, '') + '-' + suffix,
-      );
+      const parts = alias.split('-');
+      while (parts.join('-').length > 23)
+        parts.splice(
+          /^[0-9]{4}$/.test(parts.at(-1)) ? parts.length - 2 : parts.length - 1,
+          1,
+        );
+      link = await createLink(target, parts.join('-') + '-' + suffix);
     }
     const updated = (
       await tx.query(

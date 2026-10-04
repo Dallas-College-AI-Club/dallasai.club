@@ -1083,7 +1083,7 @@ try {
   await expect(
     page.getByRole('link', { name: 'View published event ↗' }),
   ).toHaveAttribute('href', 'https://go.dallasai.club/test-published-event');
-  assert.equal(shortAliases.at(-1), 'dai-blocked-popup-check');
+  assert.equal(shortAliases.at(-1), 'dai-check');
   assert.deepEqual(errors, []);
   console.log(
     'Passed: four event types, fixed Studio design and office-only logo, workshop entry, private image preview, persistence, publish, public refresh, safe rendering, conflict recovery, archived editing, reload, restore as draft, preserved RSVPs/images, republish, unpublish, sign-out, and mobile layouts.',

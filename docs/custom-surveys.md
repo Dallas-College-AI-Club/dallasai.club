@@ -125,9 +125,21 @@ unchecked. Source or wording edits invalidate only that response's flags and
 final audience consent. Every concern dial, resource offer, page comment, and
 ideal-responsibilities answer has its own choices.
 
+The review page pairs your answers with the other advisor's saved shared wording
+under the same question. On phones each pair stacks together. Edit controls sit
+beside **Your response**. Questions answered only by the other advisor remain
+visible for comparison and are not included in your submission or personal copy.
+Only the already-authorized shared results are used; question previews contain no
+responses. A resource or concern added by an advisor stays separate from another
+advisor's independently added option.
+
 The review page has separate **Mark all wording reviewed** and **Include all in
-shared summary** buttons. They skip empty, stale, and removed responses and
-leave final audience consent unchecked. Full downloads use
+shared summary** buttons. Click either again to undo only the checks it added;
+choices checked individually before the bulk action are kept. Changing a checkbox
+individually afterwards also takes it out of that bulk action. The two buttons
+work independently, skip empty, stale, and removed responses, and leave final
+audience consent unchecked. Editing an answer still clears that answer's review
+and inclusion choices. Full downloads use
 `formname-full-response_respondent-name_YYYY-MM-DD_HH-mm-ss-CT.docx` (or `.md`).
 
 Admins manage respondent names and email addresses in Custom surveys, including

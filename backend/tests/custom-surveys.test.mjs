@@ -275,6 +275,44 @@ test('replacement summaries remove omitted answers; stale revisions and altered 
     2,
   );
 });
+test('advisor comparison receives only the current shared snapshot and excludes unapproved audiences', async () => {
+  assert.equal((await request('submit', submission())).status, 200);
+  const device = await request(
+    'verify-device',
+    {},
+    { cookie: 'test-neon=bracewell' },
+  );
+  const otherCookie = device.headers.getSetCookie()[0].split(';')[0];
+  const shared = async () =>
+    (
+      await (
+        await request('bootstrap', undefined, { cookie: otherCookie })
+      ).json()
+    ).results.find((r) => r.advisor_id === 'pearlman');
+  assert.deepEqual((await shared()).responses.map((r) => r.id).sort(), [
+    'note-spark',
+    'q-spark',
+  ]);
+  assert.equal(
+    (await request('submit', submission([narrative()], 1))).status,
+    200,
+  );
+  assert.deepEqual(
+    (await shared()).responses.map((r) => r.id),
+    ['note-spark'],
+  );
+  await f.db.query(
+    "UPDATE club_forms.custom_survey_responses SET shared_with='{}' WHERE survey_id=$1 AND advisor_id='pearlman'",
+    [f.id],
+  );
+  assert.equal((await shared()).responses, null);
+  const own = await (await request('bootstrap')).json();
+  assert.equal(
+    own.results.find((r) => r.advisor_id === 'pearlman').responses.length,
+    1,
+  );
+});
+
 test('forged identity, consent, hidden original values and unexpected fields are rejected before persistence', async () => {
   const cases = [
     { ...submission(), state: { private: 'Never store' } },

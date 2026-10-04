@@ -1,5 +1,6 @@
 import { makeDocx } from './personal-copy.js';
-import { markAllResponses, fullResponseFilename } from './review-actions.js';
+import { toggleAllResponses, fullResponseFilename } from './review-actions.js';
+import { answerRank } from './results-ui.js';
 export function mountAdvisor(
   bootstrap,
   transport,
@@ -7,6 +8,11 @@ export function mountAdvisor(
 ) {
   let submitting = false;
   const BANK = bootstrap.definition;
+  let sharedResults = readOnly ? [] : bootstrap.results || [];
+  const peers = readOnly
+    ? []
+    : BANK.respondents.filter((p) => p.id !== bootstrap.advisorId);
+  const responseOrder = answerRank(BANK);
   const Q = Object.fromEntries(BANK.questions.map((q) => [q.id, q]));
   const $ = (id) => document.getElementById(id);
   const esc = (s) =>
@@ -30,6 +36,7 @@ export function mountAdvisor(
     custom: {},
     notes: {},
     review: {},
+    bulk: { reviewed: new Set(), included: new Set() },
     approved: false,
   });
 
@@ -978,14 +985,17 @@ export function mountAdvisor(
     }
     if (t.dataset.bulkReview && !submitting) {
       invalidate();
-      const count = markAllResponses(
+      const { count, undo } = toggleAllResponses(
         reviewFields(),
         state.review,
         t.dataset.bulkReview,
+        state.bulk[t.dataset.bulkReview],
       );
       render();
       announce(
-        `${count} responses ${t.dataset.bulkReview === 'reviewed' ? 'marked as reviewed' : 'included in the shared summary'}.`,
+        undo
+          ? `${count} bulk checks undone. Individual choices kept.`
+          : `${count} responses ${t.dataset.bulkReview === 'reviewed' ? 'marked as reviewed' : 'included in the shared summary'}.`,
       );
     }
     if (t.dataset.rankaction)
@@ -1329,7 +1339,7 @@ export function mountAdvisor(
         r.included = false;
         r.archived = true;
       }
-    return descriptors
+    const fields = descriptors
       .map((f) => {
         const signature = sourceSignature(f);
         let r = state.review[f.id];
@@ -1375,6 +1385,15 @@ export function mountAdvisor(
           f.source.trim() ||
           f.text.trim(),
       );
+    for (const flag of ['reviewed', 'included'])
+      for (const id of state.bulk[flag])
+        if (
+          !fields.some(
+            (f) => f.id === id && f[flag] && !f.stale && f.text.trim(),
+          )
+        )
+          state.bulk[flag].delete(id);
+    return fields;
   }
   function sharingIssues(fields = reviewFields()) {
     if (!state.advisorId) return ['Verify your email.'];
@@ -1449,14 +1468,15 @@ export function mountAdvisor(
     refreshFinalControls(fields);
   }
   function refreshFinalControls(fields = reviewFields()) {
-    document
-      .querySelectorAll('[data-bulk-review]')
-      .forEach(
-        (b) =>
-          (b.disabled =
-            readOnly ||
-            !fields.some((f) => f.text.trim() && !f.stale && !f.archived)),
-      );
+    document.querySelectorAll('[data-bulk-review]').forEach((b) => {
+      const active = state.bulk[b.dataset.bulkReview].size > 0;
+      b.textContent = bulkLabel(b.dataset.bulkReview);
+      b.setAttribute('aria-pressed', String(active));
+      b.disabled =
+        readOnly ||
+        (!active &&
+          !fields.some((f) => f.text.trim() && !f.stale && !f.archived));
+    });
     const count = fields.filter((x) => x.included).length,
       issues = sharingIssues(fields);
     if ($('selection-summary'))
@@ -1470,35 +1490,104 @@ export function mountAdvisor(
       .querySelectorAll('[data-personal-export]')
       .forEach((b) => (b.disabled = !hasFullResponses()));
   }
+  function bulkLabel(flag) {
+    return flag === 'reviewed'
+      ? state.bulk.reviewed.size
+        ? 'Undo bulk wording review'
+        : 'Mark all wording reviewed'
+      : state.bulk.included.size
+        ? 'Undo bulk inclusion'
+        : 'Include all in shared summary';
+  }
+  function peerResponses(person) {
+    return (
+      sharedResults.find(
+        (r) => r.advisor_id === person.id && r.active !== false,
+      )?.responses || []
+    );
+  }
+  function comparisonFields(fields) {
+    const rows = [...fields];
+    for (const person of peers) {
+      for (const answer of peerResponses(person)) {
+        // Custom resource/concern identifiers belong to their author. Never
+        // imply that two independently added options describe the same thing.
+        const custom = answer.optionId?.startsWith('custom_');
+        const id = custom ? `peer-${person.id}-${answer.id}` : answer.id;
+        if (rows.some((f) => f.id === id)) continue;
+        rows.push({
+          ...answer,
+          id,
+          peerId: custom ? person.id : null,
+          sourceId: answer.id,
+          text: '',
+          empty: true,
+          step: BANK.chapters.findIndex((c) => c.id === answer.group),
+        });
+      }
+    }
+    return rows.sort((a, b) => responseOrder(a) - responseOrder(b));
+  }
+  function comparisonHTML(f) {
+    return peers
+      .map((person) => {
+        const custom = f.optionId?.startsWith('custom_');
+        const answer =
+          !custom || f.peerId === person.id
+            ? peerResponses(person).find((r) => r.id === (f.sourceId || f.id))
+            : null;
+        return `<aside class="peer-response" aria-label="${esc(person.name)} — ${esc(f.title)}"><h4 class="comparison-label">${esc(person.name)}</h4><p class="peer-caption">Shared response</p><div class="peer-wording">${answer ? esc(answer.text) : '<span class="peer-empty">No shared response for this question.</span>'}</div></aside>`;
+      })
+      .join('');
+  }
   function summaryCard(f) {
     const ideal = f.id === 'q-ideal_responsibilities';
-    return `<section class="reviewfield ${f.included ? 'is-included' : ''}" id="review-card-${f.id}" aria-labelledby="summary-heading-${f.id}"><div class="review-heading-row"><h3 id="summary-heading-${f.id}">${esc(f.title)}</h3>${ideal ? '' : `<button class="small ghost" data-editresponse="${f.id}">${f.kind === 'comment' ? 'Edit comment' : 'Edit answer'}</button>`}</div>${ideal ? `<p class="fine">${esc(Q.ideal_responsibilities.prompt)}</p>` : ''}<p class="response-mode">${esc(fieldHint(f))}</p>${f.stale ? `<div class="stale-note">Your original answer changed after you edited its wording.<details><summary>See updated answer</summary><pre>${esc(f.source)}</pre></details><div class="chiprow"><button class="small" data-resetwording="${f.id}">Use updated answer</button><button class="small" data-keepwording="${f.id}">Keep my wording</button></div></div>` : ''}<textarea id="summary-${f.id}" class="summary-editor" data-summarytext="${f.id}" maxlength="${ideal ? 2000 : f.kind === 'comment' ? 700 : 12000}" aria-labelledby="summary-heading-${f.id}" placeholder="${ideal ? 'The role I would love to play…' : 'Write the answer you would like to share…'}">${esc(f.text)}</textarea>${!ideal && !f.stale ? `<button class="small ghost" data-resetwording="${f.id}" ${f.mode !== 'narrative' || f.kind === 'comment' ? 'hidden' : ''}>Restore generated wording</button>` : ''}<div class="reviewcontrols"><label for="reviewed-${f.id}"><input type="checkbox" id="reviewed-${f.id}" data-answerreview="${f.id}" ${f.reviewed ? 'checked' : ''} ${!f.text.trim() || f.stale ? 'disabled' : ''}>I reviewed this wording.</label><label for="included-${f.id}"><input type="checkbox" id="included-${f.id}" data-answerinclude="${f.id}" ${f.included ? 'checked' : ''} ${!f.text.trim() || f.stale ? 'disabled' : ''}>Include in shared summary.</label></div></section>`;
+    const edit = ideal
+      ? ''
+      : `<button class="small ghost" data-editresponse="${esc(f.id)}">${f.kind === 'comment' ? 'Edit comment' : 'Edit answer'}</button>`;
+    const own = f.empty
+      ? '<p class="response-mode">You have not answered this question.</p>'
+      : `
+      <p class="peer-caption">Your wording · editable</p>
+      ${f.stale ? `<div class="stale-note">Your original answer changed after you edited its wording.<details><summary>See updated answer</summary><pre>${esc(f.source)}</pre></details><div class="chiprow"><button class="small" data-resetwording="${f.id}">Use updated answer</button><button class="small" data-keepwording="${f.id}">Keep my wording</button></div></div>` : ''}
+      <textarea id="summary-${f.id}" class="summary-editor" data-summarytext="${f.id}" maxlength="${ideal ? 2000 : f.kind === 'comment' ? 700 : 12000}" aria-labelledby="summary-heading-${f.id}" placeholder="${ideal ? 'The role I would love to play…' : 'Write the answer you would like to share…'}">${esc(f.text)}</textarea>
+      <p class="response-mode">${esc(fieldHint(f))}</p>
+      ${!ideal && !f.stale ? `<button class="small ghost" data-resetwording="${f.id}" ${f.mode !== 'narrative' || f.kind === 'comment' ? 'hidden' : ''}>Restore generated wording</button>` : ''}
+      <div class="reviewcontrols"><label for="reviewed-${f.id}"><input type="checkbox" id="reviewed-${f.id}" data-answerreview="${f.id}" ${f.reviewed ? 'checked' : ''} ${!f.text.trim() || f.stale ? 'disabled' : ''}>I reviewed this wording.</label><label for="included-${f.id}"><input type="checkbox" id="included-${f.id}" data-answerinclude="${f.id}" ${f.included ? 'checked' : ''} ${!f.text.trim() || f.stale ? 'disabled' : ''}>Include in shared summary.</label></div>`;
+    return `<section class="reviewfield ${!f.empty && f.included ? 'is-included' : ''}" id="review-card-${esc(f.id)}" aria-labelledby="summary-heading-${esc(f.id)}">
+      <h3 id="summary-heading-${esc(f.id)}">${esc(f.title)}</h3>
+      ${ideal ? `<p class="fine">${esc(Q.ideal_responsibilities.prompt)}</p>` : ''}
+      <div class="answer-comparison ${peers.length ? '' : 'own-only'}"><div class="own-response"><div class="own-response-heading"><h4 class="comparison-label">Your response</h4>${edit}</div>${own}</div>${peers.length ? `<div class="peer-responses">${comparisonHTML(f)}</div>` : ''}</div></section>`;
   }
   function reviewHTML() {
     const fields = reviewFields(),
       issues = sharingIssues(fields),
       valid = !!state.approved && !issues.length,
       count = fields.filter((f) => f.included).length;
-    const ideal = fields.find((f) => f.id === 'q-ideal_responsibilities');
+    const rows = comparisonFields(fields);
+    const ideal = rows.find((f) => f.id === 'q-ideal_responsibilities');
     const grouped = BANK.chapters
       .slice(0, 4)
       .map((c, step) => {
-        const items = fields.filter((f) => f.step === step);
+        const items = rows.filter((f) => f.step === step);
         return items.length
           ? `<section class="review-group" aria-labelledby="review-group-${c.id}"><h2 id="review-group-${c.id}" class="review-group-title">${esc(c.title)}</h2>${items.map(summaryCard).join('')}</section>`
           : '';
       })
       .join('');
-    return `<div class="playbook-person"><span class="eyebrow">Your advising playbook</span><h2>${esc(advisorName())}</h2></div><p class="share-guide">Each response has two separate choices: approve its wording and decide whether to share it. Only responses marked for inclusion and reviewed will be submitted. Questions you skipped stay out.</p><div class="chiprow review-bulk"><button data-bulk-review="reviewed" ${fields.some((f) => f.text.trim() && !f.stale) ? '' : 'disabled'}>Mark all wording reviewed</button><button data-bulk-review="included" ${fields.some((f) => f.text.trim() && !f.stale) ? '' : 'disabled'}>Include all in shared summary</button></div>${summaryCard(ideal)}${grouped}<section class="send-panel"><h2>Share your playbook</h2><p>Submitting replaces your previously shared summary with this selection. Responses you leave out are removed from the current shared results.</p><p id="selection-summary" class="selection-summary">${count} ${count === 1 ? 'response' : 'responses'} selected for sharing.</p><p class="fine" id="sharing-issues" role="status">${count ? esc(issues.join(' ')) : ''}</p><label class="check final-approval"><input id="approve-playbook" type="checkbox" ${state.approved ? 'checked' : ''} ${issues.length ? 'disabled' : ''}><span>${esc(consentWording())}</span></label><div class="chiprow"><button id="submitPlaybook" class="primary" data-submit-control ${valid ? '' : 'disabled'}>Submit shared summary</button></div><div id="submit-status" role="status" aria-live="polite" class="submit-status"></div><div class="personal-copy"><h3>Keep a full copy for yourself</h3><p>These files contain all your responses, comments, and edited wording, including answers you do not include in the shared summary. Downloading does not submit anything.</p><div class="chiprow"><button id="exportFullWord" class="ghost" data-personal-export ${hasFullResponses() ? '' : 'disabled'}>Download full responses (.docx)</button><button id="exportFullMarkdown" class="ghost" data-personal-export ${hasFullResponses() ? '' : 'disabled'}>Download full responses (.md)</button></div></div></section>`;
+    return `<div class="playbook-person"><span class="eyebrow">Your advising playbook</span><h2>${esc(advisorName())}</h2>${peers.length ? `<p class="comparison-guide">Compare with ${esc(new Intl.ListFormat('en-US').format(peers.map((p) => p.name)))}’s shared responses, question by question.</p>` : ''}</div><p class="share-guide">Each response has two separate choices: approve its wording and decide whether to share it. Only responses marked for inclusion and reviewed will be submitted. Your unanswered questions stay out of your submission.</p><div class="chiprow review-bulk"><button data-bulk-review="reviewed" aria-pressed="${state.bulk.reviewed.size > 0}" ${fields.some((f) => f.text.trim() && !f.stale) ? '' : 'disabled'}>${bulkLabel('reviewed')}</button><button data-bulk-review="included" aria-pressed="${state.bulk.included.size > 0}" ${fields.some((f) => f.text.trim() && !f.stale) ? '' : 'disabled'}>${bulkLabel('included')}</button></div><p class="fine bulk-hint">Click a bulk button again to undo only the checks it added. Individual choices are kept.</p>${summaryCard(ideal)}${grouped}<section class="send-panel"><h2>Share your playbook</h2><p>Submitting replaces your previously shared summary with this selection. Responses you leave out are removed from the current shared results.</p><p id="selection-summary" class="selection-summary">${count} ${count === 1 ? 'response' : 'responses'} selected for sharing.</p><p class="fine" id="sharing-issues" role="status">${count ? esc(issues.join(' ')) : ''}</p><label class="check final-approval"><input id="approve-playbook" type="checkbox" ${state.approved ? 'checked' : ''} ${issues.length ? 'disabled' : ''}><span>${esc(consentWording())}</span></label><div class="chiprow"><button id="submitPlaybook" class="primary" data-submit-control ${valid ? '' : 'disabled'}>Submit shared summary</button></div><div id="submit-status" role="status" aria-live="polite" class="submit-status"></div><div class="personal-copy"><h3>Keep a full copy for yourself</h3><p>These files contain all your responses, comments, and edited wording, including answers you do not include in the shared summary. Downloading does not submit anything.</p><div class="chiprow"><button id="exportFullWord" class="ghost" data-personal-export ${hasFullResponses() ? '' : 'disabled'}>Download full responses (.docx)</button><button id="exportFullMarkdown" class="ghost" data-personal-export ${hasFullResponses() ? '' : 'disabled'}>Download full responses (.md)</button></div></div></section>`;
   }
   function editResponse(id) {
-    const f = reviewFields().find((x) => x.id === id);
+    const f = comparisonFields(reviewFields()).find((x) => x.id === id);
     if (!f) return;
     setStep(f.step);
     const target =
       f.kind === 'comment'
         ? $('comments-' + f.pageId)
-        : $('question-' + f.questionId);
+        : $(
+            'question-' +
+              (f.empty && f.kind === 'concern' ? 'concerns' : f.questionId),
+          );
     if (f.kind === 'comment' && target) target.open = true;
     if (target) {
       const details = target.closest('details');
@@ -1560,12 +1649,13 @@ export function mountAdvisor(
       button.disabled = true;
       status.textContent = 'Saving selected responses…';
       const receipt = await transport.submit(data);
-      status.textContent =
+      state.approved = false;
+      render();
+      $('submit-status').textContent =
         'Shared summary saved. Revision ' +
         receipt.revision +
         '. Reference: ' +
         receipt.id;
-      state.approved = false;
       const approval = $('approve-playbook');
       if (approval) approval.checked = false;
       announce('Shared summary saved.');
@@ -1760,6 +1850,9 @@ export function mountAdvisor(
   reduce.addEventListener('change', () => render());
   render();
   return {
+    updateResults(results) {
+      sharedResults = readOnly ? [] : results;
+    },
     discard() {
       state = fresh();
     },

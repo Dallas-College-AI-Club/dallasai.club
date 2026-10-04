@@ -1,14 +1,31 @@
-export function markAllResponses(fields, review, flag) {
+export function toggleAllResponses(fields, review, flag, added) {
   if (!['reviewed', 'included'].includes(flag))
     throw Error('Unknown review action.');
   let count = 0;
+  const undo = added.size > 0;
+  if (undo) {
+    for (const id of added) {
+      if (review[id]?.[flag]) {
+        review[id][flag] = false;
+        count++;
+      }
+    }
+    added.clear();
+    return { count, undo };
+  }
   for (const field of fields) {
-    if (!field.stale && field.text.trim() && !field.archived) {
+    if (
+      !field.stale &&
+      field.text.trim() &&
+      !field.archived &&
+      !review[field.id][flag]
+    ) {
       review[field.id][flag] = true;
+      added.add(field.id);
       count++;
     }
   }
-  return count;
+  return { count, undo };
 }
 export function fullResponseFilename(
   formName,

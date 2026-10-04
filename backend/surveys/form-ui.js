@@ -55,18 +55,28 @@ export function questionFields(
       group.append(input, node('p', '1 = lowest · 5 = highest', 'micro'));
     } else {
       group.setAttribute('role', 'group');
-      // An exclusive choice, such as “None of these”, is chosen by itself:
-      // while it is checked, the other choices are cleared and disabled.
+      // An exclusive choice, such as “None of these”, is chosen by itself.
+      // While it is checked the other choices are cleared and aria-disabled,
+      // so they stay in the Tab order, and a polite status says what changed.
       const inputs = [],
-        exclusive = q.type === 'multiple' ? q.exclusiveOption : undefined;
+        exclusive = q.type === 'multiple' ? q.exclusiveOption : undefined,
+        alone = '“' + q.options[exclusive] + '”',
+        live = node('p', undefined, 'sr-only');
+      live.setAttribute('role', 'status');
       const block = () => {
-        const alone = Boolean(inputs[exclusive]?.checked);
+        const blocked = Boolean(inputs[exclusive]?.checked);
+        let cleared = 0;
         inputs.forEach((input, i) => {
           if (i === exclusive) return;
-          if (alone) input.checked = false;
-          input.disabled = readOnly || alone;
-          input.parentElement.classList.toggle('is-blocked', alone);
+          if (blocked && input.checked) {
+            input.checked = false;
+            cleared++;
+          }
+          if (blocked) input.setAttribute('aria-disabled', 'true');
+          else input.removeAttribute('aria-disabled');
+          input.parentElement.classList.toggle('is-blocked', blocked);
         });
+        return cleared;
       };
       q.options.forEach((option, i) => {
         const label = node('label', undefined, 'form-option'),
@@ -80,8 +90,25 @@ export function questionFields(
           q.type === 'single'
             ? values[q.id] === i
             : (values[q.id] || []).includes(i);
+        // A blocked choice keeps focus but cannot be checked.
+        input.onclick = (event) => {
+          if (input.getAttribute('aria-disabled') !== 'true') return;
+          event.preventDefault();
+          live.textContent = 'Uncheck ' + alone + ' to choose other options.';
+        };
         input.onchange = () => {
-          block();
+          const cleared = block();
+          if (i === exclusive)
+            live.textContent = input.checked
+              ? (cleared === 1
+                  ? '1 choice cleared. '
+                  : cleared
+                    ? cleared + ' choices cleared. '
+                    : '') +
+                'Other choices are unavailable while ' +
+                alone +
+                ' is chosen.'
+              : 'Other choices are available again.';
           onChange(
             q.id,
             q.type === 'single'
@@ -97,12 +124,12 @@ export function questionFields(
       if (inputs[exclusive]) {
         const hint = node(
           'p',
-          'Choosing “' + q.options[exclusive] + '” clears the other choices.',
+          'Choosing ' + alone + ' clears the other choices.',
           'micro',
         );
         hint.id = 'exclusive-' + q.id;
         inputs[exclusive].setAttribute('aria-describedby', hint.id);
-        group.append(hint);
+        group.append(hint, live);
         block();
       }
       if (!readOnly && !q.required) {

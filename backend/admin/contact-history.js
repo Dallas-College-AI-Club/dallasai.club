@@ -272,15 +272,17 @@ export function contactHistory(api, onChange = () => {}) {
   function management(contact, version) {
     const panel = node('section', undefined, 'contact-management'),
       actions = node('div', undefined, 'survey-response-actions'),
+      // Filled red marks the one action that cannot be undone; Delete
+      // contact can be restored, so it stays neutral.
       test = node(
         'button',
         contact.is_test ? 'Unmark as test' : 'Mark as test',
-        'secondary',
+        contact.is_test ? 'secondary' : 'danger filled',
       ),
       remove = node(
         'button',
         contact.is_test ? 'Permanently delete test contact' : 'Delete contact',
-        'secondary danger',
+        contact.is_test ? 'danger filled' : 'secondary',
       ),
       restore = node('button', 'Restore contact', 'secondary'),
       merge = node('button', 'Merge with another contact', 'secondary'),
@@ -359,30 +361,38 @@ export function contactHistory(api, onChange = () => {}) {
       heading.tabIndex = -1;
       details.replaceChildren(heading, node('p', description));
       let input;
+      // The typed email matches whatever its letter case.
+      const typed = () => input.value.trim().toLowerCase(),
+        matches = () => typed() === contact.email.toLowerCase();
       const accept = button(
         label,
         () => {
-          if (requireEmail && input.value.trim() !== contact.email) return;
+          if (requireEmail && !matches()) return;
           save(
-            {
-              ...body,
-              ...(requireEmail ? { confirmEmail: input.value.trim() } : {}),
-            },
+            { ...body, ...(requireEmail ? { confirmEmail: typed() } : {}) },
             message,
           );
         },
-        'danger',
+        requireEmail ? 'danger filled' : 'danger',
       );
       if (requireEmail) {
-        const label = node('label', 'Type the primary email to confirm');
+        const field = node('label', 'Type the primary email to confirm'),
+          hint = node('p', undefined, 'hint contact-note-text');
         input = node('input');
         input.type = 'email';
         input.autocomplete = 'off';
-        label.append(input);
-        details.append(label);
-        accept.disabled = true;
-        input.oninput = () =>
-          (accept.disabled = input.value.trim() !== contact.email);
+        hint.id = 'contact-confirm-hint';
+        input.setAttribute('aria-describedby', hint.id);
+        field.append(input);
+        details.append(field, hint);
+        const sync = () => {
+          accept.disabled = !matches();
+          hint.textContent = matches()
+            ? ''
+            : 'Type ' + contact.email + ' to turn on “' + label + '”.';
+        };
+        input.oninput = sync;
+        sync();
       }
       row.append(
         accept,
@@ -395,16 +405,18 @@ export function contactHistory(api, onChange = () => {}) {
       heading.focus();
     }
     // Mark as test deletes the contact and everything linked to it in one
-    // step, after the officer types the primary email. Contacts marked as
-    // test earlier keep Unmark and the same permanent delete.
+    // step, after the officer types the primary email. The counts go back
+    // to the server, which refuses if anything changed since. Contacts
+    // marked as test earlier keep Unmark and the same permanent delete.
+    const n = contact.counts;
     const purge = () =>
       confirm(
         contact.is_test
           ? 'Permanently delete this test contact?'
           : 'Mark as test and delete permanently?',
-        `This permanently deletes ${contact.name || contact.email} and everything linked to them: ${plural(contact.submissions, 'submission')}, ${plural(contact.survey_responses, 'event survey response')}, ${plural(contact.comments, 'officer comment')}, ${plural(contact.notes, 'follow-up note')}, ${plural(contact.attachments, 'attachment')} and ${plural(contact.emails.length, 'linked email address', 'linked email addresses')}. This cannot be undone.`,
+        `This permanently deletes ${contact.name || contact.email} and everything linked to them: ${plural(n.submissions, 'submission')}, ${plural(n.survey_responses, 'event survey response')}, ${plural(n.comments, 'officer comment')}, ${plural(n.website_notes, 'website note')}, ${plural(n.notes, 'follow-up note')}, ${plural(n.attachments, 'attachment')} and ${plural(n.addresses, 'linked email address', 'linked email addresses')}. This cannot be undone.`,
         'Delete test contact permanently',
-        { action: 'contact-purge' },
+        { action: 'contact-purge', counts: n },
         'Test contact and all linked records permanently deleted.',
         true,
       );

@@ -904,19 +904,36 @@ try {
       await expect(none).toHaveAccessibleDescription(
         'Choosing “None of these” clears the other choices.',
       );
+      const announced = page.locator('.question [role="status"]');
       await friday.check();
       await saturday.check();
       await none.focus();
       await page.keyboard.press('Space');
       await expect(none).toBeChecked();
       await expect(none).toBeFocused();
+      await expect(announced).toHaveText(
+        '2 choices cleared. Other choices are unavailable while “None of these” is chosen.',
+      );
       for (const other of [friday, saturday]) {
         await expect(other).not.toBeChecked();
-        await expect(other).toBeDisabled();
+        await expect(other).toHaveAttribute('aria-disabled', 'true');
       }
+      // Blocked choices stay in the Tab order but cannot be checked.
+      await page.keyboard.press('Shift+Tab');
+      await expect(saturday).toBeFocused();
       await page.keyboard.press('Space');
-      await expect(friday).toBeEnabled();
+      await expect(saturday).not.toBeChecked();
+      await expect(announced).toHaveText(
+        'Uncheck “None of these” to choose other options.',
+      );
+      await page.keyboard.press('Tab');
       await page.keyboard.press('Space');
+      await expect(announced).toHaveText('Other choices are available again.');
+      await expect(friday).not.toHaveAttribute('aria-disabled');
+      await page.keyboard.press('Space');
+      await expect(announced).toHaveText(
+        'Other choices are unavailable while “None of these” is chosen.',
+      );
       await page
         .getByRole('button', { name: 'Review answers →', exact: true })
         .click();
@@ -947,7 +964,7 @@ try {
         })
         .click();
       await expect(none).toBeChecked();
-      await expect(friday).toBeDisabled();
+      await expect(friday).toHaveAttribute('aria-disabled', 'true');
     },
   );
   await check(

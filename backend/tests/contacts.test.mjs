@@ -38,11 +38,18 @@ async function seed(email, name = 'Member Name') {
   return id;
 }
 const contact = async (email) => (await contactHistory(db, { email })).contact;
+// A purge sends back the counts its warning showed, like the office does.
 async function change(email, action, extra = {}, storage) {
   const c = await contact(email);
   return manageContact(
     db,
-    { email: c.email, revision: c.revision, action, ...extra },
+    {
+      email: c.email,
+      revision: c.revision,
+      action,
+      ...(action === 'contact-purge' ? { counts: c.counts } : {}),
+      ...extra,
+    },
     actor,
     storage,
   );
@@ -175,10 +182,11 @@ test('Mark as test deletes a contact and its linked answers, comments, notes, au
     { email: first, noteId: randomUUID(), note: 'Test note' },
     actor,
   );
-  await db.query(
-    `INSERT INTO club_forms.entry_comments(id,entry_id,author_email,body) VALUES($1,$2,$3,'Test comment')`,
-    [randomUUID(), id, actor],
-  );
+  for (const author of [actor, 'website'])
+    await db.query(
+      `INSERT INTO club_forms.entry_comments(id,entry_id,author_email,body) VALUES($1,$2,$3,'Test comment')`,
+      [randomUUID(), id, author],
+    );
   await db.query(
     `INSERT INTO club_forms.audit(actor,entry_id,action) VALUES($1,$2,'test')`,
     [actor, id],
@@ -187,20 +195,19 @@ test('Mark as test deletes a contact and its linked answers, comments, notes, au
     `INSERT INTO club_forms.attachments(id,entry_id,name,pathname,content_type,size) VALUES($1,$2,'test.txt','contributions/test-only','text/plain',1)`,
     [randomUUID(), id],
   );
-  // The confirmation states these counts; the contact was never marked first.
+  // The warning states these counts, with website notes apart from officer
+  // comments; the contact was never marked first.
   const shown = await contact(second);
-  assert.deepEqual(
-    [
-      shown.is_test,
-      shown.emails.length,
-      shown.submissions,
-      shown.survey_responses,
-      shown.comments,
-      shown.notes,
-      shown.attachments,
-    ],
-    [false, 2, 2, 2, 1, 1, 1],
-  );
+  assert.equal(shown.is_test, false);
+  assert.deepEqual(shown.counts, {
+    addresses: 2,
+    submissions: 2,
+    survey_responses: 2,
+    comments: 1,
+    website_notes: 1,
+    notes: 1,
+    attachments: 1,
+  });
   const deleted = [];
   assert.deepEqual(
     await change(
@@ -254,6 +261,44 @@ test('Mark as test deletes a contact and its linked answers, comments, notes, au
     assert.ok(!JSON.stringify(receipt).includes(text), text);
   await assert.rejects(contact(first), { status: 404 });
 });
+test('a purge refuses when anything changed after its warning opened, and accepts the email in any letter case', async () => {
+  const id = await seed(first);
+  const shown = await contact(first);
+  const purge = (extra) =>
+    manageContact(
+      db,
+      {
+        email: first,
+        revision: shown.revision,
+        action: 'contact-purge',
+        counts: shown.counts,
+        confirmEmail: first,
+        ...extra,
+      },
+      actor,
+    );
+  // Another officer comments; a comment leaves the contact revision alone.
+  await db.query(
+    `INSERT INTO club_forms.entry_comments(id,entry_id,author_email,body) VALUES($1,$2,'other@example.edu','Late comment')`,
+    [randomUUID(), id],
+  );
+  assert.equal((await contact(first)).revision, shown.revision);
+  await assert.rejects(purge(), {
+    status: 409,
+    message:
+      'This contact changed. Refresh its history and review the action again.',
+  });
+  await assert.rejects(purge({ counts: undefined }), { status: 409 });
+  assert.equal((await contact(first)).counts.comments, 1);
+  assert.deepEqual(
+    await purge({
+      counts: (await contact(first)).counts,
+      confirmEmail: '  E12345@Student.DCCCD.edu ',
+    }),
+    { purged: true, filesDeleted: true },
+  );
+  await assert.rejects(contact(first), { status: 404 });
+});
 test('failed file cleanup remains queued and can be retried without retaining test contact data', async () => {
   const id = await seed(first);
   await db.query(
@@ -304,7 +349,7 @@ test('failed file cleanup remains queued and can be retried without retaining te
 test('Mark as test deletion needs a signed-in officer on the office origin, and its receipt names that officer only', async () => {
   process.env.AUTH_BASE_URL = 'https://office.example.edu';
   await seed(first);
-  const { revision } = await contact(first);
+  const { revision, counts } = await contact(first);
   const post = async (authorize, origin) => {
     const res = { setHeader() {}, end() {} };
     await surveysHandler({
@@ -320,6 +365,7 @@ test('Mark as test deletion needs a signed-in officer on the office origin, and 
           action: 'contact-purge',
           email: first,
           revision,
+          counts,
           confirmEmail: first,
         },
       },

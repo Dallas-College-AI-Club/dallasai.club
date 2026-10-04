@@ -118,11 +118,13 @@ standalone-survey drafts and unsubmitted answers are not included.
 **Delete contact** removes a regular contact from the Active directory only.
 Select **Deleted** and **Restore contact** to bring it back; saved submissions and
 notes remain available. New submissions do not silently restore a deleted contact.
-**Mark as test** deletes the contact completely in one step. Its warning lists the
-submissions, event survey responses, officer comments, follow-up notes, attachments
-and linked email addresses that will be removed, and requires typing the primary
-email. Confirmation erases all of them, with the contact history and aliases. This
-cannot be restored. The audit log keeps a receipt with the acting admin and the
+**Mark as test**, the filled red button, deletes the contact completely in one step.
+Its warning lists the submissions, event survey responses, officer comments, website
+notes, follow-up notes, attachments and linked email addresses that will be removed,
+and requires typing the primary email in any letter case. Confirmation erases all of
+them, with the contact history and aliases. If any of those counts changed after the
+warning opened, nothing is deleted and the officer is asked to review the contact
+again. This cannot be restored. The audit log keeps a receipt with the acting admin and the
 counts removed, without the address. Contacts marked as test before this change keep
 **Unmark as test** and **Permanently delete test contact**, which uses the same
 warning; regular and test contacts cannot be merged unless their test settings are

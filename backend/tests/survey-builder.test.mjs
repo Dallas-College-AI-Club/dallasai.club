@@ -318,6 +318,75 @@ test('form answers use canonical text, atomic replacement receipts and separate 
     await f.db.close();
   }
 });
+test('an exclusive choice publishes and must be chosen by itself; surveys without one are unchanged', async () => {
+  const d = draft();
+  assert.deepEqual(Object.keys(validateDefinition(d).questions[0]), [
+    'id',
+    'title',
+    'description',
+    'type',
+    'required',
+    'options',
+  ]);
+  const times = {
+    id: randomUUID(),
+    title: 'Which times work?',
+    description: '',
+    type: 'multiple',
+    required: true,
+    options: ['Friday', 'Saturday', 'None of these'],
+  };
+  for (const question of [
+    ...[3, -1, 1.5, '2', null].map((x) => ({ ...times, exclusiveOption: x })),
+    { ...times, type: 'single', exclusiveOption: 2 },
+  ])
+    assert.throws(
+      () => validateDefinition({ ...d, questions: [question] }, true),
+      { status: 400 },
+    );
+  d.questions.push({ ...times, exclusiveOption: 2 });
+  const f = await fixture();
+  try {
+    const { id } = await create(f, d);
+    await add(f, id);
+    // Publishing compares the stored jsonb with the request, so the mark
+    // must survive the round trip.
+    await changeDraft(f.db, actor, action(id, d, 1, 'publish'));
+    const survey = await linkedSurvey(f.db, privateSurveyToken(id)),
+      plain = structuredClone(survey);
+    delete plain.definition.questions[2].exclusiveOption;
+    assert.equal(survey.definition.questions[2].exclusiveOption, 2);
+    const answer = (value, s = survey) =>
+      validateFormResponse(
+        {
+          requestId: randomUUID(),
+          expectedRevision: 0,
+          contentVersion: FORM_VERSION,
+          advisorId: 'member',
+          consent: 'admins',
+          answers: [
+            { id: d.questions[0].id, value: 4 },
+            { id: times.id, value },
+          ],
+        },
+        s,
+        { advisor_id: 'member' },
+      )[1].text;
+    assert.equal(answer([2]), 'None of these');
+    assert.equal(answer([0, 1]), 'Friday\nSaturday');
+    for (const value of [
+      [0, 2],
+      [2, 1],
+    ])
+      assert.throws(() => answer(value), {
+        status: 400,
+        message: 'Choose “None of these” by itself for: Which times work?',
+      });
+    assert.equal(answer([0, 2], plain), 'Friday\nNone of these');
+  } finally {
+    await f.db.close();
+  }
+});
 test('HTTP preview capability cannot answer or read results; restricted preview and builder endpoints require authorization', async () => {
   const f = await fixture(),
     server = http.createServer(f.handler);

@@ -699,31 +699,76 @@ try {
   await contacts
     .getByText('Contact restored to Active.', { exact: true })
     .waitFor();
-  await contacts
-    .getByRole('button', { name: 'Mark as test', exact: true })
-    .click();
-  await contacts
-    .getByRole('button', { name: 'Confirm mark as test', exact: true })
-    .click();
-  await contacts
-    .getByText('Contact marked as test. No records were deleted.', {
+  // Mark as test deletes in one step, after a warning with the counts. It is
+  // the filled red action; Delete contact can be restored, so it is neutral.
+  const markTest = contacts.getByRole('button', {
+    name: 'Mark as test',
+    exact: true,
+  });
+  assert.match(await markTest.getAttribute('class'), /\bdanger filled\b/);
+  assert.doesNotMatch(
+    await contacts
+      .getByRole('button', { name: 'Delete contact', exact: true })
+      .getAttribute('class'),
+    /danger/,
+  );
+  await markTest.click();
+  const warning = contacts.locator('.contact-confirmation');
+  await warning
+    .getByRole('heading', {
+      name: 'Mark as test and delete permanently?',
       exact: true,
     })
     .waitFor();
-  await contacts
-    .getByRole('button', {
-      name: 'Permanently delete test contact',
-      exact: true,
-    })
-    .click();
+  assert.match(
+    await warning.textContent(),
+    /2 submissions, 1 event survey response, 0 officer comments, 0 website notes, 1 follow-up note, 0 attachments and 2 linked email addresses\. This cannot be undone\./,
+  );
   const purge = contacts.getByRole('button', {
-    name: 'Delete test contact permanently',
-    exact: true,
-  });
+      name: 'Delete test contact permanently',
+      exact: true,
+    }),
+    confirmEmail = contacts.getByLabel('Type the primary email to confirm', {
+      exact: true,
+    }),
+    description = () =>
+      confirmEmail.evaluate(
+        (el) =>
+          document.getElementById(el.getAttribute('aria-describedby'))
+            .textContent,
+      );
   assert.equal(await purge.isDisabled(), true);
+  assert.equal(
+    await description(),
+    'Type e0000001@student.dcccd.edu to turn on “Delete test contact permanently”.',
+  );
+  // Any letter case matches.
+  await confirmEmail.fill(' E0000001@Student.DCCCD.edu ');
+  assert.equal(await purge.isDisabled(), false);
+  assert.equal(await description(), '');
+  // Another officer comments after the warning opened: nothing is deleted.
+  await db.query(
+    `INSERT INTO club_forms.entry_comments(id,entry_id,author_email,body) SELECT gen_random_uuid(),id,'other@example.com','Late comment' FROM club_forms.entries WHERE email='e0000001@student.dcccd.edu'`,
+  );
+  await purge.click();
   await contacts
-    .getByLabel('Type the primary email to confirm', { exact: true })
-    .fill('e0000001@student.dcccd.edu');
+    .getByText(
+      'This contact changed. Refresh its history and review the action again.',
+      { exact: true },
+    )
+    .waitFor();
+  assert.equal(
+    (await db.query('SELECT count(*)::int n FROM club_forms.entries')).rows[0]
+      .n,
+    3,
+  );
+  await contacts
+    .getByLabel('Show contacts', { exact: true })
+    .selectOption('active');
+  await contacts.getByRole('button', { name: /Full Name Alias/ }).click();
+  await markTest.click();
+  assert.match(await warning.textContent(), / 1 officer comment, /);
+  await confirmEmail.fill('e0000001@student.dcccd.edu');
   await purge.click();
   await contacts
     .getByText('Test contact and all linked records permanently deleted.', {
@@ -751,6 +796,18 @@ try {
       (r) => r.email,
     ),
     ['untouched@example.edu'],
+  );
+  assert.deepEqual(
+    (await db.query('SELECT email FROM club_forms.contacts')).rows.map(
+      (r) => r.email,
+    ),
+    ['untouched@example.edu'],
+  );
+  assert.doesNotMatch(
+    JSON.stringify(
+      (await db.query('SELECT actor,action FROM club_forms.audit')).rows,
+    ),
+    /member23|e0000001|dallascollege|dcccd/,
   );
   await contacts
     .getByLabel('Show contacts', { exact: true })

@@ -8,7 +8,7 @@ Open the protected backend `/admin/` page. New submissions appear with review st
 
 The **Browser alerts** switch in the account menu requests browser permission and shows an alert, with counts by type, when a newer submission arrives. An officer’s own status changes never raise one. The officer must keep the office tab open; browser throttling can delay background checks. New counts and an on-screen notice also update without notification permission. The on/off preference is remembered in this browser and synchronized across office tabs. Alerts stop at sign-out or when the office is closed; reopening the office resumes a remembered on preference only when browser permission is still granted. Email alerts remain disconnected; the UI states this explicitly. Neon login-code delivery is a separate service and does not send inbox alerts.
 
-The office uses the approved Studio appearance with locally served Geist typography and the Desk layout (event list beside the editor). Appearance controls and alternative themes, fonts, and layouts have been removed; old saved preferences no longer apply. The office follows the browser’s light/dark setting while retaining the Studio design. The supplied black-on-white and white-on-black logos are used only in the office, including its sign-in page and favicon. The public website's branding is unchanged.
+The office uses the approved Studio appearance with locally served Geist typography. The header shows the club name, and the sections are tabs across the top at every width: **Inbox**, **Events**, **Surveys** and **Help**. Events uses the Desk layout (event list beside the editor). Count cards with new submissions, the open submission and the open survey response are highlighted with the selected tint and an accent line; everything else keeps plain lines. Appearance controls and alternative themes, fonts, and layouts have been removed; old saved preferences no longer apply. The office follows the browser’s light/dark setting while retaining the Studio design. The supplied black-on-white and white-on-black logos are used only in the office, including its sign-in page and favicon. The public website's branding is unchanged.
 
 ## Submission activity and comments
 
@@ -27,7 +27,7 @@ CSV exports have separate Subject / title and Message / body fields, dedicated m
 - **Request a workshop** opens the workshop request dialog. Confirmation replaces the form, with a Close button. Dialog close controls stay visible while scrolling.
 - Join and The AI Review subscription requests replace their forms with a focused confirmation screen and Done button. Event RSVPs open a popup with a Close button after submission. Errors preserve the person's entered text.
 
-There are no email alerts, emailed confirmation links, or newsletter broadcasts in this release. Newsletter requests record consent for future updates; email ownership is not verified and `email_verified` remains false. They must not be represented as verified subscribers or automatically enrolled in a future mailing service. The public page explains that newsletters are not currently being sent. People can contact the club to withdraw a request or cancel an RSVP.
+There are no email alerts, emailed confirmation links, or newsletter broadcasts in this release. The AI Review subscription requests record consent for future updates; email ownership is not verified and `email_verified` remains false. They must not be represented as verified subscribers or automatically enrolled in a future mailing service. The public page explains that newsletters are not currently being sent. People can contact the club to withdraw a request or cancel an RSVP.
 
 ## Setup and access
 
@@ -53,7 +53,7 @@ Contributions accept up to three files and 2 MB total: PDF, DOCX, TXT, Markdown,
 
 ## Potential events and RSVP surveys
 
-The office tabs are **Inbox**, **Events**, and **Surveys**. In Events, check **Potential event** to publish an idea while leaving its date blank (shown as **TBD**). It appears below the calendar under Potential events and opens the normal event details. It remains eligible for the upcoming RSVP inbox while published. Scheduled events still require a date.
+The office tabs are **Inbox**, **Events**, **Surveys** and **Help**. In Events, check **Potential event** to publish an idea while leaving its date blank (shown as **TBD**). It appears below the calendar under Potential events and opens the normal event details. It remains eligible for the upcoming RSVP inbox while published. Scheduled events still require a date.
 
 **Require a college or alumni email ending in .edu** is an event-level setting, enabled by default when an officer chooses **Social**. It can be changed for any event. The public form and server enforce it; ordinary events still accept other valid email addresses. This checks address format, not email ownership.
 
@@ -118,14 +118,18 @@ standalone-survey drafts and unsubmitted answers are not included.
 **Delete contact** removes a regular contact from the Active directory only.
 Select **Deleted** and **Restore contact** to bring it back; saved submissions and
 notes remain available. New submissions do not silently restore a deleted contact.
-**Mark as test** applies to every email linked to that contact and does not delete
-anything by itself. For a marked test contact, **Permanently delete test contact**
-shows the affected counts and requires typing its primary email. Confirmation
-erases its linked website entries, event survey answers, comments, notes, contact
-history, aliases and attachments. This cannot be restored. The audit log keeps a
-receipt with the acting admin and the counts removed, without the address. Regular and test
-contacts cannot be merged unless their test settings are first reviewed to match.
-Concurrent changes invalidate a management confirmation and require a refresh.
+**Mark as test**, the filled red button, deletes the contact completely in one step.
+Its warning lists the submissions, event survey responses, officer comments, website
+notes, follow-up notes, attachments and linked email addresses that will be removed,
+and requires typing the primary email in any letter case. Confirmation erases all of
+them, with the contact history and aliases. If any of those counts changed after the
+warning opened, nothing is deleted and the officer is asked to review the contact
+again. This cannot be restored. The audit log keeps a receipt with the acting admin and the
+counts removed, without the address. Contacts marked as test before this change keep
+**Unmark as test** and **Permanently delete test contact**, which uses the same
+warning; regular and test contacts cannot be merged unless their test settings are
+first reviewed to match. Concurrent changes invalidate a management confirmation and
+require a refresh.
 
 Apply `backend/015_contact_identity_management.sql` after migration 014 before
 deploying contact management. It backfills aliases without merging or deleting

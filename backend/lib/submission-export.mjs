@@ -32,7 +32,7 @@ const knownFields = new Set([
   'hasSurvey',
   'potential',
 ]);
-const received = new Intl.DateTimeFormat('en-US', {
+export const received = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/Chicago',
   dateStyle: 'medium',
   timeStyle: 'long',
@@ -49,7 +49,7 @@ function plainText(value) {
       .join('\n');
   return String(value ?? '');
 }
-const centralDate = new Intl.DateTimeFormat('en-CA', {
+export const centralDate = new Intl.DateTimeFormat('en-CA', {
   timeZone: 'America/Chicago',
   year: 'numeric',
   month: '2-digit',
@@ -106,7 +106,7 @@ export function submissionsCSV(rows) {
           {
             active: 'Received in club inbox',
             cancelled: 'RSVP cancelled',
-            unsubscribed: 'Newsletter request withdrawn',
+            unsubscribed: 'The AI Review subscription withdrawn',
           }[row.state] || row.state,
           { new: 'New', reviewed: 'Reviewed', closed: 'Archived' }[
             row.review_status

@@ -50,6 +50,16 @@ export function dateTime(value, now = new Date()) {
   if (!date) return '';
   return plain((sameYear(date, now) ? full : fullYear).format(date)) + ' CT';
 }
+// 'Fri, Oct 2, 2026, 11:34 PM CT': always with the year, for downloads.
+export function fullDateTime(value) {
+  const date = valid(value);
+  return date ? plain(fullYear.format(date)) + ' CT' : '';
+}
+// '2026-10-02': the Central calendar day, for file names.
+export function isoDay(value) {
+  const date = valid(value);
+  return date ? centralDay.format(date) : '';
+}
 // '9:14 AM' (Central), e.g. 'Updated 9:14 AM'.
 export function clock(value) {
   const date = valid(value);
@@ -83,7 +93,7 @@ export function plural(n, word, pluralWord = word + 's') {
 const kinds = {
   question: ['Question', 'Questions'],
   join: ['Signup', 'Signups'],
-  subscribe: ['Newsletter', 'Newsletter'],
+  subscribe: ['The AI Review subscription', 'The AI Review'],
   rsvp: ['RSVP', 'RSVPs'],
   'rsvp-past': ['RSVP', 'RSVPs for past events'],
   workshop: ['Workshop request', 'Workshops'],
@@ -172,9 +182,11 @@ const actions = {
   'survey-restored': 'Included in results',
   'survey-summary': 'Compiled a survey summary',
   'survey-export-csv': 'Exported survey responses',
+  'custom-survey-export-csv': 'Exported survey responses',
+  'custom-survey-pdf': 'Downloaded a response as PDF',
   'export-csv': 'Exported CSV',
   'state:cancelled': 'RSVP marked cancelled',
-  'state:unsubscribed': 'Newsletter request withdrawn',
+  'state:unsubscribed': 'The AI Review subscription withdrawn',
   'state:active': 'Restored as active',
   'contact-purged': 'Permanently deleted a test contact',
   draft: 'Draft saved',

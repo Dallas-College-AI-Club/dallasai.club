@@ -1,9 +1,14 @@
-import { copyText, node } from './ui.js';
-import { actionLabel, actorLabel, dateTime, plural } from './format.js';
+import { copyText, download as save, node } from './ui.js';
+import { actionLabel, actorLabel, dateTime, isoDay, plural } from './format.js';
 import { currentOfficer } from './session.js';
 import { mountRespondents } from './survey-respondents.js';
 import { mountSurveyBuilder } from './survey-builder.js';
-import { responseSections } from '../surveys/results-ui.js';
+import {
+  fileSlug,
+  partitionResponses,
+  responseSections,
+} from '../surveys/results-ui.js';
+import { closePrintView, downloadResponse } from './response-download.js';
 // Self-registered respondents may have no display name; officers see the
 // email instead. Respondent-facing pages keep their own masking.
 const named = (results) =>
@@ -21,6 +26,7 @@ export function mountCustomSurveys(root, api) {
   }
   async function load() {
     stopBuilder();
+    closePrintView();
     const current = ++generation;
     root.replaceChildren(node('p', 'Loading custom surveys…'));
     try {
@@ -230,10 +236,63 @@ export function mountCustomSurveys(root, api) {
               );
             content.append(history);
           }
+          const isCurrent = () =>
+            current === generation && request === requestGeneration;
+          // Each response downloads as a PDF made here from what is shown.
+          const pdfActions = (result) => {
+            const actions = node('div', undefined, 'entry-actions'),
+              button = node('button', 'Download PDF', 'secondary'),
+              status = node('p');
+            button.setAttribute(
+              'aria-label',
+              'Download PDF for ' + result.display_name,
+            );
+            status.setAttribute('role', 'status');
+            button.onclick = () =>
+              downloadResponse({
+                survey,
+                result,
+                definition: data.resultsDefinition,
+                api,
+                isCurrent,
+                status,
+                trigger: button,
+              });
+            actions.append(button, status);
+            return actions;
+          };
+          const exportCSV = node('button', 'Export CSV', 'secondary'),
+            exportStatus = node('p'),
+            exportActions = node('div', undefined, 'entry-actions');
+          exportStatus.setAttribute('role', 'status');
+          // From these results, not the survey list, which may be older.
+          exportCSV.disabled = !partitionResponses(data.results).active.length;
+          exportCSV.onclick = async () => {
+            exportCSV.disabled = true;
+            exportStatus.textContent = 'Preparing CSV for all responses…';
+            try {
+              const saved = await save(
+                '/api/custom-surveys?' +
+                  new URLSearchParams({ action: 'export', id: survey.id }),
+                `${fileSlug(survey.title) || 'custom-survey'}-responses-${isoDay(new Date())}.csv`,
+                { isCurrent },
+              );
+              if (saved)
+                exportStatus.textContent =
+                  'CSV downloaded. It includes every active response across all pages.';
+            } catch (error) {
+              if (isCurrent()) exportStatus.textContent = error.message;
+            } finally {
+              exportCSV.disabled = false;
+            }
+          };
+          exportActions.append(exportCSV, exportStatus);
           content.append(
             node('h3', 'Submitted responses'),
+            exportActions,
             responseSections(named(data.results), {
               definition: data.resultsDefinition,
+              actions: pdfActions,
             }),
           );
           let nextOffset = data.nextOffset;
@@ -257,6 +316,7 @@ export function mountCustomSurveys(root, api) {
               content.insertBefore(
                 responseSections(named(page.results), {
                   definition: data.resultsDefinition,
+                  actions: pdfActions,
                 }),
                 more,
               );
@@ -307,6 +367,7 @@ export function mountCustomSurveys(root, api) {
       if (builder) return;
       generation++;
       dropped = true;
+      closePrintView();
       root.replaceChildren();
     },
     refresh() {
@@ -329,6 +390,7 @@ export function mountCustomSurveys(root, api) {
     clear() {
       generation++;
       stopBuilder();
+      closePrintView();
       selected = '';
       root.replaceChildren();
     },

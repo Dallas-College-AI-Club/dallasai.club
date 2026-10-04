@@ -1,10 +1,16 @@
 import { chromium, expect } from '@playwright/test';
 import assert from 'node:assert/strict';
-import { mkdir } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { officeFixture } from './helpers/office-fixture.mjs';
+import {
+  advisorResponses,
+  builderSample,
+} from './helpers/survey-response-samples.mjs';
+import { pdfLines } from './helpers/pdf-text.mjs';
 import { changeDraft } from '../lib/survey-builder.mjs';
 import { privateSurveyToken } from '../lib/custom-surveys.mjs';
+import { definition } from '../lib/survey-contract.mjs';
 import { randomUUID } from 'node:crypto';
 const fixture = await officeFixture();
 const browser = await chromium.launch({
@@ -759,6 +765,212 @@ try {
           exact: true,
         }),
       ).toHaveValue('Not answered');
+    },
+  );
+  await check(
+    'An exclusive choice is marked in the builder and chosen by itself',
+    async (page) => {
+      await page.locator('#surveys-tab').click();
+      await page.locator('#custom-surveys-group').click();
+      await page
+        .getByRole('button', { name: 'Create custom survey', exact: true })
+        .click();
+      await page
+        .getByLabel('Survey title', { exact: true })
+        .fill('Exclusive choice survey');
+      for (const step of ['Audience', 'Questions']) {
+        await page
+          .getByRole('button', { name: 'Save and continue →', exact: true })
+          .click();
+        await expect(page.locator('.builder-panel > h3')).toHaveText(step);
+      }
+      await page
+        .getByRole('button', { name: 'Add question', exact: true })
+        .click();
+      const question = page.locator('.builder-question');
+      await question
+        .getByLabel('Question', { exact: true })
+        .fill('Which times work?');
+      await question
+        .getByLabel('Answer type', { exact: true })
+        .selectOption('multiple');
+      await question.getByRole('button', { name: 'Add choice' }).click();
+      for (const [i, text] of ['Friday', 'Saturday', 'None of these'].entries())
+        await question
+          .getByLabel('Choice ' + (i + 1), { exact: true })
+          .fill(text);
+      const exclusive = (n) =>
+        question.getByRole('checkbox', {
+          name: 'Choice ' + n + ' is exclusive',
+          exact: true,
+        });
+      await exclusive(3).focus();
+      await page.keyboard.press('Space');
+      await expect(exclusive(3)).toBeChecked();
+      await expect(exclusive(3)).toBeFocused();
+      // One exclusive choice per question, and the mark moves with its choice.
+      await exclusive(1).check();
+      await expect(exclusive(3)).not.toBeChecked();
+      await exclusive(3).check();
+      await expect(exclusive(1)).not.toBeChecked();
+      await question
+        .getByRole('button', { name: 'Move choice 3 up', exact: true })
+        .click();
+      await expect(exclusive(2)).toBeChecked();
+      await expect(
+        question.getByLabel('Choice 2', { exact: true }),
+      ).toHaveValue('None of these');
+      await question
+        .getByRole('button', { name: 'Move choice 2 down', exact: true })
+        .click();
+      await expect(exclusive(3)).toBeChecked();
+      await page
+        .getByRole('button', { name: 'Save and continue →', exact: true })
+        .click();
+      await expect(page.locator('.builder-panel > h3')).toHaveText('Preview');
+      await expect(
+        page.locator('.builder-preview-question li').nth(2),
+      ).toHaveText('None of these · exclusive');
+      const saved = (
+        await fixture.db.query(
+          'SELECT definition FROM club_forms.custom_surveys WHERE title=$1',
+          ['Exclusive choice survey'],
+        )
+      ).rows[0].definition;
+      assert.equal(saved.questions[0].exclusiveOption, 2);
+      // The officer's trial form uses the respondent form.
+      await page.locator('.survey-trial > summary').click();
+      const trial = page.locator('.survey-trial'),
+        trialFriday = trial.getByRole('checkbox', {
+          name: 'Friday',
+          exact: true,
+        });
+      await trialFriday.check();
+      await trial
+        .getByRole('checkbox', { name: 'None of these', exact: true })
+        .check();
+      await expect(trialFriday).not.toBeChecked();
+      await expect(trialFriday).toBeDisabled();
+      // A respondent: the exclusive choice clears and blocks the others.
+      const id = randomUUID();
+      for (const [action, expectedRevision] of [
+        ['save', 0],
+        ['publish', 1],
+      ])
+        await changeDraft(
+          fixture.db,
+          { email: 'officer@example.com' },
+          {
+            id,
+            action,
+            expectedRevision,
+            requestId: randomUUID(),
+            definition: {
+              ...saved,
+              title: 'Exclusive respondent check',
+              audience: 'public',
+              permissions: {
+                preview: 'link',
+                answer: 'verified',
+                results: 'admins',
+              },
+            },
+          },
+        );
+      await page.goto(
+        fixture.origin + '/surveys/#invite=' + privateSurveyToken(id),
+      );
+      await page
+        .getByRole('button', { name: 'Continue to questions →', exact: true })
+        .click();
+      await page
+        .getByRole('textbox', { name: 'Email address', exact: true })
+        .fill('exclusive@example.com');
+      await page
+        .getByRole('button', { name: 'Send sign-in code', exact: true })
+        .click();
+      await page
+        .getByRole('textbox', { name: 'Sign-in code', exact: true })
+        .fill('123456');
+      await page
+        .getByRole('button', { name: 'Verify and continue', exact: true })
+        .click();
+      const friday = page.getByRole('checkbox', {
+          name: 'Friday',
+          exact: true,
+        }),
+        saturday = page.getByRole('checkbox', {
+          name: 'Saturday',
+          exact: true,
+        }),
+        none = page.getByRole('checkbox', {
+          name: 'None of these',
+          exact: true,
+        });
+      await expect(none).toHaveAccessibleDescription(
+        'Choosing “None of these” clears the other choices.',
+      );
+      const announced = page.locator('.question [role="status"]');
+      await friday.check();
+      await saturday.check();
+      await none.focus();
+      await page.keyboard.press('Space');
+      await expect(none).toBeChecked();
+      await expect(none).toBeFocused();
+      await expect(announced).toHaveText(
+        '2 choices cleared. Other choices are unavailable while “None of these” is chosen.',
+      );
+      for (const other of [friday, saturday]) {
+        await expect(other).not.toBeChecked();
+        await expect(other).toHaveAttribute('aria-disabled', 'true');
+      }
+      // Blocked choices stay in the Tab order but cannot be checked.
+      await page.keyboard.press('Shift+Tab');
+      await expect(saturday).toBeFocused();
+      await page.keyboard.press('Space');
+      await expect(saturday).not.toBeChecked();
+      await expect(announced).toHaveText(
+        'Uncheck “None of these” to choose other options.',
+      );
+      await page.keyboard.press('Tab');
+      await page.keyboard.press('Space');
+      await expect(announced).toHaveText('Other choices are available again.');
+      await expect(friday).not.toHaveAttribute('aria-disabled');
+      await page.keyboard.press('Space');
+      await expect(announced).toHaveText(
+        'Other choices are unavailable while “None of these” is chosen.',
+      );
+      await page
+        .getByRole('button', { name: 'Review answers →', exact: true })
+        .click();
+      await expect(page.locator('.answer-copy')).toHaveText('None of these');
+      await page.getByRole('checkbox').check();
+      await page
+        .getByRole('button', { name: 'Submit answers', exact: true })
+        .click();
+      await expect(
+        page.getByRole('heading', {
+          name: 'Your response is saved',
+          exact: true,
+        }),
+      ).toBeVisible();
+      assert.deepEqual(
+        (
+          await fixture.db.query(
+            'SELECT responses FROM club_forms.custom_survey_responses WHERE survey_id=$1',
+            [id],
+          )
+        ).rows[0].responses.map((answer) => answer.value),
+        [[2]],
+      );
+      await page
+        .getByRole('button', {
+          name: 'Review or update my answers',
+          exact: true,
+        })
+        .click();
+      await expect(none).toBeChecked();
+      await expect(friday).toHaveAttribute('aria-disabled', 'true');
     },
   );
   await check(
@@ -2145,31 +2357,340 @@ try {
             `${pane} overflows at ${width}px`,
           );
         }
-        // Help: in the nav from 768px, in the account menu on phones.
-        if (width < 768) {
-          await page.locator('#account-button').click();
-          await page.locator('#account-help').click();
-        } else await page.locator('#help-tab').click();
+        // The section tabs sit across the top at every width, Help included.
+        await page.locator('#help-tab').click();
         await expect(page.locator('#help-pane')).toBeVisible();
-        await expect(page.locator('#account-menu')).toBeHidden();
-        // Nothing hides under the bottom tabs: the page scrolls past them.
         await page.locator('#inbox-tab').click();
-        await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
-        const nav = await page.locator('#app-nav').boundingBox(),
-          last = await page.locator('#inbox-pane .pagination').boundingBox();
-        if (width < 768) {
-          assert.ok(last.y + last.height <= nav.y, `covered at ${width}px`);
-          // Focused controls scroll clear of the tab bar (WCAG 2.4.11).
-          const padding = await page.evaluate(
-            () =>
-              getComputedStyle(document.documentElement).scrollPaddingBottom,
-          );
-          assert.ok(
-            parseFloat(padding) >= nav.height + 16,
-            `scroll-padding ${padding} at ${width}px`,
-          );
-        }
+        await page.evaluate(() => scrollTo(0, 0));
+        const bar = await page.locator('#app-bar').boundingBox(),
+          nav = await page.locator('#app-nav').boundingBox(),
+          pane = await page.locator('#inbox-pane').boundingBox();
+        assert.ok(
+          bar.y + bar.height <= nav.y + 1 && nav.y + nav.height <= pane.y,
+          `tabs not between the header and the page at ${width}px`,
+        );
+        assert.ok(nav.width >= width - 1, `tabs not full width at ${width}px`);
       }
+    },
+  );
+  // Synthetic surveys for the downloads: one in the original Advisor Studio
+  // design (no builder definition), a builder survey, and a builder survey
+  // whose first response arrives after the survey list has loaded.
+  const studio = randomUUID(),
+    feedback = randomUUID(),
+    late = randomUUID(),
+    sample = builderSample();
+  await fixture.db.query(
+    `INSERT INTO club_forms.custom_surveys(id,slug,title,content_version,status,link_digest,expires_at) VALUES($1,'advisor-studio-sample','Advisor Studio sample',$2,'closed',$3,now())`,
+    [studio, definition.content_version, randomUUID()],
+  );
+  for (const [id, title] of [
+    [feedback, sample.definition.title],
+    [late, 'Late responses sample'],
+  ])
+    for (const [action, expectedRevision] of [
+      ['save', 0],
+      ['publish', 1],
+    ])
+      await changeDraft(
+        fixture.db,
+        { email: 'officer@example.com' },
+        {
+          id,
+          definition: { ...sample.definition, title },
+          action,
+          expectedRevision,
+          requestId: randomUUID(),
+        },
+      );
+  const addResponse = async (survey, id, name, responses) => {
+    await fixture.db.query(
+      'INSERT INTO club_forms.custom_survey_members(survey_id,advisor_id,display_name,email) VALUES($1,$2,$3,$4)',
+      [survey, id, name, id + '@example.com'],
+    );
+    await fixture.db.query(
+      "INSERT INTO club_forms.custom_survey_responses(survey_id,advisor_id,revision,responses,submitted_at) VALUES($1,$2,1,$3,'2026-10-03T03:30:00Z')",
+      [survey, id, JSON.stringify(responses)],
+    );
+  };
+  await addResponse(studio, 'avery', 'Avery Sample', advisorResponses());
+  await addResponse(
+    feedback,
+    'jordan',
+    'Jordan Example',
+    sample.answers('Clear examples'),
+  );
+  const openCustomSurvey = async (page, id) => {
+    await page.locator('#surveys-tab').click();
+    await page.locator('#custom-surveys-group').click();
+    await page.getByLabel('Custom survey', { exact: true }).selectOption(id);
+  };
+  const pdfAudits = async (survey) =>
+    (
+      await fixture.db.query(
+        'SELECT actor,action FROM club_forms.audit WHERE action LIKE $1',
+        ['custom-survey-pdf:' + survey + ':%'],
+      )
+    ).rows;
+  await check('Custom survey responses download as PDF files', async (page) => {
+    const scripts = () =>
+      page.evaluate(() =>
+        performance
+          .getEntriesByType('resource')
+          .map((entry) => new URL(entry.name).pathname)
+          .filter((path) => path.endsWith('.js')),
+      );
+    const dialog = page.getByRole('dialog', {
+        name: 'Download PDF',
+        exact: true,
+      }),
+      heading = dialog.getByLabel('PDF heading', { exact: true }),
+      avery = page.getByRole('button', {
+        name: 'Download PDF for Avery Sample',
+        exact: true,
+      });
+    // After an update, the old PDF file is gone: the page asks for a reload
+    // and records nothing.
+    await page.route('**/admin/response-pdf-*.js', (route) => route.abort());
+    await openCustomSurvey(page, studio);
+    await avery.click();
+    await dialog
+      .getByRole('button', { name: 'Download PDF', exact: true })
+      .click();
+    await expect(
+      page.getByText(
+        'Club Office was updated. Reload the page to download the PDF.',
+        { exact: true },
+      ),
+    ).toBeVisible();
+    assert.deepEqual(await pdfAudits(studio), []);
+    await page.unroute('**/admin/response-pdf-*.js');
+    await page.reload();
+    await page.locator('#office').waitFor();
+    await openCustomSurvey(page, studio);
+    await avery.waitFor();
+    // jsPDF is not part of the first download.
+    assert.deepEqual(await scripts(), ['/admin/index.js']);
+    await avery.click();
+    await expect(heading).toHaveValue('Advisor Studio sample');
+    // The sample's Korean note is beyond the PDF font, so Print is offered.
+    await expect(
+      dialog.getByRole('button', { name: 'Print / Save as PDF', exact: true }),
+    ).toBeVisible();
+    await heading.fill('Advisor notes — Avery');
+    let download = page.waitForEvent('download');
+    await dialog
+      .getByRole('button', { name: 'Download PDF', exact: true })
+      .click();
+    let file = await download;
+    assert.equal(
+      file.suggestedFilename(),
+      'advisor-studio-sample-avery-sample-2026-10-02.pdf',
+    );
+    let bytes = await readFile(await file.path());
+    assert.equal(bytes.subarray(0, 5).toString(), '%PDF-');
+    let lines = pdfLines(bytes);
+    for (const text of [
+      'Dallas College AI Club',
+      'Advisor notes — Avery',
+      'Avery Sample',
+      '1.',
+      'Build or review an AI prototype together',
+      'Dial position: 65 of 100.',
+      'Avery Sample · Advisor notes — Avery',
+    ])
+      assert.ok(lines.includes(text), text);
+    assert.ok(!lines.includes('Advisor Studio sample'));
+    await expect(
+      page.getByText('PDF downloaded.', { exact: true }),
+    ).toBeVisible();
+    assert.match(
+      (await scripts()).join(' '),
+      /^\/admin\/index\.js \/admin\/response-pdf-\w+\.js$/,
+    );
+    assert.deepEqual(await pdfAudits(studio), [
+      {
+        actor: 'officer@example.com',
+        action: `custom-survey-pdf:${studio}:avery`,
+      },
+    ]);
+    // The heading is remembered for this survey; Cancel changes nothing.
+    await avery.click();
+    await expect(heading).toHaveValue('Advisor notes — Avery');
+    await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(avery).toBeFocused();
+    // Without browser storage the dialog still opens with the survey title.
+    await page.evaluate(() => {
+      for (const name of ['getItem', 'setItem', 'removeItem'])
+        Storage.prototype[name] = () => {
+          throw new Error('Storage is blocked');
+        };
+    });
+    await page
+      .getByLabel('Custom survey', { exact: true })
+      .selectOption(feedback);
+    await page
+      .getByRole('button', { name: 'Download PDF for Jordan Example' })
+      .click();
+    await expect(heading).toHaveValue('Workshop feedback sample');
+    // Plain Latin text needs no print view.
+    await expect(
+      dialog.getByRole('button', { name: 'Print / Save as PDF', exact: true }),
+    ).toBeHidden();
+    download = page.waitForEvent('download');
+    await dialog
+      .getByRole('button', { name: 'Download PDF', exact: true })
+      .click();
+    file = await download;
+    assert.equal(
+      file.suggestedFilename(),
+      'workshop-feedback-sample-jordan-example-2026-10-02.pdf',
+    );
+    // Builder surveys list a skipped question as 'No answer'.
+    lines = pdfLines(await readFile(await file.path()));
+    for (const text of ['Jordan Example', '•', 'Agents', 'No answer'])
+      assert.ok(lines.includes(text), text);
+    // The response and its button fit a phone.
+    await page.setViewportSize({ width: 375, height: 800 });
+    await page
+      .getByRole('heading', { name: 'Submitted responses', exact: true })
+      .evaluate((heading) => heading.scrollIntoView());
+    assert.equal(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= innerWidth,
+      ),
+      true,
+    );
+    await page.screenshot({
+      path: path.join(screens, 'custom-survey-pdf-375.png'),
+    });
+  });
+  await check(
+    'Names the PDF font lacks are offered Print / Save as PDF',
+    async (page) => {
+      await addResponse(
+        feedback,
+        'haneul',
+        '김하늘',
+        sample.answers('좋았어요. Clear examples'),
+      );
+      await page.evaluate(() => {
+        window.printCalls = 0;
+        window.print = () => window.printCalls++;
+      });
+      await openCustomSurvey(page, feedback);
+      await page
+        .locator('.response-person > summary', { hasText: '김하늘' })
+        .click();
+      const trigger = page.getByRole('button', {
+        name: 'Download PDF for 김하늘',
+        exact: true,
+      });
+      await trigger.click();
+      const dialog = page.getByRole('dialog', {
+        name: 'Download PDF',
+        exact: true,
+      });
+      await expect(dialog).toContainText(
+        'Some characters here only show with Print / Save as PDF.',
+      );
+      await dialog
+        .getByLabel('PDF heading', { exact: true })
+        .fill('Workshop notes for 하늘');
+      await dialog
+        .getByRole('button', { name: 'Print / Save as PDF', exact: true })
+        .click();
+      const view = page.getByRole('dialog', {
+        name: 'Print view',
+        exact: true,
+      });
+      await expect(view).toBeVisible();
+      await expect(view.locator('h1')).toHaveText('Workshop notes for 하늘');
+      await expect(view.locator('dd').first()).toHaveText('김하늘');
+      await expect(view).toContainText('좋았어요. Clear examples');
+      await expect(view).toContainText('No answer');
+      assert.equal(await page.evaluate(() => window.printCalls), 1);
+      assert.deepEqual((await pdfAudits(feedback)).at(-1), {
+        actor: 'officer@example.com',
+        action: `custom-survey-pdf:${feedback}:haneul`,
+      });
+      // On paper a plain copy of the document prints, with no Club Office
+      // around it; on screen the copy stays hidden.
+      const copy = page.locator('.print-copy');
+      await page.emulateMedia({ media: 'print' });
+      for (const id of ['#app-bar', '#app-nav', '#main'])
+        await expect(page.locator(id)).toBeHidden();
+      await expect(view).toBeHidden();
+      await expect(copy.locator('h1')).toHaveText('Workshop notes for 하늘');
+      await expect(copy).toContainText('김하늘');
+      await page.emulateMedia({ media: 'screen' });
+      await expect(copy).toBeHidden();
+      await view
+        .getByRole('button', { name: 'Print / Save as PDF', exact: true })
+        .click();
+      assert.equal(await page.evaluate(() => window.printCalls), 2);
+      await view.getByRole('button', { name: 'Close', exact: true }).click();
+      await expect(view).toHaveCount(0);
+      await expect(copy).toHaveCount(0);
+      await expect(trigger).toBeFocused();
+      // Printing the office itself is unchanged.
+      await page.emulateMedia({ media: 'print' });
+      await expect(page.locator('#main')).toBeVisible();
+      await page.emulateMedia({ media: 'screen' });
+    },
+  );
+  await check(
+    'Custom survey CSV export downloads every active response',
+    async (page) => {
+      const exportButton = page
+        .locator('#custom-surveys-root')
+        .getByRole('button', { name: 'Export CSV', exact: true });
+      // The button follows the results just loaded, not the older survey
+      // list: a first response after the list loaded can be exported.
+      await openCustomSurvey(page, late);
+      await expect(exportButton).toBeDisabled();
+      await addResponse(late, 'riley', 'Riley Sample', sample.answers('Late'));
+      await page
+        .getByLabel('Custom survey', { exact: true })
+        .selectOption(studio);
+      await page
+        .getByLabel('Custom survey', { exact: true })
+        .selectOption(late);
+      await expect(
+        page.getByRole('button', { name: 'Download PDF for Riley Sample' }),
+      ).toBeVisible();
+      await expect(exportButton).toBeEnabled();
+      await page
+        .getByLabel('Custom survey', { exact: true })
+        .selectOption(studio);
+      await expect(
+        page.getByRole('button', { name: 'Download PDF for Avery Sample' }),
+      ).toBeVisible();
+      const download = page.waitForEvent('download');
+      await exportButton.click();
+      const file = await download;
+      assert.match(
+        file.suggestedFilename(),
+        /^advisor-studio-sample-responses-\d{4}-\d{2}-\d{2}\.csv$/,
+      );
+      const csv = await readFile(await file.path(), 'utf8');
+      assert.match(
+        csv,
+        /^\ufeff"Name","Email","Submitted \(Central\)","Status","What would you actually look forward to\?"/,
+      );
+      assert.match(csv, /\r\n"Avery Sample","avery@example.com","Oct 2, 2026/);
+      assert.match(
+        csv,
+        /"Active","1\. Build or review an AI prototype together 2\. Shape/,
+      );
+      assert.match(csv, /"\[Shared wording only\] =SUM\(A1\)/);
+      await expect(
+        page.getByText(
+          'CSV downloaded. It includes every active response across all pages.',
+          { exact: true },
+        ),
+      ).toBeVisible();
     },
   );
 } finally {

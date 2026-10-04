@@ -265,9 +265,9 @@ export async function changeState(db, body, actor) {
     )
       throw new RequestError(
         400,
-        'Only an RSVP can be cancelled, and only a newsletter request withdrawn.',
+        'Only an RSVP can be cancelled, and only an AI Review subscription withdrawn.',
       );
-    const item = entry.kind === 'rsvp' ? 'RSVP' : 'newsletter request';
+    const item = entry.kind === 'rsvp' ? 'RSVP' : 'AI Review subscription';
     // Legacy 'pending' or 'suppressed' entries are not managed here.
     if (!allowed.includes(entry.state))
       throw new RequestError(

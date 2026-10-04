@@ -51,13 +51,19 @@ await cp(
   path.join(root, 'public/admin/assets'),
   { recursive: true },
 );
+// Splitting keeps on-demand code, such as the PDF download, in its own file
+// next to index.js.
 await build({
   entryPoints: [path.join(root, 'admin/index.js')],
   bundle: true,
+  splitting: true,
   format: 'esm',
   target: 'es2022',
   minify: true,
-  outfile: path.join(root, 'public/admin/index.js'),
+  outdir: path.join(root, 'public/admin'),
+  // jsPDF's HTML and SVG helpers are unused; its README says to leave their
+  // optional libraries external.
+  external: ['canvg', 'dompurify', 'html2canvas'],
 });
 await mkdir(path.join(root, 'public/surveys'), { recursive: true });
 for (const file of ['index.html', 'style.css'])

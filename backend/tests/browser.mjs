@@ -15,6 +15,15 @@ const publicEvents = JSON.parse(
     ? { ...event, date: '2099-10-02', end: null }
     : event,
 );
+publicEvents.push({
+  ...publicEvents.find((event) => event.id === 'productivity'),
+  id: 'possible-club-night',
+  title: 'Possible club night',
+  date: '2099-01-02',
+  potential: true,
+});
+let eventsForPage = publicEvents,
+  eventsAvailable = true;
 // Attachment bytes stay in this process; no Blob or production API is called.
 process.env.BLOB_READ_WRITE_TOKEN = 'local-forms-fixture';
 const storage = {
@@ -71,20 +80,10 @@ try {
     async (route) => {
       if (new URL(route.request().url()).pathname === '/api/events')
         return route.fulfill({
+          status: eventsAvailable ? 200 : 503,
           contentType: 'application/json',
           headers: { 'Access-Control-Allow-Origin': origin },
-          body: JSON.stringify({
-            events: JSON.parse(
-              await readFile(
-                path.join(backend, 'generated/events.json'),
-                'utf8',
-              ),
-            ).map((e) =>
-              e.id === 'productivity'
-                ? { ...e, date: '2099-10-02', end: null }
-                : e,
-            ),
-          }),
+          body: JSON.stringify({ events: eventsForPage }),
         });
       if (route.request().method() === 'OPTIONS')
         return route.fulfill({
@@ -165,6 +164,45 @@ try {
     path: path.join(screens, 'membership-desktop.png'),
     fullPage: true,
   });
+  const eventCards = page.locator('.membership-event');
+  await expect(eventCards).toHaveCount(2);
+  await expect(eventCards.nth(0)).toContainText('Next event');
+  await expect(eventCards.nth(0).getByRole('link')).toHaveAttribute(
+    'href',
+    'club.html?mode=events&event=productivity',
+  );
+  await expect(eventCards.nth(1)).toContainText('Potential event');
+  await expect(eventCards.nth(1).getByRole('link')).toHaveAttribute(
+    'href',
+    'club.html?mode=events&event=possible-club-night',
+  );
+  // Calendar edits, unpublishing and an unavailable feed never leave a stale
+  // event invitation beside a saved signup.
+  eventsForPage = publicEvents.filter(
+    (event) => event.id !== 'possible-club-night',
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(eventCards).toHaveCount(1);
+  eventsAvailable = false;
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(eventCards).toHaveCount(0);
+  await expect(
+    page.getByRole('link', { name: 'Open Teams ↗', exact: true }),
+  ).toBeVisible();
+  eventsAvailable = true;
+  eventsForPage = publicEvents;
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(eventCards).toHaveCount(2);
+  await eventCards.nth(0).getByRole('link').click();
+  await expect(page.locator('#event-detail h2')).toContainText(
+    'Being productive with AI Workshop',
+  );
+  await expect(page.locator('#open-rsvp')).toBeVisible();
+  const calendarRefresh = page.waitForResponse((response) =>
+    response.url().endsWith('/api/events'),
+  );
+  await page.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await calendarRefresh;
   await page.goto(origin + '/club.html?mode=journal');
   await page.getByRole('button', { name: 'Subscribe ↗', exact: true }).click();
   await page

@@ -3308,9 +3308,33 @@ try {
       await ideal.locator('[data-answerreview]').check();
       await ideal.locator('[data-answerinclude]').check();
       await page.locator('#approve-playbook').check();
+      const attempts = [];
+      await page.route('**/api/custom-surveys?action=submit', async (route) => {
+        attempts.push(route.request().postDataJSON());
+        if (attempts.length > 1) return route.continue();
+        const committed = await route.fetch();
+        assert.equal(committed.status(), 200);
+        await route.abort('failed');
+      });
+      await page.locator('#submitPlaybook').click();
+      await expect(page.locator('#submit-status')).not.toHaveText(
+        'Saving selected responses…',
+      );
+      await expect(page.locator('#submitPlaybook')).toBeEnabled();
       await page.locator('#submitPlaybook').click();
       await expect(page.locator('#submit-status')).toContainText(
         'Shared summary saved. Revision 1.',
+      );
+      assert.equal(attempts.length, 2);
+      assert.deepEqual(attempts[1], attempts[0]);
+      assert.equal(
+        (
+          await fixture.db.query(
+            'SELECT count(*)::int n FROM club_forms.custom_survey_receipts WHERE survey_id=$1',
+            [id],
+          )
+        ).rows[0].n,
+        1,
       );
       const saved = (
         await fixture.db.query(
@@ -3344,8 +3368,27 @@ try {
         assert.ok(peer.y >= own.y + own.height);
       }
       await page.setViewportSize({ width: 1440, height: 1000 });
-      await page.goto(url + '&preview=1');
       await page.reload();
+      await page
+        .getByRole('button', { name: 'Open my questions', exact: true })
+        .click();
+      await page.locator('#saved-results summary').first().click();
+      await expect(page.locator('#saved-results')).toContainText(
+        'Updated private wording.',
+      );
+      await expect(page.locator('#saved-results')).toContainText(
+        'My own private draft comment.',
+      );
+      const office = await page.context().newPage();
+      await office.goto(fixture.origin + '/admin/#/surveys/custom/' + id);
+      await expect(office.locator('#main')).toContainText(
+        'Updated private wording.',
+      );
+      await expect(office.locator('#main')).toContainText(
+        'My own private draft comment.',
+      );
+      await office.close();
+      await page.goto(url + '&preview=1');
       await page
         .getByRole('button', {
           name: '5 Your playbook, in your words',
@@ -3405,6 +3448,11 @@ try {
         await dialog.dismiss();
       });
       await expect(sample.locator('.choice-match')).toHaveCount(3);
+      const peerOnly = sample.locator('#review-card-resource-materials');
+      await expect(peerOnly.locator('.peer-responses')).toContainText(
+        'Happy to discuss possibilities',
+      );
+      await expect(peerOnly.locator('[data-answerinclude]')).toHaveCount(0);
       await sample
         .getByRole('button', { name: 'Welcome', exact: true })
         .click();
@@ -3525,6 +3573,14 @@ try {
       await expect(ideal.locator('textarea')).not.toHaveValue(
         'Only this temporary wording.',
       );
+      await sample.locator('[data-nav="3"]').click();
+      await sample.locator('#choice-meeting_format').selectOption('');
+      await sample.locator('#next').click();
+      const unanswered = sample.locator('#review-card-q-meeting_format');
+      await expect(unanswered.locator('.peer-responses')).toContainText(
+        'Microsoft Teams',
+      );
+      await expect(unanswered.locator('[data-answerinclude]')).toHaveCount(0);
       await sample.locator('[data-nav="-1"]').click();
       await sample
         .getByRole('button', { name: 'Alex Rivera', exact: true })
@@ -3566,7 +3622,6 @@ try {
         await blocked.goto(
           fixture.origin + '/surveys/#invite=' + fixture.token + '&preview=1',
         );
-        await blocked.reload();
         await expect(
           blocked.locator('.sidebar').getByText('Welcome', { exact: true }),
         ).toHaveCount(1);
@@ -3576,6 +3631,97 @@ try {
         ).toBeDisabled();
       } finally {
         await anonymous.close();
+      }
+    },
+  );
+  await check(
+    'Returning from a survey preview restores the real email sign-in',
+    async (page) => {
+      const url = fixture.origin + '/surveys/#invite=' + fixture.token;
+      await page.goto(url);
+      await expect(
+        page.getByLabel('Email address', { exact: true }),
+      ).toBeVisible();
+      await page
+        .getByRole('button', {
+          name: 'Preview questions · no sign-in needed',
+          exact: true,
+        })
+        .click();
+      await expect(page.locator('#who')).toHaveText(
+        'Preview · answering disabled',
+      );
+      await page.goBack();
+      await expect(
+        page.getByLabel('Email address', { exact: true }),
+      ).toBeVisible();
+      assert.equal(page.url(), url);
+      await expect(page.locator('.sample-bar')).toHaveCount(0);
+      await page.goForward();
+      await expect(page.locator('#who')).toHaveText(
+        'Preview · answering disabled',
+      );
+      const skip = page.getByRole('link', {
+        name: 'Skip to survey',
+        exact: true,
+      });
+      await skip.focus();
+      await skip.click();
+      assert.equal(page.url(), url + '&preview=1');
+      await expect(page.locator('#main')).toBeFocused();
+      await expect(page.locator('#who')).toHaveText(
+        'Preview · answering disabled',
+      );
+      await page.reload();
+      await expect(page.locator('#who')).toHaveText(
+        'Preview · answering disabled',
+      );
+      await page
+        .getByRole('link', { name: 'Sign in to answer →', exact: true })
+        .click();
+      await expect(
+        page.getByLabel('Email address', { exact: true }),
+      ).toBeVisible();
+      await page.goto(fixture.origin + '/surveys/#sample=sample-jordan');
+      await expect(
+        page.getByRole('button', { name: 'Jordan Morgan', exact: true }),
+      ).toBeEnabled();
+      await page.goto(url);
+      await expect(
+        page.getByLabel('Email address', { exact: true }),
+      ).toBeVisible();
+      await expect(page.locator('.sample-bar')).toHaveCount(0);
+      await expect(
+        page.getByRole('button', { name: 'Send sign-in code', exact: true }),
+      ).toBeEnabled();
+      await expect(page.locator('#survey-preview')).toBeVisible();
+      for (const width of [1440, 390, 320]) {
+        await page.setViewportSize({ width, height: 844 });
+        for (let repeat = 0; repeat < 5; repeat++) {
+          await page.locator('#survey-preview').click();
+          await expect(page.locator('#who')).toHaveText(
+            'Preview · answering disabled',
+          );
+          await page.goBack();
+          await expect(
+            page.getByLabel('Email address', { exact: true }),
+          ).toBeVisible();
+          await page.goForward();
+          await expect(page.locator('#who')).toHaveText(
+            'Preview · answering disabled',
+          );
+          await page
+            .getByRole('link', { name: 'Sign in to answer →', exact: true })
+            .click();
+          await expect(
+            page.getByLabel('Email address', { exact: true }),
+          ).toBeVisible();
+          assert.ok(
+            await page.evaluate(
+              () => document.documentElement.scrollWidth <= innerWidth,
+            ),
+          );
+        }
       }
     },
   );

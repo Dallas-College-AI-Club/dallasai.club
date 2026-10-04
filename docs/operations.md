@@ -69,6 +69,7 @@ Keep runtime connections restricted. The original leaderboard setup is retained 
 | 018 | Custom-survey history/device indexes and permission to clean obsolete devices |
 | 019 | Officer Help topics (`club_forms.help_entries`) |
 | 020 | Help guidebook categories, editable starter topics, and topic-linked audit receipts |
+| 021 | Officer-recorded event attendance and registration snapshots for RSVPs without questions |
 
 Apply `018_survey_maintenance.sql` before deploying the new maintenance handler.
 It grants deletion only for device tokens, not survey responses. The migration is
@@ -86,6 +87,22 @@ Reruns preserve officer edits and do not recreate deleted starter topics. Receip
 survive topic deletion without retaining the title or body. Older unlinked receipts
 remain in Activity; their original topic cannot be reconstructed. Keep this additive
 migration on a code rollback.
+
+Apply `021_event_participation.sql` before deploying event attendance and combined
+survey reports. It creates `club_forms.event_attendance`, keyed by event ID and
+normalized email, grants the runtime role select/insert/update, and backfills
+missing RSVP snapshots with empty question and answer arrays. Reruns preserve
+existing answer snapshots and attendance. Deleting a contact's email record
+cascades its attendance records. Attendance changes and report exports use the
+existing officer audit table; keep this additive migration on a code rollback.
+
+Feedback completion is calculated from nonempty saved responses across every
+published same-event custom survey, including archived respondents and closed or
+expired rounds. Drafts are excluded; partial completion remains missing feedback.
+The RSVP list, count, summary, and CSV share the participation filters. Combined
+reports accept `type=all|rsvp|feedback` and optional `surveyId` to scope only their
+feedback source. Combined CSV retains the custom-survey same-origin and 4 MB
+limits. The ordinary list defaults to RSVPs.
 
 The original `provision.mjs` bootstraps only part of the current schema and refuses
 to overwrite existing credentials. Never treat rerunning it as an upgrade; review
@@ -115,6 +132,15 @@ Browser fixtures use synthetic data and local databases. Test public routes, for
 validation and retries, mobile layouts, sign-in/sign-out, event changes, and custom
 survey creation, preview, submission, replacement, access removal, and result paging.
 The CI office workflow runs `node tests/browser-office.mjs`.
+
+Event-participation backend verification (2026-10-04, disposable local PGlite):
+30 targeted tests passed across `event-participation`, `survey-management`,
+`surveys`, and `submission-management`. This includes migration reruns/runtime
+grants, attendance audit rollback, 53 matching RSVPs across pages, partial and
+archived feedback evidence, per-survey report scope, and combined-export origin
+and size limits. Thirty-three distinct mutation probes caused their regression
+tests to fail. These are local backend checks; release browser and production
+verification are recorded separately.
 
 Admin-refinement verification (2026-10-04, local worktree): the 189-test backend
 suite passed, including linked event feedback, calendar/number answers, deletion

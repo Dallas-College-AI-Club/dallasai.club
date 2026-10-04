@@ -181,6 +181,64 @@ test('rsvp-all lists past and upcoming RSVPs; status=all is the same as no statu
     assert.equal((await request('/api/admin' + query)).status, 400);
 });
 
+test('Active filters list, event totals, arrivals and CSV to New plus Reviewed', async () => {
+  const fresh = await insert({
+    kind: 'rsvp',
+    name: 'New RSVP',
+    data: { eventId: 'next', eventTitle: 'Next event' },
+  });
+  const reviewed = await insert({
+    kind: 'rsvp',
+    name: 'Reviewed RSVP',
+    status: 'reviewed',
+    data: { eventId: 'past', eventTitle: 'Past event' },
+  });
+  const cancelled = await insert({
+    kind: 'rsvp',
+    name: 'Cancelled RSVP',
+    state: 'cancelled',
+    data: { eventId: 'next', eventTitle: 'Next event' },
+  });
+  const archived = await insert({
+    kind: 'rsvp',
+    name: 'Archived RSVP',
+    status: 'closed',
+    data: { eventId: 'next', eventTitle: 'Next event' },
+  });
+  await insert({ name: 'Other category' });
+  const filter = 'kind=rsvp-all&status=active',
+    active = await list('?' + filter);
+  assert.deepEqual(
+    active.entries.map((entry) => entry.id).sort(),
+    [fresh, reviewed, cancelled].sort(),
+  );
+  // Cancelled is an RSVP business state, not an Inbox archive status.
+  assert.equal(active.total, 3);
+  assert.deepEqual(active.eventCounts, { next: 2, past: 1 });
+  assert.equal(active.counts.find((row) => row.kind === 'rsvp').closed, 1);
+  assert.equal((await list('?' + filter + '&eventId=past')).total, 1);
+  assert.equal((await list('?' + filter + '&q=Reviewed')).total, 1);
+  assert.equal(
+    (await list('?counts=1&since=2025-12-31T00:00:00Z&' + filter))
+      .arrivedInView,
+    3,
+  );
+  const response = await request('/api/admin?export=csv&' + filter);
+  assert.equal(response.status, 200);
+  const csv = await response.text();
+  for (const name of ['New RSVP', 'Reviewed RSVP', 'Cancelled RSVP'])
+    assert.ok(csv.includes(name), name);
+  for (const name of ['Archived RSVP', 'Other category'])
+    assert.ok(!csv.includes(name), name);
+  assert.deepEqual(
+    (await list('?kind=rsvp-all&status=closed')).entries.map(
+      (entry) => entry.id,
+    ),
+    [archived],
+  );
+  assert.equal((await list('?kind=rsvp-all&status=all')).total, 4);
+});
+
 test('sort=oldest reverses the list, ties broken by id', async () => {
   const times = ['2026-01-03', '2026-01-01', '2026-01-02', '2026-01-02'];
   const ids = [];

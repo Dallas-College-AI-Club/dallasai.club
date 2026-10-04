@@ -152,9 +152,16 @@ export function customSurveysHandler({
           )
         ).rows[0];
         if (!survey) throw new RequestError(404, 'Survey not found.');
+        const view = url.searchParams.get('view') || 'active';
+        const search = (url.searchParams.get('search') || '').trim();
+        if (
+          !['active', 'archived', 'all'].includes(view) ||
+          search.length > 200
+        )
+          throw new RequestError(400, 'Choose valid response filters.');
         if (action === 'export') {
           const csv = surveyResultsCSV(
-            await surveyExportRows(db, id),
+            await surveyExportRows(db, id, { view, search }),
             survey.definition || definition,
           );
           // Vercel sends at most 4.5 MB; refuse rather than fail midway.
@@ -181,7 +188,8 @@ export function customSurveysHandler({
           survey,
           resultsDefinition: survey.definition || definition,
           ...(await surveyResultPage(db, id, url.searchParams.get('offset'), {
-            activeOnly: true,
+            view,
+            search,
           })),
           readOnly: true,
         });

@@ -20,6 +20,11 @@ const browser = await chromium.launch({
 const failures = [],
   screens = path.resolve(import.meta.dirname, '../../.preview/office-audit');
 await mkdir(screens, { recursive: true });
+async function openLibrarySurvey(page) {
+  const card = page.locator('#survey-library .custom-survey-group').first();
+  await card.locator(':scope > summary').click();
+  await card.locator(':scope > a').click();
+}
 async function check(name, fn) {
   const context = await browser.newContext({
     viewport: { width: 1440, height: 1000 },
@@ -284,10 +289,7 @@ try {
     'Custom survey create preview publish respondents and close',
     async (page) => {
       await page.locator('#surveys-tab').click();
-      await page
-        .locator('#survey-library .survey-library-row a')
-        .first()
-        .click();
+      await openLibrarySurvey(page);
       await page
         .getByRole('button', { name: 'Create custom survey', exact: true })
         .click();
@@ -408,10 +410,7 @@ try {
     'Ambiguous save retries the same request without losing the draft',
     async (page) => {
       await page.locator('#surveys-tab').click();
-      await page
-        .locator('#survey-library .survey-library-row a')
-        .first()
-        .click();
+      await openLibrarySurvey(page);
       await page
         .getByRole('button', { name: 'Create custom survey', exact: true })
         .click();
@@ -482,7 +481,7 @@ try {
       },
     );
     await page.locator('#surveys-tab').click();
-    await page.locator('#survey-library .survey-library-row a').first().click();
+    await openLibrarySurvey(page);
     await page.getByLabel('Custom survey', { exact: true }).selectOption(id);
     await page
       .getByRole('button', {
@@ -549,10 +548,7 @@ try {
     'Custom draft navigation is guarded',
     async (page, dialogs, setAccept) => {
       await page.locator('#surveys-tab').click();
-      await page
-        .locator('#survey-library .survey-library-row a')
-        .first()
-        .click();
+      await openLibrarySurvey(page);
       await page
         .getByRole('button', { name: 'Create custom survey', exact: true })
         .click();
@@ -578,10 +574,7 @@ try {
     'Survey collections retain search and protect drafts',
     async (page, dialogs, setAccept) => {
       await page.locator('#surveys-tab').click();
-      await page
-        .locator('#survey-hub')
-        .getByRole('link', { name: 'RSVP answers', exact: true })
-        .click();
+      await page.locator('#event-surveys-group').click();
       await page.locator('#survey-search').fill('rsvp@example.edu');
       await expect(
         page.locator('#survey-results .survey-response'),
@@ -592,7 +585,7 @@ try {
       );
       await page.locator('#custom-surveys-group').click();
       await page
-        .getByRole('button', { name: 'Create custom survey', exact: true })
+        .getByRole('link', { name: 'Create survey', exact: true })
         .click();
       await page
         .getByLabel('Survey title', { exact: true })
@@ -627,10 +620,7 @@ try {
     'Cancelled browser navigation retains custom draft and address',
     async (page, dialogs, setAccept) => {
       await page.locator('#surveys-tab').click();
-      await page
-        .locator('#survey-library .survey-library-row a')
-        .first()
-        .click();
+      await openLibrarySurvey(page);
       await page
         .getByRole('button', { name: 'Create custom survey', exact: true })
         .click();
@@ -866,10 +856,7 @@ try {
     'An exclusive choice is marked in the builder and chosen by itself',
     async (page) => {
       await page.locator('#surveys-tab').click();
-      await page
-        .locator('#survey-library .survey-library-row a')
-        .first()
-        .click();
+      await openLibrarySurvey(page);
       await page
         .getByRole('button', { name: 'Create custom survey', exact: true })
         .click();
@@ -1448,6 +1435,8 @@ try {
   await check(
     'Save note & mark reviewed saves both and focuses the next card',
     async (page) => {
+      await page.goto(fixture.origin + '/admin/#/inbox?status=new');
+      await page.locator('#entries .entry').first().waitFor();
       const [first, second] = await page
         .locator('#entries .entry')
         .evaluateAll((cards) => cards.map((card) => card.id));
@@ -1654,7 +1643,7 @@ try {
     'Focus stays in the inbox after signing in again',
     async (page) => {
       await page.clock.install();
-      await page.reload();
+      await page.goto(fixture.origin + '/admin/#/inbox?status=new');
       await page.locator('#office').waitFor();
       const [first, second, third] = await page
         .locator('#entries .entry')
@@ -1738,10 +1727,7 @@ try {
       );
       await expect(page.locator('#status')).toHaveText('CSV download started.');
       await page.locator('#surveys-tab').click();
-      await page
-        .locator('#survey-hub')
-        .getByRole('link', { name: 'RSVP answers', exact: true })
-        .click();
+      await page.locator('#event-surveys-group').click();
       await page.locator('#survey-results .survey-response').first().waitFor();
       await page.route(
         (url) =>
@@ -1886,7 +1872,7 @@ try {
     await expect(page.locator('#events-heading')).toBeFocused();
     await page.locator('#surveys-tab').click();
     await expect(page).toHaveURL(/#\/surveys$/);
-    await page.locator('#survey-library .survey-library-row a').first().click();
+    await openLibrarySurvey(page);
     await expect(page).toHaveURL(/#\/surveys\/custom\/[a-f0-9-]+$/);
     await expect(page).toHaveTitle(/Custom survey · Surveys · Club Office$/);
     await page.goBack();
@@ -1900,7 +1886,7 @@ try {
     await expect(page.locator('#events-pane')).toBeVisible();
     // Surveys opens its overview instead of hiding the other collection.
     await page.locator('#surveys-tab').click();
-    await page.locator('#survey-library .survey-library-row a').first().click();
+    await openLibrarySurvey(page);
     await page.locator('#inbox-tab').click();
     await expect(page.locator('#surveys-tab')).toHaveAttribute(
       'href',
@@ -1925,10 +1911,7 @@ try {
     'Reload keeps the page, the Surveys sub-view and Inbox filters',
     async (page) => {
       await page.locator('#surveys-tab').click();
-      await page
-        .locator('#survey-library .survey-library-row a')
-        .first()
-        .click();
+      await openLibrarySurvey(page);
       const create = page.getByRole('button', {
         name: 'Create custom survey',
         exact: true,
@@ -2532,7 +2515,7 @@ try {
   );
   const openCustomSurvey = async (page, id) => {
     await page.locator('#surveys-tab').click();
-    await page.locator('#survey-library .survey-library-row a').first().click();
+    await openLibrarySurvey(page);
     await page.getByLabel('Custom survey', { exact: true }).selectOption(id);
   };
   const pdfAudits = async (survey) =>
@@ -2797,7 +2780,7 @@ try {
       assert.match(csv, /"\[Shared wording only\] =SUM\(A1\)/);
       await expect(
         page.getByText(
-          'CSV downloaded. It includes every active response across all pages.',
+          'CSV downloaded. It includes every matching response across all pages.',
           { exact: true },
         ),
       ).toBeVisible();
@@ -2910,7 +2893,7 @@ try {
         .getByRole('link', { name: 'Show all' })
         .click();
       await expect(page).toHaveURL(
-        /#\/inbox\?type=rsvp-all&event=home-check-event$/,
+        /#\/inbox\?type=rsvp-all&event=home-check-event&status=active$/,
       );
       await expect(page.locator('#filters [name="kind"]')).toHaveValue(
         'rsvp-all',

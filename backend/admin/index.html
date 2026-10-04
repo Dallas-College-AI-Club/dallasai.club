@@ -187,8 +187,16 @@
           <nav class="event-views inbox-views" aria-label="Submission status">
             <button
               type="button"
-              data-inbox-status="new"
+              data-inbox-status="active"
               aria-pressed="true"
+              aria-controls="entries"
+            >
+              Active
+            </button>
+            <button
+              type="button"
+              data-inbox-status="new"
+              aria-pressed="false"
               aria-controls="entries"
             >
               New
@@ -208,6 +216,14 @@
               aria-controls="entries"
             >
               Archived
+            </button>
+            <button
+              type="button"
+              data-inbox-status=""
+              aria-pressed="false"
+              aria-controls="entries"
+            >
+              All saved
             </button>
           </nav>
           <form id="filters" class="filters">
@@ -516,7 +532,7 @@
           </div>
           <nav id="survey-groups" class="sub-nav" aria-label="Survey groups">
             <a id="all-surveys-group" href="#/surveys">All surveys</a>
-            <a id="event-surveys-group" href="#/surveys/events">RSVP answers</a
+            <a id="event-surveys-group" href="#/surveys/events">Event surveys</a
             ><a id="custom-surveys-group" href="#/surveys/custom"
               >Custom surveys</a
             >
@@ -525,13 +541,22 @@
             <p class="hint">Every survey, in one place.</p>
             <div class="survey-library-toolbar">
               <label
+                >Search titles<input
+                  id="survey-title-search"
+                  type="search"
+                  maxlength="200"
+                  placeholder="Search survey titles"
+              /></label>
+              <button id="survey-title-clear" type="button">
+                Clear search
+              </button>
+              <label
                 >Collection<select id="survey-collection">
                   <option value="">All surveys</option>
-                  <option value="events">Event feedback</option>
+                  <option value="events">Event surveys</option>
                   <option value="custom">Custom surveys</option>
                 </select></label
               >
-              <a class="button-link" href="#/surveys/events">RSVP answers</a>
               <button
                 id="survey-library-refresh"
                 type="button"
@@ -541,25 +566,22 @@
               </button>
             </div>
             <div id="survey-library" aria-live="polite"></div>
-            <p class="hint">
-              Event feedback has its own link. RSVP answers are collected during
-              registration.
-            </p>
+            <p class="hint">Event surveys include RSVP answers and feedback.</p>
           </section>
           <section id="custom-surveys-root" hidden></section>
           <section id="event-surveys-root">
             <div class="heading">
-              <h2 tabindex="-1" data-focus-fallback>RSVP answers</h2>
+              <h2 tabindex="-1" data-focus-fallback>Event surveys</h2>
               <button id="survey-reload" type="button" class="btn-quiet">
                 Refresh
               </button>
             </div>
             <p>
-              Detailed answers from event RSVPs. Results remain here after an
-              event ends or is archived.
+              RSVP answers and feedback, grouped by event. Results remain here
+              after an event ends or is archived.
             </p>
             <label
-              >Survey event<select id="survey-event">
+              >Event<select id="survey-event">
                 <option value="">All events, including past events</option>
               </select></label
             >

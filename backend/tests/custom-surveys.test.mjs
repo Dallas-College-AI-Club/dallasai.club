@@ -500,6 +500,95 @@ async function publicSurvey(results, questions) {
     );
   return { id, link: privateSurveyToken(id) };
 }
+test('catalog shows the actual publication timestamp and end date', async () => {
+  const { id } = await publicSurvey('admins', [textQuestion('Feedback')]);
+  const {
+    rows: [saved],
+  } = await f.db.query(
+    'SELECT published_at,expires_at FROM club_forms.custom_surveys WHERE id=$1',
+    [id],
+  );
+  const { surveys } = await (
+    await request('catalog', undefined, { cookie: 'test-officer=yes' })
+  ).json();
+  const survey = surveys.find((item) => item.id === id);
+  assert.equal(survey.published_at, saved.published_at.toISOString());
+  assert.equal(survey.expires_at, saved.expires_at.toISOString());
+});
+test('officer results and CSV share search and active, archived, all scope across pages', async () => {
+  const { id } = await publicSurvey('admins', [textQuestion('Feedback')]);
+  for (let index = 0; index < 14; index++) {
+    const name = index === 13 ? 'Other' : 'Matching ' + index;
+    const advisorId = 'scope' + index;
+    await f.db.query(
+      'INSERT INTO club_forms.custom_survey_members(survey_id,advisor_id,display_name,email,active) VALUES($1,$2,$3,$4,$5)',
+      [id, advisorId, name, advisorId + '@example.com', index < 12],
+    );
+    await f.db.query(
+      'INSERT INTO club_forms.custom_survey_responses(survey_id,advisor_id,revision,responses) VALUES($1,$2,1,$3)',
+      [
+        id,
+        advisorId,
+        JSON.stringify([{ id: 'q', title: 'Feedback', text: name }]),
+      ],
+    );
+  }
+  for (const [view, expected] of [
+    ['active', 12],
+    ['archived', 1],
+    ['all', 13],
+  ]) {
+    const params = { id, view, search: '  MATCHING  ' };
+    const options = { cookie: 'test-officer=yes', params };
+    let page = await (await request('results', undefined, options)).json();
+    let rows = [...page.results];
+    while (page.nextOffset !== null) {
+      page = await (
+        await request('results', undefined, {
+          ...options,
+          params: { ...params, offset: String(page.nextOffset) },
+        })
+      ).json();
+      rows.push(...page.results);
+    }
+    assert.equal(rows.length, expected, view);
+    assert.ok(rows.every((row) => row.display_name.startsWith('Matching')));
+    if (view !== 'all')
+      assert.ok(rows.every((row) => row.active === (view === 'active')));
+    const exported = await fetch(
+      origin +
+        '/api/custom-surveys?' +
+        new URLSearchParams({ action: 'export', ...params }),
+      {
+        headers: {
+          Cookie: 'test-officer=yes',
+          'Sec-Fetch-Site': 'same-origin',
+        },
+      },
+    );
+    assert.equal(exported.status, 200);
+    const csv = await exported.text();
+    assert.equal(csv.trim().split('\r\n').length - 1, expected, view + ' CSV');
+    assert.ok(!csv.includes('Other'));
+  }
+  const byEmail = await (
+    await request('results', undefined, {
+      cookie: 'test-officer=yes',
+      params: { id, view: 'all', search: 'SCOPE13@EXAMPLE.COM' },
+    })
+  ).json();
+  assert.equal(byEmail.results[0].display_name, 'Other');
+  assert.equal(byEmail.results.length, 1);
+  assert.equal(
+    (
+      await request('results', undefined, {
+        cookie: 'test-officer=yes',
+        params: { id, view: 'invalid' },
+      })
+    ).status,
+    400,
+  );
+});
 async function respondent(link, name) {
   const device = await request(
     'verify-device',

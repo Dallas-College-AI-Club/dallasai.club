@@ -91,26 +91,33 @@ after(async () => {
   await db.close();
 });
 
-test('Home includes archived entries and deletion receipts without restoring deleted data', async () => {
+test('Home preserves shared status counts and does not report permanent deletion totals', async () => {
   await insert({ status: 'closed' });
   await insert({ status: 'new' });
+  await insert({ status: 'reviewed' });
   await db.query(
     "INSERT INTO club_forms.audit(actor,action) VALUES($1,'submission-permanently-deleted'),($1,'contact-purged:entries=3:notes=2:files=0'),($1,'contact-purged:entries=0:notes=1:files=0')",
     [officer],
   );
   const home = await get('?home=1');
-  assert.equal(home.counts.find((row) => row.kind === 'question').total, 2);
-  assert.equal(home.counts.find((row) => row.kind === 'question').closed, 1);
-  assert.equal(home.deletedSubmissions, 4);
+  const question = home.counts.find((row) => row.kind === 'question');
+  assert.equal(question.total, 3);
+  assert.equal(question.new, 1);
+  assert.equal(question.reviewed, 1);
+  assert.equal(question.closed, 1);
+  assert.equal(home.deletedSubmissions, undefined);
 });
 
-test('Home groups new RSVPs by event with true counts, cancelled ones left out', async () => {
+test('Home groups active RSVPs by event, archived and cancelled ones left out', async () => {
   await rsvp('next');
   await rsvp('next');
   await rsvp('next', { status: 'reviewed' });
+  await rsvp('next', { status: 'closed' });
   await rsvp('next', { state: 'cancelled' });
   await rsvp('past');
+  await rsvp('past', { status: 'closed' });
   await rsvp('later', { status: 'reviewed' });
+  await rsvp('archived-only', { status: 'closed' });
   const home = await get('?home=1');
   assert.deepEqual(
     home.rsvpGroups.map(({ id, title, total, new: fresh, past }) => ({
@@ -141,6 +148,8 @@ test('Home: newest New submissions, next dated event, potential events, drafts a
   });
   await insert({ status: 'reviewed', data: { subject: 'Old' } });
   await rsvp('next');
+  await rsvp('next', { status: 'reviewed' });
+  await rsvp('next', { status: 'closed' });
   await rsvp('next', { state: 'cancelled' });
   for (const [id, published, revision, publishedRevision] of [
     ['draft-only', null, 1, 0],
@@ -192,7 +201,7 @@ test('Home: newest New submissions, next dated event, potential events, drafts a
     title: 'Next event',
     date: '2099-01-02T17:00:00-06:00',
     category: 'Workshop',
-    rsvps: 1,
+    rsvps: 2,
   });
   assert.deepEqual(home.potential, [{ id: 'maybe', title: 'Maybe someday' }]);
   assert.deepEqual(

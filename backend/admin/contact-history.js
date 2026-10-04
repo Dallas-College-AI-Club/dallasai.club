@@ -7,7 +7,7 @@ import {
   plural,
 } from './format.js';
 import { contactProfile } from './contact-profile.js';
-import { currentOfficer, drafts, isPaused } from './session.js';
+import { currentOfficer, drafts } from './session.js';
 // Unsaved notes are kept as contactNote:<email> and profile edits as
 // profile:<email> in the drafts store. A profile draft remembers the
 // contact revision it started from, so a later change can be pointed out.
@@ -17,19 +17,19 @@ const noteKey = (address) => 'contactNote:' + address,
 function forgetProfiles(addresses) {
   for (const address of addresses) drafts.delete(profileKey(address));
 }
-export function contactHistory(api, onChange = () => {}) {
-  const dialog = node('dialog', undefined, 'contact-dialog');
-  dialog.setAttribute('aria-labelledby', 'contact-heading');
-  const close = node('button', 'Close', 'secondary'),
-    heading = node('h2', 'Contacts'),
+// The Contacts tab: renders into root (the pane), which stays in the page
+// while other tabs show, so a search or an open profile is kept.
+export function contactHistory(api, onChange = () => {}, root) {
+  const heading = node('h1', 'Contacts'),
     intro = node(
       'p',
       'Link a person’s school email addresses to see their website submissions and officer notes together. Notes record follow-up; this page does not send or read emails.',
       'hint',
     );
-  heading.id = 'contact-heading';
-  const toolbar = node('div', undefined, 'heading contact-dialog-heading');
-  toolbar.append(heading, close);
+  heading.id = 'contacts-heading';
+  heading.tabIndex = -1;
+  const toolbar = node('div', undefined, 'heading view-header');
+  toolbar.append(heading);
   const searchForm = node('form', undefined, 'survey-tools'),
     label = node('label', 'Find a contact by name or email'),
     search = node('input'),
@@ -57,22 +57,14 @@ export function contactHistory(api, onChange = () => {}) {
   retry.hidden = true;
   retry.onclick = () => load();
   paging.append(prev, next);
-  dialog.append(toolbar, intro, searchForm, status, retry, content, paging);
-  document.body.append(dialog);
+  root.append(toolbar, intro, searchForm, status, retry, content, paging);
   let generation = 0,
     email = '',
-    offset = 0;
-  close.onclick = () => dialog.close();
-  dialog.addEventListener('close', () => {
-    // Closed for re-authentication: keep everything for when it reopens.
-    if (isPaused()) return;
-    generation++;
-    content.replaceChildren();
-    search.value = '';
-    status.textContent = '';
-  });
+    offset = 0,
+    loaded = false;
   async function load() {
     const version = ++generation;
+    loaded = true;
     retry.hidden = true;
     status.textContent = 'Loading contacts…';
     content.replaceChildren();
@@ -89,7 +81,7 @@ export function contactHistory(api, onChange = () => {}) {
             },
       );
       const data = await api('/api/surveys?' + params);
-      if (version !== generation || !dialog.open) return;
+      if (version !== generation) return;
       if (!email) {
         heading.textContent = 'Contacts';
         for (const c of data.contacts) {
@@ -249,7 +241,6 @@ export function contactHistory(api, onChange = () => {}) {
           if (item.entry_id) {
             const link = node('a', 'Open submission');
             link.href = '#/inbox/' + encodeURIComponent(item.entry_id);
-            link.onclick = () => dialog.close();
             card.append(link);
           }
           content.append(card);
@@ -288,7 +279,7 @@ export function contactHistory(api, onChange = () => {}) {
       merge = node('button', 'Merge with another contact', 'secondary'),
       edit = node('button', 'Edit contact', 'secondary'),
       details = node('div', undefined, 'contact-confirmation');
-    const fresh = () => version === generation && dialog.open;
+    const fresh = () => version === generation;
     async function save(body, message) {
       if (!fresh()) return;
       const unlock = lock(panel, 'button, input');
@@ -335,11 +326,10 @@ export function contactHistory(api, onChange = () => {}) {
         else email = result.email;
         offset = 0;
         await load();
-        if (dialog.open)
-          status.textContent =
-            result.purged && !result.filesDeleted
-              ? 'Test contact and saved records permanently deleted. Attachment cleanup is pending and will retry automatically.'
-              : message;
+        status.textContent =
+          result.purged && !result.filesDeleted
+            ? 'Test contact and saved records permanently deleted. Attachment cleanup is pending and will retry automatically.'
+            : message;
         onChange(result);
       } catch (error) {
         if (fresh()) {
@@ -552,7 +542,6 @@ export function contactHistory(api, onChange = () => {}) {
                 'Contact changes for ' + contact.email,
               );
           },
-          () => dialog.close(),
         ),
       );
       if (draft && draft.revision !== contact.revision)
@@ -592,19 +581,24 @@ export function contactHistory(api, onChange = () => {}) {
       email = address;
       view.value = 'active';
       offset = 0;
-      if (!dialog.open) dialog.showModal();
       load();
+    },
+    // Entering the tab shows the list the first time, then keeps its place.
+    show() {
+      if (!loaded) this.open();
     },
     // Drops the shown history after a long pause; drafts stay in the store.
     reset() {
       generation++;
+      loaded = false;
       content.replaceChildren();
       status.textContent = '';
       retry.hidden = false;
     },
     clear() {
       generation++;
-      if (dialog.open) dialog.close();
+      loaded = false;
+      heading.textContent = 'Contacts';
       content.replaceChildren();
       search.value = '';
       status.textContent = '';

@@ -11,6 +11,7 @@ import {
   fullDateTime,
   isoDay,
   kindLabel,
+  newSummary,
   plural,
   statusLabel,
 } from '../admin/format.js';
@@ -124,4 +125,30 @@ test('every server action code has a label', async () => {
   assert.deepEqual(missing, []);
   assert.equal(actionLabel('review:closed'), 'Archived');
   assert.equal(actionLabel('something-new'), 'Updated');
+});
+
+test('newSummary() lowercases kinds mid-sentence but keeps The AI Review', () => {
+  assert.equal(
+    newSummary(
+      [
+        [2, 'rsvp'],
+        [1, 'question'],
+        [0, 'join'],
+      ],
+      'nothing new',
+    ),
+    '3 new: 2 RSVPs, 1 question',
+  );
+  assert.equal(
+    newSummary(
+      [
+        [1, 'subscribe'],
+        [2, 'subscribe'],
+        [2, 'workshop'],
+      ],
+      '',
+    ),
+    '5 new: 1 The AI Review subscription, 2 The AI Review, 2 workshops',
+  );
+  assert.equal(newSummary([[0, 'join']], 'nothing new'), 'nothing new');
 });

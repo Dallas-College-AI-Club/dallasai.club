@@ -521,7 +521,7 @@ try {
     }
     await route.fulfill({ contentType: 'application/json', body });
   });
-  await admin.goto(origin + '/admin/');
+  await admin.goto(origin + '/admin/#/inbox');
   await admin
     .getByLabel('Email address', { exact: true })
     .fill('officer@example.com');
@@ -557,6 +557,9 @@ try {
     .getByText('stored in the club’s Neon database', { exact: false })
     .waitFor();
   await admin.locator('#inbox-tab').click();
+  // The count cards are folded; the summary still says what is new.
+  await expect(admin.locator('#counts-summary')).toHaveText(/^Counts · /);
+  await admin.locator('#counts-summary').click();
   await admin
     .locator('#counts')
     .getByText('The AI Review', { exact: true })
@@ -566,7 +569,12 @@ try {
   assert.equal(await admin.locator('input[type="password"]').count(), 0);
   assert.equal(await admin.locator('#filters [name="search"]').count(), 0);
   await admin.locator('#filters [name="kind"]').selectOption('rsvp');
-  await admin.getByLabel('Event', { exact: true }).selectOption('future');
+  // A short event list shows chips; the Event dropdown is the phone and
+  // long-list fallback.
+  await admin
+    .locator('#event-chips')
+    .getByRole('button', { name: 'Upcoming workshop', exact: true })
+    .click();
   await admin.waitForFunction(() =>
     document.querySelector('#export').href.includes('eventId=future'),
   );
@@ -767,10 +775,27 @@ try {
     fullPage: true,
   });
   await admin.emulateMedia({ colorScheme: 'light' });
+  // The header keeps the black-square logo in light mode too; the favicon
+  // still follows the color scheme.
   await admin.waitForFunction(() =>
     document
       .querySelector('.office-logo')
-      .currentSrc.endsWith('/club-office-logo.png'),
+      .currentSrc.endsWith('/club-office-logo-dark.png'),
+  );
+  assert.deepEqual(
+    await admin.evaluate(() =>
+      [...document.querySelectorAll('link[rel="icon"]')].map((link) => [
+        link.media,
+        link.getAttribute('href'),
+      ]),
+    ),
+    [
+      ['(prefers-color-scheme: light)', '/admin/assets/club-office-logo.png'],
+      [
+        '(prefers-color-scheme: dark)',
+        '/admin/assets/club-office-logo-dark.png',
+      ],
+    ],
   );
   await admin.screenshot({
     path: path.join(screens, 'admin-desktop.png'),

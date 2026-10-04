@@ -626,11 +626,6 @@ dialog::backdrop {
   border-radius: 999px;
   box-shadow: var(--shadow);
 }
-@media (max-width: 767px) {
-  .arrivals-slot {
-    top: 56px;
-  }
-}
 #event-status {
   color: var(--accent);
   margin: 12px 0;
@@ -2127,5 +2122,279 @@ html.survey-report-open {
   from {
     opacity: 0;
     translate: 0 8px;
+  }
+}
+
+/* 8. Release B: Home, folded counts, event chips, the Contacts tab and
+   officer Help topics, plus tab and menu fixes. Plain 1px lines; the tint
+   and accent line only on what needs attention. */
+/* Tabs: the focus ring sits inside the tab, so the scrolling bar never
+   clips it; under 600 px the tabs wrap so every one stays in view. */
+#app-nav a:focus-visible {
+  outline-offset: -2px;
+}
+@media (max-width: 599px) {
+  #app-nav {
+    flex-wrap: wrap;
+    gap: 0;
+    overflow-x: visible;
+  }
+  #app-nav a {
+    min-height: 44px;
+    padding: 8px 10px;
+  }
+}
+/* The account menu scrolls with its button on wide screens. */
+@media (min-width: 768px) {
+  .menu-panel {
+    position: absolute;
+  }
+}
+.button-link {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 36px;
+  padding: 7px 14px;
+  border: 1px solid var(--control-border);
+  border-radius: var(--radius-s);
+  background: var(--surface);
+  color: var(--text);
+  font-weight: 600;
+  text-decoration: none;
+}
+.button-link:hover {
+  background: var(--subtle);
+}
+.button-link.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--button-text);
+}
+@media (pointer: coarse) {
+  .button-link {
+    min-height: 44px;
+  }
+}
+/* Home: bento tiles, four columns wide, two on tablets, one on phones. */
+#home-updated {
+  margin: 0 0 0 auto;
+}
+.bento {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+.tile {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  min-width: 0;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+  overflow-wrap: anywhere;
+}
+.tile.has-new {
+  background: var(--selected);
+  border-color: var(--accent);
+}
+.tile-wide {
+  grid-column: span 2;
+}
+.bento > .tile:first-child {
+  grid-row: span 2;
+}
+.tile-label {
+  margin: 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.tile h3,
+.tile p {
+  margin: 0;
+}
+.tile-number strong {
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: -0.04em;
+}
+.tile.has-new .tile-number strong {
+  color: var(--accent);
+}
+.tile-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tile-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.tile-row > div {
+  display: grid;
+  min-width: 0;
+}
+.tile-row span,
+.tile-row time {
+  color: var(--muted);
+  font-size: 12px;
+}
+.activity-list .tile-row {
+  padding: 10px 0;
+  border-width: 1px 0 0;
+  border-radius: 0;
+}
+.activity-list .tile-row span {
+  color: var(--text);
+  font-size: 14px;
+}
+.tile .event-choice {
+  margin: 0;
+}
+.tile-totals {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.tile-totals .total {
+  display: grid;
+  color: var(--text);
+  text-decoration: none;
+}
+.tile-totals .total strong {
+  font-size: 20px;
+  font-weight: 600;
+}
+.tile-totals .total span {
+  color: var(--muted);
+  font-size: 12px;
+}
+.tile-totals .total.has-new strong {
+  color: var(--accent);
+}
+@media (max-width: 1023px) {
+  .bento {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .bento > .tile:first-child {
+    grid-row: auto;
+  }
+}
+@media (max-width: 599px) {
+  .bento {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .tile-wide {
+    grid-column: auto;
+  }
+}
+/* Inbox: the count cards fold away; the summary still says what is new. */
+.counts-fold {
+  margin: 16px 0;
+}
+.counts-fold > summary {
+  min-height: 36px;
+  padding: 6px 0;
+}
+.counts-fold[open] > summary {
+  margin-bottom: 0;
+}
+.counts-fold .counts {
+  margin-top: 8px;
+}
+.group-tools {
+  margin: 0 0 12px;
+}
+.event-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: -8px 0 16px;
+}
+.chip-button {
+  border-radius: 999px;
+}
+.chip-button[aria-pressed='true'] {
+  background: var(--selected);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+@media (min-width: 768px) {
+  .filters.has-chips #event-filter-label {
+    display: none;
+  }
+}
+@media (max-width: 767px) {
+  .event-chips {
+    display: none;
+  }
+}
+/* Contacts: the former dialog, now a tab. */
+#contacts-pane {
+  max-width: 860px;
+}
+#contacts-heading {
+  overflow-wrap: anywhere;
+}
+/* Officer Help topics. */
+.help-entry {
+  margin-top: 16px;
+  padding: 16px 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+.help-entry h3 {
+  margin: 0 0 8px;
+  overflow-wrap: anywhere;
+}
+.help-entry-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+#help-archived {
+  margin-top: 16px;
+}
+.help-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 16px;
+  padding: 20px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-m);
+}
+.help-form h3 {
+  margin: 0;
+}
+.help-form label {
+  display: grid;
+  gap: 6px;
+  font-weight: 600;
+}
+#help-add {
+  margin-top: 16px;
+}
+@media (forced-colors: active) {
+  .count.has-new,
+  .tile.has-new,
+  .chip-button[aria-pressed='true'] {
+    outline: 2px solid Highlight;
+    outline-offset: -2px;
   }
 }

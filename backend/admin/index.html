@@ -26,18 +26,14 @@
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
     <header id="app-bar">
-      <a class="brand" href="#/inbox"
-        ><picture
-          ><source
-            srcset="/admin/assets/club-office-logo-dark.png"
-            media="(prefers-color-scheme: dark)" />
-          <img
-            class="office-logo"
-            src="/admin/assets/club-office-logo.png"
-            width="40"
-            height="40"
-            alt=""
-        /></picture>
+      <a class="brand" href="#/home"
+        ><img
+          class="office-logo"
+          src="/admin/assets/club-office-logo-dark.png"
+          width="40"
+          height="40"
+          alt=""
+        />
         <span>Dallas College AI Club</span
         ><span class="crumb">/ Club office</span></a
       >
@@ -78,12 +74,14 @@
       <button id="signout" type="button">Sign out</button>
     </div>
     <nav id="app-nav" aria-label="Club Office">
+      <a id="home-tab" href="#/home"><span>Home</span></a>
       <a id="inbox-tab" href="#/inbox"
         ><span>Inbox</span
         ><span id="nav-new-count" class="nav-badge" hidden></span
       ></a>
       <a id="events-tab" href="#/events"><span>Events</span></a>
       <a id="surveys-tab" href="#/surveys"><span>Surveys</span></a>
+      <a id="contacts-tab" href="#/contacts"><span>Contacts</span></a>
       <a id="help-tab" href="#/help"><span>Help</span></a>
     </nav>
     <main id="main" tabindex="-1">
@@ -155,7 +153,14 @@
         <button type="button" id="not-officer-signout">Sign out</button>
       </section>
       <div id="office" hidden>
-        <section id="inbox-pane" aria-labelledby="inbox-heading">
+        <section id="home-pane" aria-labelledby="home-heading" hidden>
+          <div class="heading view-header">
+            <h1 id="home-heading" tabindex="-1">This week in the club</h1>
+            <p id="home-updated" class="hint"></p>
+          </div>
+          <div id="home-tiles" class="bento"></div>
+        </section>
+        <section id="inbox-pane" aria-labelledby="inbox-heading" hidden>
           <div class="heading view-header">
             <h1 id="inbox-heading" tabindex="-1">Inbox</h1>
             <p id="inbox-updated" class="hint"></p>
@@ -163,7 +168,10 @@
               Refresh
             </button>
           </div>
-          <div id="counts" class="counts"></div>
+          <details id="counts-fold" class="counts-fold">
+            <summary id="counts-summary">Counts</summary>
+            <div id="counts" class="counts"></div>
+          </details>
           <nav class="event-views inbox-views" aria-label="Submission status">
             <button
               type="button"
@@ -199,6 +207,7 @@
                 <option value="subscribe">The AI Review</option>
                 <option value="rsvp">RSVPs for upcoming events</option>
                 <option value="rsvp-past">RSVPs for past events</option>
+                <option value="rsvp-all">RSVPs for all events</option>
                 <option value="workshop">Workshops</option>
                 <option value="contribution">Articles</option>
               </select></label
@@ -208,6 +217,13 @@
               </select></label
             >
           </form>
+          <div
+            id="event-chips"
+            class="event-chips"
+            role="group"
+            aria-label="Choose an event"
+            hidden
+          ></div>
           <div class="toolbar">
             <a id="export" href="/api/admin?export=csv">Export filtered CSV</a>
             <a class="hint" href="#/help?topic=exports">About exports</a>
@@ -516,12 +532,56 @@
           </section>
         </section>
         <section
+          id="contacts-pane"
+          aria-labelledby="contacts-heading"
+          hidden
+        ></section>
+        <section
           id="help-pane"
           class="help"
           aria-labelledby="help-heading"
           hidden
         >
           <h1 id="help-heading" tabindex="-1">Help</h1>
+          <section id="help-officer" aria-labelledby="help-officer-h">
+            <h2 id="help-officer-h">Officer topics</h2>
+            <p class="hint">
+              Notes officers write for each other. Only signed-in officers see
+              them.
+            </p>
+            <p id="help-officer-status" role="status"></p>
+            <div id="help-officer-list"></div>
+            <details id="help-archived" hidden>
+              <summary>Archived topics</summary>
+              <div id="help-archived-list"></div>
+            </details>
+            <button id="help-add" type="button" class="secondary" hidden>
+              Add a topic
+            </button>
+            <form id="help-form" class="help-form" hidden>
+              <h3 id="help-form-heading" tabindex="-1">New topic</h3>
+              <label
+                >Title<input name="help-title" maxlength="120" required
+              /></label>
+              <label
+                >Text<textarea
+                  name="help-body"
+                  rows="8"
+                  maxlength="8000"
+                  required
+                ></textarea>
+              </label>
+              <p class="hint">
+                Plain text. Leave a blank line between paragraphs.
+              </p>
+              <div class="dialog-actions">
+                <button type="button" class="secondary" data-cancel>
+                  Cancel
+                </button>
+                <button type="submit" class="btn-primary">Save topic</button>
+              </div>
+            </form>
+          </section>
           <section id="help-submissions" aria-labelledby="help-submissions-h">
             <h2 id="help-submissions-h">How people reach the inbox</h2>
             <ul class="submission-sources">

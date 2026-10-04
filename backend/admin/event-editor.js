@@ -603,7 +603,12 @@ export function mountEventEditor(api) {
       : [],
   );
   return {
-    show: load,
+    // Refreshes the list; with an id (from Home), opens that event too.
+    async show(id = '') {
+      await load();
+      const row = id && rows.find((r) => r.id === id);
+      if (row && canLeave()) edit(row);
+    },
     canLeave,
     // Ten minutes paused: drop the event list, keep the editor.
     reset() {

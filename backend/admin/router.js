@@ -9,7 +9,7 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
 const queries = {
   inbox: {
     status: ['reviewed', 'archived', 'all'],
-    type: [...KINDS, 'rsvp-past'],
+    type: [...KINDS, 'rsvp-past', 'rsvp-all'],
     event: slug,
   },
   help: {
@@ -51,7 +51,7 @@ const notFound = (section, message) => ({
 export function parse(hash) {
   const [path, search = ''] = hash.replace(/^#?\/?/, '').split('?'),
     parts = path.split('/').filter(Boolean),
-    [section = 'inbox'] = parts,
+    [section = 'home'] = parts,
     route = (name, params = {}) => ({
       name,
       section,
@@ -60,6 +60,7 @@ export function parse(hash) {
     });
   const [, a, b, c, d] = parts,
     n = parts.length;
+  if (section === 'home' && n === 1) return route('home');
   if (section === 'inbox' && n === 1) return route('inbox');
   if (section === 'inbox' && n === 2)
     return uuid.test(a)
@@ -69,6 +70,7 @@ export function parse(hash) {
           'This submission no longer exists or the link is incomplete.',
         );
   if (section === 'events' && n === 1) return route('events');
+  if (section === 'contacts' && n === 1) return route('contacts');
   if (section === 'help' && n === 1) return route('help');
   if (section === 'surveys' && n === 1) return route('surveys');
   if (section === 'surveys' && a === 'events') {
@@ -107,7 +109,7 @@ export function build(path, query = {}) {
 // hash is already a route (or unknown, which shows 'not found').
 export function legacy(hash) {
   const value = hash.replace(/^#/, '');
-  if (!value || value === '/') return '#/inbox';
+  if (!value || value === '/') return '#/home';
   if (value.startsWith('/')) return null;
   if (value === 'events') return '#/events';
   if (value === 'surveys') return '#/surveys';

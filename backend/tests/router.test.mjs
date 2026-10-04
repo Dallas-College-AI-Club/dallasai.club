@@ -37,6 +37,23 @@ test('parse() reads routes, ids and allowed query values', () => {
   assert.deepEqual(parse('#/surveys/custom/' + id).params, { id });
   assert.deepEqual(parse('#/help?topic=exports').query, { topic: 'exports' });
 });
+test('Home is the landing page; Contacts and all-event RSVPs have routes', () => {
+  for (const hash of ['', '#', '#/', '#/home'])
+    assert.equal(parse(legacy(hash) || hash).name, 'home', hash);
+  assert.equal(parse('#/contacts').name, 'contacts');
+  assert.equal(parse('#/contacts/ava@example.edu').name, 'not-found');
+  // Show all for one event: every RSVP for it, upcoming or past.
+  assert.deepEqual(parse('#/inbox?type=rsvp-all&event=game-night').query, {
+    type: 'rsvp-all',
+    event: 'game-night',
+  });
+  assert.equal(
+    build('inbox', { type: 'rsvp-all', event: 'game-night' }),
+    '#/inbox?type=rsvp-all&event=game-night',
+  );
+  // Emails never reach the address, even on the Contacts tab.
+  assert.deepEqual(parse('#/contacts?email=ava@example.edu').query, {});
+});
 test('bad ids and unknown pages are not found, before any request', () => {
   for (const [hash, from] of [
     ['#/inbox/abc', 'inbox'],
@@ -73,9 +90,9 @@ test('build() leaves out defaults', () => {
 });
 test('old links are rewritten to their routes', () => {
   for (const [old, rewritten] of [
-    ['', '#/inbox'],
-    ['#', '#/inbox'],
-    ['#/', '#/inbox'],
+    ['', '#/home'],
+    ['#', '#/home'],
+    ['#/', '#/home'],
     ['#events', '#/events'],
     ['#surveys', '#/surveys'],
     ['#entry=' + id, '#/inbox/' + id + '?status=all'],

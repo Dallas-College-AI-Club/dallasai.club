@@ -33,16 +33,29 @@ code. Publishing feedback does not register anyone for the event. After publishi
 use **QR code → Download QR** to save a scannable SVG. The QR is generated locally and
 contains the same private answering link; respondents still verify their email.
 
-Builder surveys support written answers, single choice, multiple choice, 1–5 rating,
-calendar date and number. A multiple-choice question can mark one answer exclusive;
-choosing it clears and blocks the other answers. RSVP questions support written,
-single and multiple choice, including an explicit exclusive answer and legacy
+Both builders support short and long written answers, single choice, multiple choice,
+calendar dates, exact times, numbers and email addresses. Custom surveys also support
+a 1–5 rating. A multiple-choice question can mark one answer exclusive;
+choosing it clears and blocks the other answers. RSVP questions also recognize legacy
 “Any of these” / “None of these” labels. Uncheck the exclusive answer to choose others.
+
+For availability, create one choose-several question per date, set **Date for these
+choices (optional)**, and enter the periods you need, such as Morning, Afternoon and
+Evening. Period labels are configurable. This preserves which periods belong to
+each date. Use **Time of day** for an exact clock time and explain the timezone in
+the question's help text.
 
 Neon stores survey definitions and structured answers as JSON with stable question
 IDs, not a changing SQL column per question. CSV export turns question titles into
-column headings. Calendar answers retain `YYYY-MM-DD` without timezone conversion;
-event timestamps and submission timestamps use the existing Central Time rules.
+column headings, including a choice question's date when supplied. Calendar answers
+retain `YYYY-MM-DD` and clock times retain 24-hour `HH:mm`, without timezone conversion.
+Numbers are JSON numbers (including zero); email answers are trimmed and lowercased.
+Period questions retain their ISO date as `choiceDate` in the definition/snapshot.
+RSVP choice values are labels; custom choice values are indexes into their frozen
+definition, with readable text also saved. Use question IDs when joining answers;
+use the saved question version when interpreting historical responses.
+
+Event timestamps and submission timestamps use the existing Central Time rules.
 RSVP answers retain a snapshot of the questions at submission. Custom survey
 questions and permissions are fixed when published.
 

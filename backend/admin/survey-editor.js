@@ -25,14 +25,21 @@ export function surveyEditor(root, addButton) {
           type = node('select');
         for (const [value, label] of [
           ['text', 'Written answer'],
+          ['short', 'Short answer'],
           ['single', 'Choose one'],
           ['multiple', 'Choose several'],
+          ['date', 'Calendar date'],
+          ['time', 'Time of day'],
+          ['number', 'Number'],
+          ['email', 'Email address'],
         ])
           type.append(new Option(label, value));
         type.value = question.type;
         type.onchange = () => {
           question.type = type.value;
           if (type.value !== 'multiple') delete question.exclusiveOption;
+          if (!['single', 'multiple'].includes(type.value))
+            delete question.choiceDate;
           render();
         };
         typeLabel.append(type);
@@ -48,7 +55,15 @@ export function surveyEditor(root, addButton) {
           box.append(wrapper);
         }
         check('Required answer', 'required');
-        if (question.type !== 'text') {
+        if (['single', 'multiple'].includes(question.type)) {
+          const date = field('Date for these choices (optional)', 'choiceDate');
+          date.type = 'date';
+          date.min = '0001-01-01';
+          date.max = '9999-12-31';
+          date.oninput = () => {
+            if (date.value) question.choiceDate = date.value;
+            else delete question.choiceDate;
+          };
           const wrapper = node(
               'label',
               'Answer options (one per line, 2–30 options)',
@@ -138,10 +153,9 @@ export function surveyEditor(root, addButton) {
     },
     value() {
       return questions.map(({ exclusiveOption, ...question }) => {
-        const options =
-          question.type === 'text'
-            ? []
-            : question.options.map((x) => x.trim()).filter(Boolean);
+        const options = ['single', 'multiple'].includes(question.type)
+          ? question.options.map((x) => x.trim()).filter(Boolean)
+          : [];
         const exclusive =
           exclusiveOption === undefined
             ? -1
@@ -149,7 +163,9 @@ export function surveyEditor(root, addButton) {
         return {
           ...question,
           options,
-          allowOther: question.type !== 'text' && question.allowOther,
+          allowOther:
+            ['single', 'multiple'].includes(question.type) &&
+            question.allowOther,
           ...(exclusive >= 0 && question.type === 'multiple'
             ? { exclusiveOption: exclusive }
             : {}),

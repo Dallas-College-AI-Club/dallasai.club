@@ -17,8 +17,8 @@ const impliedChoice = (question, values, choice) =>
   values.some(anyChoice) &&
   ordinaryChoice(choice);
 export const answerValues = (answer) =>
-  (Array.isArray(answer?.value) ? answer.value : [answer?.value || ''])
-    .filter(Boolean)
+  (Array.isArray(answer?.value) ? answer.value : [answer?.value ?? ''])
+    .filter((value) => value !== '' && value !== null && value !== undefined)
     .map((value) => (value === '__other__' ? 'Other: ' + answer.other : value));
 export async function reportRows(db, filter = {}) {
   const { where, values } = responseFilter(filter);
@@ -134,8 +134,8 @@ export function summarizeResponses(rows) {
       const answer = row.answers.find((a) => a.questionId === q.id);
       const values = Array.isArray(answer?.value)
         ? answer.value
-        : [answer?.value || ''];
-      if (!values.some(Boolean)) {
+        : [answer?.value ?? ''];
+      if (!values.some((value) => value !== '')) {
         q.skipped++;
         continue;
       }
@@ -146,7 +146,7 @@ export function summarizeResponses(rows) {
           impliedChoice(q, values, choice.value)
         )
           choice.count++;
-      if (q.type === 'text')
+      if (!['single', 'multiple'].includes(q.type))
         q.written.push({
           name: row.name,
           email: row.email,
@@ -199,6 +199,7 @@ export function responsesCSV(rows) {
     'Question version',
     ...columns.map(
       ({ question: q, option }) =>
+        (q.choiceDate ? q.choiceDate + ' · ' : '') +
         (option === null ? q.label : q.label + ' — ' + option) +
         ' [' +
         q.version.slice(0, 8) +

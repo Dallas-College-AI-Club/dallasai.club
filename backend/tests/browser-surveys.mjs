@@ -1,6 +1,7 @@
 import { testDatabase } from './helpers/db.mjs';
 import { adminHandler } from '../api/admin.mjs';
 import { surveysHandler } from '../api/surveys.mjs';
+import { customSurveysHandler } from '../api/custom-surveys.mjs';
 import { formsHandler } from '../api/forms.mjs';
 import { chromium } from '@playwright/test';
 import assert from 'node:assert/strict';
@@ -59,6 +60,10 @@ const formsAPI = formsHandler({
   getEvents: () => liveEvents(db, []),
   rateLimit: async () => {},
 });
+const customSurveyAPI = customSurveysHandler({
+  authorize: authorized,
+  getDatabase: () => db,
+});
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/api/events') return events(req, res);
@@ -94,6 +99,7 @@ const server = http.createServer(async (req, res) => {
   }
   if (url.pathname === '/api/admin') return adminAPI(req, res);
   if (url.pathname === '/api/surveys') return surveyAPI(req, res);
+  if (url.pathname === '/api/custom-surveys') return customSurveyAPI(req, res);
   if (url.pathname === '/api/forms') return formsAPI(req, res);
   const root = url.pathname.startsWith('/admin/')
     ? path.join(backend, 'public')
@@ -165,6 +171,11 @@ try {
     ['text', 'Friend name', false, [], false],
     ['single', 'Which day?', true, ['Friday', 'Saturday'], true],
     ['multiple', 'Which games?', true, ['Cards', 'Puzzles'], true],
+    ['short', 'Short introduction', true, [], false],
+    ['date', 'Preferred date', true, [], false],
+    ['number', 'Guests', true, [], false],
+    ['email', 'Contact address', true, [], false],
+    ['time', 'Arrival time', true, [], false],
   ]) {
     await admin.locator('#add-survey-question').click();
     let box = admin.locator('.survey-editor-question').last();
@@ -172,25 +183,28 @@ try {
     await box.getByLabel('Answer type').selectOption(type);
     box = admin.locator('.survey-editor-question').last();
     await box.getByLabel('Required answer').setChecked(required);
-    if (type !== 'text') {
+    if (['single', 'multiple'].includes(type)) {
       await box.getByLabel('Answer options').fill(options.join('\n'));
       await box.getByLabel('Allow an Other answer').setChecked(other);
     }
   }
   // Choice order supports keyboard buttons and pointer dragging without losing text.
-  const choiceBox = admin.locator('.survey-editor-question').last();
+  const choiceBox = admin.locator('.survey-editor-question').nth(2);
+  await choiceBox
+    .getByLabel('Date for these choices (optional)', { exact: true })
+    .fill('2026-10-16');
   await choiceBox
     .getByRole('button', { name: 'Move choice 2 up', exact: true })
     .click();
   assert.equal(
-    await choiceBox.getByLabel('Answer choice 1', { exact: true }).inputValue(),
+    await choiceBox.getByLabel('Choice 1', { exact: true }).inputValue(),
     'Puzzles',
   );
   await choiceBox
     .getByRole('button', { name: 'Drag choice 1 to reorder', exact: true })
-    .dragTo(choiceBox.locator('.survey-option-row').nth(1));
+    .dragTo(choiceBox.locator('.survey-choice-row').nth(1));
   assert.equal(
-    await choiceBox.getByLabel('Answer choice 1', { exact: true }).inputValue(),
+    await choiceBox.getByLabel('Choice 1', { exact: true }).inputValue(),
     'Cards',
   );
   let previewSubmits = 0;
@@ -206,6 +220,14 @@ try {
     .fill('Preview answer only');
   await preview.getByLabel('Friday', { exact: true }).check();
   await preview.getByLabel('Cards', { exact: true }).check();
+  for (const [label, value] of [
+    ['Short introduction', 'Hello'],
+    ['Preferred date', '2028-02-29'],
+    ['Guests', '0'],
+    ['Contact address', 'advisor@example.edu'],
+    ['Arrival time', '18:30'],
+  ])
+    await preview.getByLabel(label, { exact: true }).fill(value);
   await preview
     .getByRole('button', { name: 'Preview admin result', exact: true })
     .click();
@@ -213,6 +235,13 @@ try {
   assert.match(
     await preview.locator('.rsvp-answer-preview').textContent(),
     /Preview answer only/,
+  );
+  assert.equal(
+    await preview
+      .locator('.rsvp-answer-preview dt')
+      .filter({ hasText: 'Guests' })
+      .evaluate((el) => el.nextElementSibling.textContent),
+    '0',
   );
   assert.match(
     await preview.locator('.rsvp-answer-preview').textContent(),
@@ -243,8 +272,8 @@ try {
   assert.equal(
     await choiceBox
       .getByRole('button', { name: 'Move choice 1 up', exact: true })
-      .isDisabled(),
-    true,
+      .count(),
+    0,
   );
   await admin.getByRole('button', { name: 'Save draft', exact: true }).click();
   await admin
@@ -255,12 +284,17 @@ try {
     )
     .waitFor();
   const stored = (await db.query('SELECT * FROM club_forms.events')).rows[0];
-  assert.equal(stored.draft.surveyQuestions.length, 3);
+  assert.equal(stored.draft.surveyQuestions.length, 8);
+  assert.equal(stored.draft.surveyQuestions[2].choiceDate, '2026-10-16');
+  assert.match(
+    await admin.locator('#event-overview').textContent(),
+    /2026-10-16 · Which games\?/,
+  );
   assert.equal((await liveEvents(db, [])).length, 0);
   await admin.reload();
   await admin.locator('.event-choice').click();
   await admin.locator('#edit-selected-event').click();
-  assert.equal(await admin.locator('.survey-editor-question').count(), 3);
+  assert.equal(await admin.locator('.survey-editor-question').count(), 8);
   await admin
     .getByRole('button', { name: 'Publish event', exact: true })
     .click();
@@ -325,6 +359,14 @@ try {
     .fill('<img src=x onerror=alert(1)> Friend');
   await page.getByLabel('Friday', { exact: true }).check();
   await page.getByLabel('Cards', { exact: true }).check();
+  for (const [label, value] of [
+    ['Short introduction', 'Hello'],
+    ['Preferred date', '2028-02-29'],
+    ['Guests', '0'],
+    ['Contact address', 'advisor@example.edu'],
+    ['Arrival time', '18:30'],
+  ])
+    await page.getByLabel(label, { exact: true }).fill(value);
   await page
     .locator('[data-question="' + live.surveyQuestions[2].id + '"]')
     .getByLabel('Other', { exact: true })
@@ -373,7 +415,11 @@ try {
   );
   let response = (await db.query('SELECT * FROM club_forms.survey_responses'))
     .rows[0];
-  assert.equal(response.answers.length, 3);
+  assert.equal(response.answers.length, 8);
+  assert.deepEqual(
+    response.answers.slice(3).map((a) => a.value),
+    ['Hello', '2028-02-29', 0, 'advisor@example.edu', '18:30'],
+  );
   assert.deepEqual(response.answers[2].value, ['Cards', '__other__']);
   assert.equal(response.answers[2].other, 'Chess');
   const entryId = response.entry_id;
@@ -394,6 +440,13 @@ try {
   assert.doesNotMatch(await admin.locator('#entries').textContent(), /Chess/);
   await admin.getByRole('button', { name: 'View survey answers' }).click();
   await admin.locator('#survey-results .survey-response').waitFor();
+  assert.equal(
+    await admin
+      .locator('#survey-results dt')
+      .filter({ hasText: 'Guests' })
+      .evaluate((el) => el.nextElementSibling.textContent),
+    '0',
+  );
   assert.match(
     await admin.locator('#survey-results').textContent(),
     /Other: Chess/,
@@ -407,6 +460,34 @@ try {
     /Date TBD/,
   );
   assert.equal(await admin.locator('#survey-results img').count(), 0);
+  await admin
+    .getByRole('button', { name: 'Edit response', exact: true })
+    .click();
+  const editing = admin.locator('.submission-dialog[open]');
+  const guests = editing
+    .locator('.submission-question')
+    .filter({ hasText: 'Guests (required)' })
+    .getByLabel('Answer', { exact: true });
+  assert.equal(await guests.getAttribute('type'), 'number');
+  assert.equal(await guests.inputValue(), '0');
+  const arrival = editing
+    .locator('.submission-question')
+    .filter({ hasText: 'Arrival time (required)' })
+    .getByLabel('Answer', { exact: true });
+  assert.equal(await arrival.getAttribute('type'), 'time');
+  await arrival.fill('19:00');
+  await editing
+    .getByRole('button', { name: 'Save changes', exact: true })
+    .click();
+  await editing.waitFor({ state: 'detached' });
+  const edited = (
+    await db.query(
+      'SELECT answers FROM club_forms.survey_responses WHERE entry_id=$1',
+      [entryId],
+    )
+  ).rows[0];
+  assert.equal(edited.answers[5].value, 0);
+  assert.equal(edited.answers[7].value, '19:00');
   await admin.reload();
   await admin.locator('#survey-results .survey-response').waitFor();
   await admin.screenshot({
@@ -430,9 +511,8 @@ try {
     await admin
       .locator('#survey-results .survey-response')
       .getAttribute('open'),
-    null,
+    '',
   );
-  await admin.locator('#survey-results .survey-response > summary').click();
   // Starring patches the card in place: scroll, open card and focus stay.
   const starButton = admin.getByRole('button', { name: '☆ Star', exact: true });
   await starButton.evaluate((el) => el.scrollIntoView({ block: 'center' }));
@@ -453,7 +533,6 @@ try {
   );
   await admin.locator('#survey-starred').check();
   await admin.locator('#survey-results .survey-response').waitFor();
-  await admin.locator('#survey-results .survey-response > summary').click();
   await admin.getByRole('button', { name: 'Archive', exact: true }).click();
   await admin
     .getByText('Response archived. Find it under Archived to restore it.', {
@@ -465,7 +544,7 @@ try {
     0,
   );
   await admin.locator('#survey-view').selectOption('archived');
-  await admin.locator('#survey-results .survey-response > summary').click();
+  await admin.locator('#survey-results .survey-response').waitFor();
   await admin.getByRole('button', { name: 'Restore', exact: true }).click();
   await admin
     .getByText('Response restored to Active.', { exact: true })
@@ -590,7 +669,6 @@ try {
   assert.equal(await admin.locator('.survey-report').textContent(), '');
   await admin.setViewportSize({ width: 320, height: 820 });
 
-  await admin.locator('#survey-results .survey-response > summary').click();
   await admin
     .getByRole('button', { name: 'Contact history', exact: true })
     .click();
@@ -814,10 +892,11 @@ try {
     .getByLabel('Show contacts', { exact: true })
     .selectOption('active');
   await admin.locator('#surveys-tab').click();
+  await admin.locator('#event-surveys-group').click();
   await admin.locator('#survey-search').fill('no-such-person');
   await admin
     .getByText(
-      '0 matching saved responses. Expand a person to read answers or manage their response.',
+      '0 matching RSVP responses. Feedback appears separately within each event.',
       { exact: true },
     )
     .waitFor();

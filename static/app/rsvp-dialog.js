@@ -37,14 +37,18 @@ export function rsvpDialog(root, { preview = false } = {}) {
     for (const question of event.surveyQuestions || []) {
       const answer = answers.find((a) => a.questionId === question.id);
       const values = (
-        Array.isArray(answer?.value) ? answer.value : [answer?.value || ""]
+        Array.isArray(answer?.value) ? answer.value : [answer?.value ?? ""]
       )
-        .filter(Boolean)
+        .filter((value) => value !== "")
         .map((value) =>
           value === "__other__" ? "Other: " + answer.other : value,
         );
       list.append(
-        el("dt", question.label),
+        el(
+          "dt",
+          (question.choiceDate ? question.choiceDate + " · " : "") +
+            question.label,
+        ),
         el("dd", values.length ? values.join("\n") : "No answer"),
       );
     }
@@ -65,14 +69,19 @@ export function rsvpDialog(root, { preview = false } = {}) {
     const fields = questions
       .map((question, index) => {
         const name = "answer-" + question.id;
-        const description = question.description
-          ? '<p id="' + name + '-help">' + h(question.description) + "</p>"
+        const help = question.description;
+        const description = help
+          ? '<p id="' + name + '-help">' + h(help) + "</p>"
           : "";
-        const described = question.description
-          ? ' aria-describedby="' + name + '-help"'
-          : "";
+        const described = help ? ' aria-describedby="' + name + '-help"' : "";
         const label =
-          h(index + 1 + ". " + question.label) +
+          h(
+            index +
+              1 +
+              ". " +
+              (question.choiceDate ? question.choiceDate + " · " : "") +
+              question.label,
+          ) +
           (question.required
             ? " <span>(required)</span>"
             : " <span>(optional)</span>");
@@ -90,6 +99,32 @@ export function rsvpDialog(root, { preview = false } = {}) {
             described +
             (question.required ? " required" : "") +
             "></textarea></fieldset>"
+          );
+        if (
+          ["short", "date", "time", "number", "email"].includes(question.type)
+        )
+          return (
+            '<fieldset class="survey-question"><legend>' +
+            label +
+            "</legend>" +
+            description +
+            '<input type="' +
+            (question.type === "short" ? "text" : question.type) +
+            '" aria-label="' +
+            h(question.label) +
+            '" name="' +
+            name +
+            '"' +
+            (question.type === "number" ? ' step="any"' : "") +
+            (question.type === "date"
+              ? ' min="0001-01-01" max="9999-12-31"'
+              : "") +
+            ' maxlength="' +
+            (question.type === "email" ? 254 : 300) +
+            '"' +
+            described +
+            (question.required ? " required" : "") +
+            "></fieldset>"
           );
         const options = [
           ...question.options,
@@ -174,7 +209,9 @@ export function rsvpDialog(root, { preview = false } = {}) {
         .querySelector('[name="answer-' + question.id + '"]')
         .closest("fieldset").dataset.draftSchema = JSON.stringify(question);
     function validateChoices(event) {
-      for (const question of questions.filter((q) => q.type !== "text")) {
+      for (const question of questions.filter((q) =>
+        ["single", "multiple"].includes(q.type),
+      )) {
         const inputs = [
           ...form.querySelectorAll('[name="answer-' + question.id + '"]'),
         ];
@@ -224,7 +261,10 @@ export function rsvpDialog(root, { preview = false } = {}) {
         value:
           question.type === "multiple"
             ? data.getAll("answer-" + question.id)
-            : data.get("answer-" + question.id) || "",
+            : question.type === "number" &&
+                data.get("answer-" + question.id) !== ""
+              ? Number(data.get("answer-" + question.id))
+              : data.get("answer-" + question.id) || "",
         other: data.get("answer-" + question.id + "-other") || "",
       })),
     });

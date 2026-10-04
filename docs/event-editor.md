@@ -81,6 +81,34 @@ the editor deployment. They preserve original events, responses, images, and his
 Archived events remain private, and database publication status overrides the
 original static registry even during a public API outage.
 
+## RSVP forms and saved data
+
+RSVP forms support short answers, long written answers, single and multiple choices,
+dates, times, numbers and email addresses. A choice question can carry an optional
+calendar date, so availability such as Morning/Afternoon/Evening remains attached
+to the correct day. Period names are ordinary editable choices; exact times use
+**Time of day**. Specify the intended timezone in the question's help text.
+
+The data path is deliberately direct:
+
+- `backend/admin/survey-editor.js` edits the event's question definitions.
+- `static/app/rsvp-dialog.js` renders both public RSVP and private trial forms.
+- `backend/lib/surveys.mjs` validates the question version and every answer.
+- `backend/lib/submissions.mjs` saves the RSVP and its question/answer snapshot in
+  one database transaction. A retry returns the original record.
+- `backend/lib/survey-report.mjs` reads those saved snapshots for summaries and CSV.
+
+Question IDs identify answers. Publishing revised questions generates a new version;
+earlier responses keep their original definitions and meanings. Dates use `YYYY-MM-DD`,
+times use `HH:mm`, numbers remain JSON numbers, and emails are trimmed/lowercased.
+For dated choices, `questions[].choiceDate` identifies the day and the matching
+`answers[].value` array contains the selected period labels. These fields can be
+joined by question ID for analytics without parsing the displayed question text.
+
+Event surveys lists RSVP-enabled events before the first response. Reopening a survey
+page starts its dropdown filters at their defaults; a direct event link remains scoped
+to that event. Saved responses remain available after closure or archiving.
+
 ## Verification
 
 `npm ci --include=dev --ignore-scripts`, `npm test`, and `npm run build`

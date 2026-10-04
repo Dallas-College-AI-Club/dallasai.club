@@ -571,7 +571,7 @@ try {
     },
   );
   await check(
-    'Survey collections retain search and protect drafts',
+    'Survey collection navigation resets filters and protects drafts',
     async (page, dialogs, setAccept) => {
       await page.locator('#surveys-tab').click();
       await page.locator('#event-surveys-group').click();
@@ -580,9 +580,7 @@ try {
         page.locator('#survey-results .survey-response'),
       ).toHaveCount(1);
       await page.locator('#event-surveys-group').click();
-      await expect(page.locator('#survey-search')).toHaveValue(
-        'rsvp@example.edu',
-      );
+      await expect(page.locator('#survey-search')).toHaveValue('');
       await page.locator('#custom-surveys-group').click();
       await page
         .getByRole('link', { name: 'Create survey', exact: true })

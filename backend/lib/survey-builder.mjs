@@ -3,6 +3,7 @@ import { RequestError } from './errors.mjs';
 import { digest, privateSurveyToken } from './custom-surveys.mjs';
 import { editorEvents } from './events.mjs';
 import { eventIdPattern } from './event-content.mjs';
+import { email, isCalendarDate } from './validation.mjs';
 export const FORM_VERSION = 'custom-form/1';
 const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const invalid = (message) => {
@@ -83,19 +84,33 @@ export function validateDefinition(input, publishing = false) {
       'required',
       'options',
       ...(exclusive ? ['exclusiveOption'] : []),
+      ...(Object.hasOwn(Object(q), 'choiceDate') ? ['choiceDate'] : []),
     ]);
     if (!uuid.test(q.id) || ids.has(q.id))
       invalid('Each question needs a unique reference.');
     ids.add(q.id);
     if (
-      !['text', 'single', 'multiple', 'scale', 'date', 'number'].includes(
-        q.type,
-      ) ||
+      ![
+        'text',
+        'short',
+        'single',
+        'multiple',
+        'scale',
+        'date',
+        'time',
+        'number',
+        'email',
+      ].includes(q.type) ||
       typeof q.required !== 'boolean' ||
       !Array.isArray(q.options)
     )
       invalid('Choose a supported question type.');
     const choice = ['single', 'multiple'].includes(q.type);
+    if (
+      q.choiceDate !== undefined &&
+      (!choice || !isCalendarDate(q.choiceDate))
+    )
+      invalid('Choose a valid date for these choices.');
     if (
       q.options.length > 12 ||
       (!choice && q.options.length) ||
@@ -126,6 +141,7 @@ export function validateDefinition(input, publishing = false) {
       required: q.required,
       options,
       ...(exclusive ? { exclusiveOption: q.exclusiveOption } : {}),
+      ...(q.choiceDate ? { choiceDate: q.choiceDate } : {}),
     };
   });
   return {
@@ -365,7 +381,11 @@ export function validateFormResponse(body, survey, member) {
   const result = [];
   for (const q of survey.definition.questions) {
     let value = answers.get(q.id);
-    if (q.type === 'text' && typeof value === 'string') value = value.trim();
+    if (
+      ['text', 'short', 'email'].includes(q.type) &&
+      typeof value === 'string'
+    )
+      value = value.trim();
     if (
       value === undefined ||
       value === '' ||
@@ -375,17 +395,20 @@ export function validateFormResponse(body, survey, member) {
       continue;
     }
     let answerText;
-    if (q.type === 'text') {
-      value = text(value, 5000);
+    if (q.type === 'text' || q.type === 'short' || q.type === 'email') {
+      value = text(
+        value,
+        q.type === 'text' ? 5000 : q.type === 'email' ? 254 : 300,
+      );
+      if (q.type === 'email') value = email(value);
       answerText = value;
     } else if (q.type === 'date') {
-      if (
-        typeof value !== 'string' ||
-        !/^\d{4}-\d{2}-\d{2}$/.test(value) ||
-        !Number.isFinite(Date.parse(value)) ||
-        new Date(value).toISOString().slice(0, 10) !== value
-      )
+      if (!isCalendarDate(value))
         invalid('Choose a valid calendar date: ' + q.title);
+      answerText = value;
+    } else if (q.type === 'time') {
+      if (typeof value !== 'string' || !/^([01]\d|2[0-3]):[0-5]\d$/.test(value))
+        invalid('Enter a valid time: ' + q.title);
       answerText = value;
     } else if (q.type === 'number') {
       if (
@@ -422,7 +445,7 @@ export function validateFormResponse(body, survey, member) {
     }
     result.push({
       id: q.id,
-      title: q.title,
+      title: (q.choiceDate ? q.choiceDate + ' · ' : '') + q.title,
       mode: 'form',
       text: answerText,
       value,

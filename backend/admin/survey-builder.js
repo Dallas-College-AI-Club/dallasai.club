@@ -357,7 +357,7 @@ export function mountSurveyBuilder(root, api, onDone, id, eventId, copyId) {
       panel.append(
         node(
           'p',
-          'Up to 30 questions. Choose text, choices, ratings, calendar dates, or numbers.',
+          'Up to 30 questions. Choose written answers, choices, ratings, dates, numbers, or email addresses.',
           'hint',
         ),
       );
@@ -391,15 +391,19 @@ export function mountSurveyBuilder(root, api, onDone, id, eventId, copyId) {
             q.type,
             [
               ['text', 'Written answer'],
+              ['short', 'Short answer'],
               ['single', 'Choose one'],
               ['multiple', 'Choose several'],
               ['scale', 'Rating: 1 to 5'],
               ['date', 'Calendar date'],
+              ['time', 'Time of day'],
               ['number', 'Number'],
+              ['email', 'Email address'],
             ],
             (v) => {
               q.type = v;
               if (v !== 'multiple') delete q.exclusiveOption;
+              if (!['single', 'multiple'].includes(v)) delete q.choiceDate;
               q.options = ['single', 'multiple'].includes(v)
                 ? q.options.length
                   ? q.options
@@ -419,12 +423,26 @@ export function mountSurveyBuilder(root, api, onDone, id, eventId, copyId) {
         };
         required.append(check, node('span', 'Required question'));
         card.append(required);
-        if (['single', 'multiple'].includes(q.type))
+        if (['single', 'multiple'].includes(q.type)) {
+          const label = node('label', 'Date for these choices (optional)'),
+            date = node('input');
+          date.type = 'date';
+          date.min = '0001-01-01';
+          date.max = '9999-12-31';
+          date.value = q.choiceDate || '';
+          date.oninput = () => {
+            if (date.value) q.choiceDate = date.value;
+            else delete q.choiceDate;
+            saved = false;
+          };
+          label.append(date);
+          card.append(label);
           card.append(
             choiceEditor(q, () => {
               saved = false;
             }),
           );
+        }
         const actions = node('div', undefined, 'entry-actions');
         if (i)
           actions.append(
@@ -479,17 +497,24 @@ export function mountSurveyBuilder(root, api, onDone, id, eventId, copyId) {
       for (const q of definition.questions) {
         const card = node('section', undefined, 'builder-preview-question');
         card.append(
-          node('strong', q.title || 'Untitled question'),
+          node(
+            'strong',
+            (q.choiceDate ? q.choiceDate + ' · ' : '') +
+              (q.title || 'Untitled question'),
+          ),
           node('p', q.description),
           node(
             'p',
             {
               text: 'Written answer',
+              short: 'Short answer',
               single: 'Choose one',
               multiple: 'Choose several',
               scale: 'Rating from 1 to 5',
               date: 'Calendar date',
+              time: 'Time of day',
               number: 'Number',
+              email: 'Email address',
             }[q.type] + (q.required ? ' · Required' : ' · Optional'),
           ),
         );

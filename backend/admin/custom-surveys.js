@@ -794,6 +794,7 @@ export function mountCustomSurveys(root, api, options = {}) {
     show(id) {
       selected = id;
       eventFilter = '';
+      options.view = 'active';
       return load();
     },
     clear() {

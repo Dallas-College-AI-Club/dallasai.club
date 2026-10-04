@@ -78,7 +78,9 @@ export function eventOverview(row, status, startEditing) {
     for (const question of event.surveyQuestions) {
       const item = node(
         'li',
-        question.label + (question.required ? ' (required)' : ' (optional)'),
+        (question.choiceDate ? question.choiceDate + ' · ' : '') +
+          question.label +
+          (question.required ? ' (required)' : ' (optional)'),
       );
       if (question.options.length)
         item.append(node('p', question.options.join(' · '), 'hint'));

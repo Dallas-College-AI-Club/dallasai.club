@@ -762,6 +762,195 @@ try {
     },
   );
   await check(
+    'An exclusive choice is marked in the builder and chosen by itself',
+    async (page) => {
+      await page.locator('#surveys-tab').click();
+      await page.locator('#custom-surveys-group').click();
+      await page
+        .getByRole('button', { name: 'Create custom survey', exact: true })
+        .click();
+      await page
+        .getByLabel('Survey title', { exact: true })
+        .fill('Exclusive choice survey');
+      for (const step of ['Audience', 'Questions']) {
+        await page
+          .getByRole('button', { name: 'Save and continue →', exact: true })
+          .click();
+        await expect(page.locator('.builder-panel > h3')).toHaveText(step);
+      }
+      await page
+        .getByRole('button', { name: 'Add question', exact: true })
+        .click();
+      const question = page.locator('.builder-question');
+      await question
+        .getByLabel('Question', { exact: true })
+        .fill('Which times work?');
+      await question
+        .getByLabel('Answer type', { exact: true })
+        .selectOption('multiple');
+      await question.getByRole('button', { name: 'Add choice' }).click();
+      for (const [i, text] of ['Friday', 'Saturday', 'None of these'].entries())
+        await question
+          .getByLabel('Choice ' + (i + 1), { exact: true })
+          .fill(text);
+      const exclusive = (n) =>
+        question.getByRole('checkbox', {
+          name: 'Choice ' + n + ' is exclusive',
+          exact: true,
+        });
+      await exclusive(3).focus();
+      await page.keyboard.press('Space');
+      await expect(exclusive(3)).toBeChecked();
+      await expect(exclusive(3)).toBeFocused();
+      // One exclusive choice per question, and the mark moves with its choice.
+      await exclusive(1).check();
+      await expect(exclusive(3)).not.toBeChecked();
+      await exclusive(3).check();
+      await expect(exclusive(1)).not.toBeChecked();
+      await question
+        .getByRole('button', { name: 'Move choice 3 up', exact: true })
+        .click();
+      await expect(exclusive(2)).toBeChecked();
+      await expect(
+        question.getByLabel('Choice 2', { exact: true }),
+      ).toHaveValue('None of these');
+      await question
+        .getByRole('button', { name: 'Move choice 2 down', exact: true })
+        .click();
+      await expect(exclusive(3)).toBeChecked();
+      await page
+        .getByRole('button', { name: 'Save and continue →', exact: true })
+        .click();
+      await expect(page.locator('.builder-panel > h3')).toHaveText('Preview');
+      await expect(
+        page.locator('.builder-preview-question li').nth(2),
+      ).toHaveText('None of these · exclusive');
+      const saved = (
+        await fixture.db.query(
+          'SELECT definition FROM club_forms.custom_surveys WHERE title=$1',
+          ['Exclusive choice survey'],
+        )
+      ).rows[0].definition;
+      assert.equal(saved.questions[0].exclusiveOption, 2);
+      // The officer's trial form uses the respondent form.
+      await page.locator('.survey-trial > summary').click();
+      const trial = page.locator('.survey-trial'),
+        trialFriday = trial.getByRole('checkbox', {
+          name: 'Friday',
+          exact: true,
+        });
+      await trialFriday.check();
+      await trial
+        .getByRole('checkbox', { name: 'None of these', exact: true })
+        .check();
+      await expect(trialFriday).not.toBeChecked();
+      await expect(trialFriday).toBeDisabled();
+      // A respondent: the exclusive choice clears and blocks the others.
+      const id = randomUUID();
+      for (const [action, expectedRevision] of [
+        ['save', 0],
+        ['publish', 1],
+      ])
+        await changeDraft(
+          fixture.db,
+          { email: 'officer@example.com' },
+          {
+            id,
+            action,
+            expectedRevision,
+            requestId: randomUUID(),
+            definition: {
+              ...saved,
+              title: 'Exclusive respondent check',
+              audience: 'public',
+              permissions: {
+                preview: 'link',
+                answer: 'verified',
+                results: 'admins',
+              },
+            },
+          },
+        );
+      await page.goto(
+        fixture.origin + '/surveys/#invite=' + privateSurveyToken(id),
+      );
+      await page
+        .getByRole('button', { name: 'Continue to questions →', exact: true })
+        .click();
+      await page
+        .getByRole('textbox', { name: 'Email address', exact: true })
+        .fill('exclusive@example.com');
+      await page
+        .getByRole('button', { name: 'Send sign-in code', exact: true })
+        .click();
+      await page
+        .getByRole('textbox', { name: 'Sign-in code', exact: true })
+        .fill('123456');
+      await page
+        .getByRole('button', { name: 'Verify and continue', exact: true })
+        .click();
+      const friday = page.getByRole('checkbox', {
+          name: 'Friday',
+          exact: true,
+        }),
+        saturday = page.getByRole('checkbox', {
+          name: 'Saturday',
+          exact: true,
+        }),
+        none = page.getByRole('checkbox', {
+          name: 'None of these',
+          exact: true,
+        });
+      await expect(none).toHaveAccessibleDescription(
+        'Choosing “None of these” clears the other choices.',
+      );
+      await friday.check();
+      await saturday.check();
+      await none.focus();
+      await page.keyboard.press('Space');
+      await expect(none).toBeChecked();
+      await expect(none).toBeFocused();
+      for (const other of [friday, saturday]) {
+        await expect(other).not.toBeChecked();
+        await expect(other).toBeDisabled();
+      }
+      await page.keyboard.press('Space');
+      await expect(friday).toBeEnabled();
+      await page.keyboard.press('Space');
+      await page
+        .getByRole('button', { name: 'Review answers →', exact: true })
+        .click();
+      await expect(page.locator('.answer-copy')).toHaveText('None of these');
+      await page.getByRole('checkbox').check();
+      await page
+        .getByRole('button', { name: 'Submit answers', exact: true })
+        .click();
+      await expect(
+        page.getByRole('heading', {
+          name: 'Your response is saved',
+          exact: true,
+        }),
+      ).toBeVisible();
+      assert.deepEqual(
+        (
+          await fixture.db.query(
+            'SELECT responses FROM club_forms.custom_survey_responses WHERE survey_id=$1',
+            [id],
+          )
+        ).rows[0].responses.map((answer) => answer.value),
+        [[2]],
+      );
+      await page
+        .getByRole('button', {
+          name: 'Review or update my answers',
+          exact: true,
+        })
+        .click();
+      await expect(none).toBeChecked();
+      await expect(friday).toBeDisabled();
+    },
+  );
+  await check(
     'CSV export errors stay in the office and a retry downloads the file',
     async (page) => {
       const exportRoute = '**/api/admin?*export=csv';

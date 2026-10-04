@@ -699,23 +699,21 @@ try {
   await contacts
     .getByText('Contact restored to Active.', { exact: true })
     .waitFor();
+  // Mark as test deletes in one step, after a warning with the counts.
   await contacts
     .getByRole('button', { name: 'Mark as test', exact: true })
     .click();
-  await contacts
-    .getByRole('button', { name: 'Confirm mark as test', exact: true })
-    .click();
-  await contacts
-    .getByText('Contact marked as test. No records were deleted.', {
+  const warning = contacts.locator('.contact-confirmation');
+  await warning
+    .getByRole('heading', {
+      name: 'Mark as test and delete permanently?',
       exact: true,
     })
     .waitFor();
-  await contacts
-    .getByRole('button', {
-      name: 'Permanently delete test contact',
-      exact: true,
-    })
-    .click();
+  assert.match(
+    await warning.textContent(),
+    /2 submissions, 1 event survey response, 0 officer comments, 1 follow-up note, 0 attachments and 2 linked email addresses\. This cannot be undone\./,
+  );
   const purge = contacts.getByRole('button', {
     name: 'Delete test contact permanently',
     exact: true,
@@ -751,6 +749,18 @@ try {
       (r) => r.email,
     ),
     ['untouched@example.edu'],
+  );
+  assert.deepEqual(
+    (await db.query('SELECT email FROM club_forms.contacts')).rows.map(
+      (r) => r.email,
+    ),
+    ['untouched@example.edu'],
+  );
+  assert.doesNotMatch(
+    JSON.stringify(
+      (await db.query('SELECT actor,action FROM club_forms.audit')).rows,
+    ),
+    /member23|e0000001|dallascollege|dcccd/,
   );
   await contacts
     .getByLabel('Show contacts', { exact: true })

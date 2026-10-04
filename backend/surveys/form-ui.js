@@ -55,9 +55,23 @@ export function questionFields(
       group.append(input, node('p', '1 = lowest · 5 = highest', 'micro'));
     } else {
       group.setAttribute('role', 'group');
+      // An exclusive choice, such as “None of these”, is chosen by itself:
+      // while it is checked, the other choices are cleared and disabled.
+      const inputs = [],
+        exclusive = q.type === 'multiple' ? q.exclusiveOption : undefined;
+      const block = () => {
+        const alone = Boolean(inputs[exclusive]?.checked);
+        inputs.forEach((input, i) => {
+          if (i === exclusive) return;
+          if (alone) input.checked = false;
+          input.disabled = readOnly || alone;
+          input.parentElement.classList.toggle('is-blocked', alone);
+        });
+      };
       q.options.forEach((option, i) => {
         const label = node('label', undefined, 'form-option'),
           input = node('input');
+        inputs.push(input);
         input.type = q.type === 'single' ? 'radio' : 'checkbox';
         input.name = q.id;
         input.value = i;
@@ -67,6 +81,7 @@ export function questionFields(
             ? values[q.id] === i
             : (values[q.id] || []).includes(i);
         input.onchange = () => {
+          block();
           onChange(
             q.id,
             q.type === 'single'
@@ -79,11 +94,23 @@ export function questionFields(
         label.append(input, node('span', option));
         group.append(label);
       });
+      if (inputs[exclusive]) {
+        const hint = node(
+          'p',
+          'Choosing “' + q.options[exclusive] + '” clears the other choices.',
+          'micro',
+        );
+        hint.id = 'exclusive-' + q.id;
+        inputs[exclusive].setAttribute('aria-describedby', hint.id);
+        group.append(hint);
+        block();
+      }
       if (!readOnly && !q.required) {
         const clear = node('button', 'Clear selection', 'small ghost');
         clear.type = 'button';
         clear.onclick = () => {
           group.querySelectorAll('input').forEach((e) => (e.checked = false));
+          block();
           onChange(q.id, '');
         };
         group.append(clear);

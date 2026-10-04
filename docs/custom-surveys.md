@@ -122,8 +122,11 @@ prints the temporary test URLs. It is not included in the deployed public build.
 Choose **Create custom survey**, then follow **Template → Audience → Questions
 → Preview → Publish**. Blank and quick-feedback templates support text, single
 choice, multiple choice, and 1–5 rating questions. Choice order supports dragging
-and move buttons. Admins can save and resume drafts, try answers locally, and
-open a mock results popup without saving responses.
+and move buttons. In a multiple-choice question, check **Exclusive** beside one
+choice, such as “Any of these” or “None of these”. Choosing it clears and blocks the
+other choices until it is unchecked, and the server rejects it combined with others.
+Surveys saved without an exclusive choice are unchanged. Admins can save and resume
+drafts, try answers locally, and open a mock results popup without saving responses.
 
 Choose Dallas College students, Dallas College staff, open to the public, club
 officers, or advisors as the audience. Preview, answering, and results have

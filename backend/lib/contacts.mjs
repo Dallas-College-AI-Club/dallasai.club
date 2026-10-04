@@ -81,6 +81,8 @@ export async function contactHistory(db, { email, offset = 0 }) {
       ARRAY(SELECT DISTINCT name FROM club_forms.entries e JOIN club_forms.contact_emails a ON a.email=e.email WHERE a.contact_email=c.email AND name<>'' ORDER BY name) AS names,
       (SELECT count(*)::int FROM club_forms.entries e JOIN club_forms.contact_emails a ON a.email=e.email WHERE a.contact_email=c.email) AS submissions,
       (SELECT count(*)::int FROM club_forms.contact_notes n JOIN club_forms.contact_emails a ON a.email=n.email WHERE a.contact_email=c.email) AS notes,
+      (SELECT count(*)::int FROM club_forms.survey_responses r JOIN club_forms.entries e ON e.id=r.entry_id JOIN club_forms.contact_emails a ON a.email=e.email WHERE a.contact_email=c.email) AS survey_responses,
+      (SELECT count(*)::int FROM club_forms.entry_comments m JOIN club_forms.entries e ON e.id=m.entry_id JOIN club_forms.contact_emails a ON a.email=e.email WHERE a.contact_email=c.email) AS comments,
       (SELECT count(*)::int FROM club_forms.attachments f JOIN club_forms.entries e ON e.id=f.entry_id JOIN club_forms.contact_emails a ON a.email=e.email WHERE a.contact_email=c.email) AS attachments
       FROM club_forms.contacts c JOIN club_forms.contact_emails lookup ON lookup.contact_email=c.email WHERE lookup.email=$1`,
       [email],
@@ -280,11 +282,13 @@ export async function manageContact(db, body, actor, storage = { del }) {
       }
       return { email, is_test: body.value };
     }
+    // Mark as test: the contact and everything linked to it are deleted in
+    // this one step, once the officer types the primary email.
     if (body.action === 'contact-purge') {
-      if (!contact.is_test || body.confirmEmail !== email)
+      if (body.confirmEmail !== email)
         throw new RequestError(
           400,
-          'Only a marked test contact can be permanently deleted. Confirm its primary email.',
+          'Type the primary email to confirm deleting this test contact.',
         );
       const aliases = (
         await tx.query(

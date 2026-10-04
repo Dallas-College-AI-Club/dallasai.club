@@ -68,7 +68,17 @@ export function validateDefinition(input, publishing = false) {
     invalid('Add between 1 and 30 questions before publishing.');
   const ids = new Set();
   const questions = input.questions.map((q) => {
-    object(q, ['id', 'title', 'description', 'type', 'required', 'options']);
+    // exclusiveOption is optional, so surveys saved before it still validate.
+    const exclusive = Object.hasOwn(Object(q), 'exclusiveOption');
+    object(q, [
+      'id',
+      'title',
+      'description',
+      'type',
+      'required',
+      'options',
+      ...(exclusive ? ['exclusiveOption'] : []),
+    ]);
     if (!uuid.test(q.id) || ids.has(q.id))
       invalid('Each question needs a unique reference.');
     ids.add(q.id);
@@ -91,6 +101,16 @@ export function validateDefinition(input, publishing = false) {
       new Set(options.map((o) => o.toLowerCase())).size !== options.length
     )
       invalid('Each choice must be different.');
+    if (
+      exclusive &&
+      (q.type !== 'multiple' ||
+        !Number.isInteger(q.exclusiveOption) ||
+        q.exclusiveOption < 0 ||
+        q.exclusiveOption >= options.length)
+    )
+      invalid(
+        'Mark one listed choice of a choose-several question as exclusive.',
+      );
     return {
       id: q.id,
       title: text(q.title, 300, !publishing),
@@ -98,6 +118,7 @@ export function validateDefinition(input, publishing = false) {
       type: q.type,
       required: q.required,
       options,
+      ...(exclusive ? { exclusiveOption: q.exclusiveOption } : {}),
     };
   });
   return {
@@ -359,6 +380,13 @@ export function validateFormResponse(body, survey, member) {
         )
       )
         invalid('Choose a listed option.');
+      if (values.length > 1 && values.includes(q.exclusiveOption))
+        invalid(
+          'Choose “' +
+            q.options[q.exclusiveOption] +
+            '” by itself for: ' +
+            q.title,
+        );
       answerText = values.map((v) => q.options[v]).join('\n');
     }
     result.push({

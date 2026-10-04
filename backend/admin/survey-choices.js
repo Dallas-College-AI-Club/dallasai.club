@@ -5,19 +5,36 @@ export function choiceEditor(question, onChange) {
   let dragging = null;
   const status = node('p');
   status.setAttribute('role', 'status');
+  // Moves or removes choices with the exclusive mark attached to its choice.
+  function edit(change) {
+    const marks = question.options.map(
+      (_, i) => i === question.exclusiveOption,
+    );
+    change(question.options);
+    change(marks);
+    if (marks.includes(true)) question.exclusiveOption = marks.indexOf(true);
+    else delete question.exclusiveOption;
+    onChange();
+    render();
+  }
   function move(from, to) {
     if (from === null || from === to || to < 0 || to >= question.options.length)
       return;
-    const [choice] = question.options.splice(from, 1);
-    question.options.splice(to, 0, choice);
-    onChange();
-    render();
+    edit((list) => list.splice(to, 0, list.splice(from, 1)[0]));
     status.textContent = `Moved choice ${from + 1} to position ${to + 1}.`;
   }
   function render() {
     root.replaceChildren(
       node('p', 'Choices · drag the grip to reorder, or use the move buttons.'),
     );
+    if (question.type === 'multiple')
+      root.append(
+        node(
+          'p',
+          'Mark one choice, such as “Any of these” or “None of these”, as exclusive: choosing it clears and blocks the other choices.',
+          'hint',
+        ),
+      );
     question.options.forEach((value, i) => {
       const row = node('div');
       row.className = 'survey-choice-row';
@@ -68,14 +85,31 @@ export function choiceEditor(question, onChange) {
           b.onclick = () => move(i, i + offset);
           row.append(b);
         }
+      if (question.type === 'multiple') {
+        // At most one exclusive choice: checking one unchecks the others in
+        // place, so focus stays on this checkbox.
+        const exclusive = node('label', undefined, 'builder-check'),
+          check = node('input');
+        check.type = 'checkbox';
+        check.checked = question.exclusiveOption === i;
+        check.setAttribute('aria-label', 'Choice ' + (i + 1) + ' is exclusive');
+        check.onchange = () => {
+          if (check.checked) question.exclusiveOption = i;
+          else delete question.exclusiveOption;
+          root
+            .querySelectorAll('.builder-check input')
+            .forEach(
+              (box, j) => (box.checked = j === question.exclusiveOption),
+            );
+          onChange();
+        };
+        exclusive.append(check, node('span', 'Exclusive'));
+        row.append(exclusive);
+      }
       const remove = node('button', 'Remove');
       remove.type = 'button';
       remove.setAttribute('aria-label', 'Remove choice ' + (i + 1));
-      remove.onclick = () => {
-        question.options.splice(i, 1);
-        onChange();
-        render();
-      };
+      remove.onclick = () => edit((list) => list.splice(i, 1));
       row.append(remove);
       root.append(row);
     });
@@ -86,7 +120,9 @@ export function choiceEditor(question, onChange) {
         question.options.push('');
         onChange();
         render();
-        root.querySelectorAll('input')[question.options.length - 1].focus();
+        root
+          .querySelectorAll('.survey-choice-row > input')
+          [question.options.length - 1].focus();
       };
       root.append(add);
     }

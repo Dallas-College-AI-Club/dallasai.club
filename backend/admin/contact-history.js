@@ -394,39 +394,42 @@ export function contactHistory(api, onChange = () => {}) {
       details.append(row);
       heading.focus();
     }
-    test.onclick = () =>
-      confirm(
-        contact.is_test
-          ? 'Remove test flag?'
-          : 'Mark this person as a test contact?',
-        contact.is_test
-          ? 'Deleting this contact will keep their submissions and allow restoration.'
-          : 'This applies to every linked email. Deleting a test contact permanently erases its submissions, survey answers, comments, attachments and follow-up notes. Marking it does not delete anything yet.',
-        contact.is_test ? 'Confirm unmark as test' : 'Confirm mark as test',
-        { action: 'contact-test', value: !contact.is_test },
-        contact.is_test
-          ? 'Test flag removed.'
-          : 'Contact marked as test. No records were deleted.',
-      );
-    restore.onclick = () =>
-      save({ action: 'contact-restore' }, 'Contact restored to Active.');
-    remove.onclick = () =>
+    // Mark as test deletes the contact and everything linked to it in one
+    // step, after the officer types the primary email. Contacts marked as
+    // test earlier keep Unmark and the same permanent delete.
+    const purge = () =>
       confirm(
         contact.is_test
           ? 'Permanently delete this test contact?'
-          : 'Delete this contact from the directory?',
-        contact.is_test
-          ? `${contact.name || contact.email}: ${plural(contact.emails.length, 'linked email address', 'linked email addresses')}, ${plural(contact.submissions, 'submission')}, ${plural(contact.notes, 'follow-up note')} and ${plural(contact.attachments, 'attachment')}. Their survey answers and comments will also be deleted. This cannot be undone.`
-          : 'Their submissions, survey answers and notes will stay saved. Find this person under Deleted to restore them.',
-        contact.is_test
-          ? 'Delete test contact permanently'
-          : 'Confirm delete contact',
-        { action: contact.is_test ? 'contact-purge' : 'contact-delete' },
-        contact.is_test
-          ? 'Test contact and all linked records permanently deleted.'
-          : 'Contact deleted from the directory. Submissions and notes are preserved.',
-        contact.is_test,
+          : 'Mark as test and delete permanently?',
+        `This permanently deletes ${contact.name || contact.email} and everything linked to them: ${plural(contact.submissions, 'submission')}, ${plural(contact.survey_responses, 'event survey response')}, ${plural(contact.comments, 'officer comment')}, ${plural(contact.notes, 'follow-up note')}, ${plural(contact.attachments, 'attachment')} and ${plural(contact.emails.length, 'linked email address', 'linked email addresses')}. This cannot be undone.`,
+        'Delete test contact permanently',
+        { action: 'contact-purge' },
+        'Test contact and all linked records permanently deleted.',
+        true,
       );
+    test.onclick = contact.is_test
+      ? () =>
+          confirm(
+            'Remove test flag?',
+            'Deleting this contact will keep their submissions and allow restoration.',
+            'Confirm unmark as test',
+            { action: 'contact-test', value: false },
+            'Test flag removed.',
+          )
+      : purge;
+    restore.onclick = () =>
+      save({ action: 'contact-restore' }, 'Contact restored to Active.');
+    remove.onclick = contact.is_test
+      ? purge
+      : () =>
+          confirm(
+            'Delete this contact from the directory?',
+            'Their submissions, survey answers and notes will stay saved. Find this person under Deleted to restore them.',
+            'Confirm delete contact',
+            { action: 'contact-delete' },
+            'Contact deleted from the directory. Submissions and notes are preserved.',
+          );
     merge.onclick = () => {
       const form = node('form', undefined, 'contact-merge-search'),
         label = node('label', 'Find the contact to keep'),

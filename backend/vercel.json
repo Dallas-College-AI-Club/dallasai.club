@@ -27,7 +27,8 @@
       "maxDuration": 30
     },
     "api/surveys.mjs": {
-      "maxDuration": 30
+      "maxDuration": 30,
+      "includeFiles": "generated/events.json"
     },
     "api/custom-surveys.mjs": {
       "maxDuration": 30,

@@ -18,7 +18,13 @@ export async function originalEvents() {
 export function mergeEvents(originals, rows) {
   const events = new Map(originals.map((event) => [event.id, event]));
   for (const row of rows) {
-    if (row.published && !row.archived_at) events.set(row.id, row.published);
+    if (row.published && !row.archived_at)
+      events.set(row.id, {
+        ...row.published,
+        ...(row.rsvp_survey_status && row.rsvp_survey_status !== 'active'
+          ? { registrationOpen: false }
+          : {}),
+      });
     else events.delete(row.id);
   }
   return [...events.values()]
@@ -29,8 +35,11 @@ export async function liveEvents(db, originals) {
   originals ??= await originalEvents();
   return mergeEvents(
     originals,
-    (await db.query('SELECT id,published,archived_at FROM club_forms.events'))
-      .rows,
+    (
+      await db.query(
+        'SELECT id,published,archived_at,rsvp_survey_status FROM club_forms.events',
+      )
+    ).rows,
   );
 }
 export async function editorEvents(db, originals) {
@@ -55,8 +64,20 @@ export async function editorEvents(db, originals) {
   return [...rows.values()]
     .map((row) => ({
       ...row,
-      draft: normalizeEventType(row.draft),
-      published: normalizeEventType(row.published),
+      draft: normalizeEventType({
+        ...row.draft,
+        ...(row.rsvp_survey_status && row.rsvp_survey_status !== 'active'
+          ? { registrationOpen: false }
+          : {}),
+      }),
+      published: normalizeEventType(
+        row.published && {
+          ...row.published,
+          ...(row.rsvp_survey_status && row.rsvp_survey_status !== 'active'
+            ? { registrationOpen: false }
+            : {}),
+        },
+      ),
     }))
     .sort((a, b) => (b.draft.date || '').localeCompare(a.draft.date || ''));
 }
@@ -99,6 +120,10 @@ export async function saveEvent(db, body, actor, originals) {
   originals ??= await originalEvents();
   const original = originals.find((event) => event.id === body.id);
   return db.transaction(async (tx) => {
+    await tx.query(
+      "SELECT pg_advisory_xact_lock(hashtextextended('event-rsvp:' || $1,0))",
+      [body.id],
+    );
     if (
       body.revision === 0 &&
       (original || ['draft', 'publish'].includes(body.action))
@@ -124,6 +149,13 @@ export async function saveEvent(db, body, actor, originals) {
         409,
         'Another admin updated this event. Your edits are still here. Copy them, then reopen the event to review the latest version.',
       );
+    if (current.rsvp_survey_status !== 'active' && draft?.registrationOpen)
+      throw new RequestError(
+        409,
+        current.rsvp_survey_status === 'archived'
+          ? 'Restore the RSVP survey before reopening registration.'
+          : 'This RSVP survey was permanently deleted. Registration cannot be reopened.',
+      );
     if (
       current.archived_at &&
       ['publish', 'unpublish', 'archive'].includes(body.action)
@@ -139,6 +171,16 @@ export async function saveEvent(db, body, actor, originals) {
       );
     const nextDraft = draft || normalizeEventType(current.draft);
     const nextLive = body.action === 'draft' ? current.published : published;
+    if (current.rsvp_survey_status === 'deleted') {
+      const removed = {
+        registrationOpen: false,
+        surveyIntro: '',
+        surveyQuestions: [],
+        surveyVersion: '',
+      };
+      Object.assign(nextDraft, removed);
+      if (nextLive) Object.assign(nextLive, removed);
+    }
     // Ignore a client-supplied URL and preserve the server-created link through
     // edits, unpublishing and restoration. Duplicates receive their own link.
     const shortLink = current.draft.shortLink || current.published?.shortLink;

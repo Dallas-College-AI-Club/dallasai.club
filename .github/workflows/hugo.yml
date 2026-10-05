@@ -42,6 +42,7 @@ jobs:
           node tests/browser-contact-profile.mjs
           node tests/browser-inbox-recency.mjs
           node tests/browser-survey-lifecycle.mjs
+          node tests/browser-survey-library-actions.mjs
 
   build:
     runs-on: ubuntu-latest

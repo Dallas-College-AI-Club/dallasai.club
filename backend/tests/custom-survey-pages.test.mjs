@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 // The imported officer session registers browser listeners; these tests exercise
 // only the asynchronous results reader, without starting a session or rendering.
 globalThis.window = { addEventListener() {} };
+globalThis.location = { hash: '#/surveys' };
 globalThis.ResizeObserver = class {
   observe() {}
 };
@@ -151,9 +152,26 @@ test('library combines title search with collection and keeps draft, event, cust
     { id: 'unrelated', title: 'Officers', status: 'open', response_count: 0 },
   ];
   const root = new Element('main');
-  const controller = mountCustomSurveys(root, async (url) =>
-    url.startsWith('/api/custom-surveys') ? { surveys } : { events: [] },
-  );
+  const controller = mountCustomSurveys(root, async (url) => {
+    if (url === '/api/custom-surveys?action=catalog') return { surveys };
+    if (url === '/api/events?admin=1') return { events: [] };
+    if (url === '/api/surveys?catalog=1')
+      return {
+        surveys: [
+          {
+            eventId: 'registration',
+            title: 'AI workshop RSVP',
+            status: 'active',
+            revision: 7,
+            responseCount: 1,
+            archivedResponseCount: 0,
+            registrationOpen: true,
+            hasEvent: true,
+          },
+        ],
+      };
+    throw new Error('Unexpected library request: ' + url);
+  });
   await controller.library(root, '', '  AI WORKSHOP  ');
   assert.deepEqual(
     root.children[0].children.map((section) => section.dataset.group),
@@ -162,12 +180,14 @@ test('library combines title search with collection and keeps draft, event, cust
   const titles = (element) =>
     [element.textContent, ...element.children.flatMap(titles)].filter(Boolean);
   assert.ok(!titles(root).includes('Officers'));
+  assert.ok(titles(root).includes('AI workshop RSVP'));
   await controller.library(root, 'events', '  AI WORKSHOP  ');
   assert.ok(titles(root).includes('AI workshop feedback'));
   assert.ok(!titles(root).includes('AI workshop custom'));
   await controller.library(root, 'custom', '  AI WORKSHOP  ');
   assert.ok(titles(root).includes('AI workshop custom'));
   assert.ok(!titles(root).includes('AI workshop feedback'));
+  assert.ok(!titles(root).includes('AI workshop RSVP'));
   controller.reset();
   controller.refresh();
   await new Promise((resolve) => setImmediate(resolve));

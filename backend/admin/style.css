@@ -2767,10 +2767,25 @@ html.survey-report-open {
   margin-right: 8px;
   color: var(--muted);
 }
+.survey-row-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.survey-lifecycle-control {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
 a.survey-library-summary {
   text-decoration: none;
 }
 a.survey-library-summary > div:first-child::before {
+  content: none;
+}
+.rsvp-survey-library-row .survey-library-summary > div:first-child::before {
   content: none;
 }
 .survey-library-row[open] > .survey-library-summary > div:first-child::before {

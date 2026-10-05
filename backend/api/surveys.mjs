@@ -5,7 +5,12 @@ import { RequestError } from '../lib/errors.mjs';
 import { changeSubmission } from '../lib/submission-management.mjs';
 import { cleanupContactFiles } from '../lib/contacts.mjs';
 import { surveyResults } from '../lib/surveys.mjs';
-import { manageResponse } from '../lib/survey-management.mjs';
+import {
+  manageResponse,
+  rsvpSurveyCatalog,
+  changeRsvpSurvey,
+} from '../lib/survey-management.mjs';
+import { originalEvents } from '../lib/events.mjs';
 import {
   reportRows,
   summarizeResponses,
@@ -21,6 +26,7 @@ export function surveysHandler({
   authorize = requireAdmin,
   getDatabase = database,
   storage,
+  getOriginalEvents = originalEvents,
 } = {}) {
   return async function handler(req, res) {
     try {
@@ -29,6 +35,17 @@ export function surveysHandler({
         adminOrigin(req);
         const body = await jsonBody(req, 400000),
           db = getDatabase();
+        if (body.action?.startsWith('rsvp-survey-'))
+          return send(
+            res,
+            200,
+            await changeRsvpSurvey(
+              db,
+              body,
+              user.email,
+              await getOriginalEvents(),
+            ),
+          );
         if (['edit-submission', 'delete-submission'].includes(body.action)) {
           const result = await changeSubmission(db, body, user.email, {
             surface: 'survey',
@@ -50,6 +67,10 @@ export function surveysHandler({
       const params = new URL(req.url, 'https://admin.invalid').searchParams;
       const db = getDatabase(),
         offset = Number(params.get('offset') || 0);
+      if (params.get('catalog') === '1')
+        return send(res, 200, {
+          surveys: await rsvpSurveyCatalog(db, await getOriginalEvents()),
+        });
       if (params.has('contact'))
         return send(
           res,

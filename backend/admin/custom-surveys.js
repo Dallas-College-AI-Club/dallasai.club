@@ -102,6 +102,112 @@ function surveySummary(survey) {
   );
   return summary;
 }
+function lifecycleControl(survey, action, api, isCurrent, onSuccess) {
+  const route = location.hash;
+  const current = () => isCurrent() && location.hash === route;
+  const rsvp = survey.kind === 'rsvp';
+  const [label, message] = (
+    rsvp
+      ? {
+          archive: [
+            'Archive RSVP survey',
+            'Stop accepting RSVPs for ' +
+              survey.title +
+              ' and move its RSVP survey to Archived. Saved responses and the event are kept.',
+          ],
+          restore: [
+            'Restore RSVP survey',
+            'Restore the RSVP survey for ' +
+              survey.title +
+              '. Registration stays closed until you reopen it in the event editor. Saved responses stay unchanged.',
+          ],
+          delete: [
+            'Delete RSVP survey permanently',
+            'Permanently delete the RSVP survey for ' +
+              survey.title +
+              ' and ' +
+              plural(
+                survey.response_count + survey.archived_response_count,
+                'saved response',
+              ) +
+              ', including RSVP registrations and their answers. This cannot be undone. The event, feedback surveys, contacts and attendance records are kept.',
+          ],
+        }
+      : {
+          edit: [
+            'Edit survey',
+            'Move this survey to a draft and stop new answers while you edit. Saved responses keep their original questions and answers. Publish when the changes are ready.',
+          ],
+          archive: [
+            'Archive survey',
+            'Stop answering and move this survey to Archived. Its questions, respondents and saved responses are kept.',
+          ],
+          restore: [
+            survey.definition && !survey.published_at
+              ? 'Restore as draft'
+              : 'Restore survey',
+            'Restore this survey for review. Saved responses stay unchanged. Answering stays closed until the editable survey is published.',
+          ],
+          delete: [
+            'Delete survey permanently',
+            'Permanently delete ' +
+              survey.title +
+              ' and ' +
+              plural(
+                survey.response_count + survey.archived_response_count,
+                'saved response',
+              ) +
+              ', including respondents, answer data and device access. This cannot be undone. Existing short URLs are kept at their provider.',
+          ],
+        }
+  )[action];
+  const control = node('span', undefined, 'survey-lifecycle-control');
+  const button = node('button', label, 'secondary'),
+    status = node('span');
+  status.setAttribute('role', 'status');
+  button.onclick = async (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (!current() || button.disabled) return;
+    button.disabled = true;
+    try {
+      if (
+        !(await confirmDialog({
+          title: label + '?',
+          body: message,
+          confirmLabel: label,
+        })) ||
+        !current()
+      )
+        return;
+      await api(
+        rsvp ? '/api/surveys' : '/api/custom-surveys?action=lifecycle',
+        {
+          ...(rsvp
+            ? { eventId: survey.id, action: 'rsvp-survey-' + action }
+            : { id: survey.id, action }),
+          expectedRevision: survey.edit_revision,
+          requestId: crypto.randomUUID(),
+        },
+      );
+      if (current()) await onSuccess();
+    } catch (error) {
+      if (current()) status.textContent = error.message;
+    } finally {
+      if (current()) button.disabled = false;
+    }
+  };
+  control.append(button, status);
+  return control;
+}
+function rowLifecycleActions(summary, survey, api, isCurrent, onChange) {
+  const actions = node('span', undefined, 'survey-row-actions');
+  for (const action of survey.status === 'archived'
+    ? ['restore', 'delete']
+    : ['archive'])
+    actions.append(lifecycleControl(survey, action, api, isCurrent, onChange));
+  summary.append(actions);
+}
 export function mountFeedbackGroups(
   root,
   api,
@@ -128,7 +234,15 @@ export function mountFeedbackGroups(
     const body = node('div', undefined, 'custom-survey-group-body');
     const open = node('a', 'Manage survey →', 'button-link');
     open.href = '#/surveys/custom/' + survey.id;
-    card.append(surveySummary(survey), open, body);
+    const summary = surveySummary(survey);
+    rowLifecycleActions(
+      summary,
+      survey,
+      api,
+      () => !disposed && isCurrent(),
+      onChange,
+    );
+    card.append(summary, open, body);
     root.append(card);
     let controller;
     const entry = {
@@ -299,27 +413,9 @@ export function mountCustomSurveys(root, api, options = {}) {
             );
             content.prepend(related);
           }
-          const lifecycleButton = (label, action, message) => {
-            const button = node('button', label, 'secondary');
-            button.onclick = async () => {
-              if (
-                !(await confirmDialog({
-                  title: label + '?',
-                  body: message,
-                  confirmLabel: label,
-                }))
-              )
-                return;
-              if (!isCurrent()) return;
-              button.disabled = true;
-              try {
-                await api('/api/custom-surveys?action=lifecycle', {
-                  id: survey.id,
-                  action,
-                  expectedRevision: survey.edit_revision,
-                  requestId: crypto.randomUUID(),
-                });
-                if (!isCurrent()) return;
+          const lifecycleButton = (action) =>
+            content.append(
+              lifecycleControl(survey, action, api, isCurrent, async () => {
                 options.onChange?.();
                 if (action === 'delete') {
                   selected = '';
@@ -335,45 +431,15 @@ export function mountCustomSurveys(root, api, options = {}) {
                   if (options.inline) go('#/surveys/custom/' + survey.id);
                   else edit(survey.id);
                 } else await load();
-              } catch (error) {
-                if (isCurrent()) content.append(node('p', error.message));
-                button.disabled = false;
-              }
-            };
-            content.append(button);
-          };
+              }),
+            );
           if (survey.status === 'archived') {
-            lifecycleButton(
-              survey.definition && !survey.published_at
-                ? 'Restore as draft'
-                : 'Restore survey',
-              'restore',
-              'Restore this survey for review. Saved responses stay unchanged. Answering stays closed until the editable survey is published.',
-            );
-            lifecycleButton(
-              'Delete survey permanently',
-              'delete',
-              'Permanently delete ' +
-                survey.title +
-                ' and ' +
-                plural(
-                  survey.response_count + survey.archived_response_count,
-                  'saved response',
-                ) +
-                ', including respondents, answer data and device access. This cannot be undone. Existing short URLs are kept at their provider.',
-            );
+            lifecycleButton('restore');
+            lifecycleButton('delete');
           } else {
             if (survey.definition && survey.status !== 'draft')
-              lifecycleButton(
-                'Edit survey',
-                'edit',
-                'Move this survey to a draft and stop new answers while you edit. Saved responses keep their original questions and answers. Publish when the changes are ready.',
-              );
-            lifecycleButton(
-              'Archive survey',
-              'archive',
-              'Stop answering and move this survey to Archived. Its questions, respondents and saved responses are kept.',
-            );
+              lifecycleButton('edit');
+            lifecycleButton('archive');
           }
           if (survey.definition) {
             const duplicate = node('a', 'Duplicate survey', 'button-link');
@@ -866,13 +932,13 @@ export function mountCustomSurveys(root, api, options = {}) {
       const request = ++generation;
       target.replaceChildren(node('p', 'Loading surveys…', 'hint'));
       try {
-        const [{ surveys }, { events }, { events: savedEvents }] =
+        const [{ surveys }, { events }, { surveys: rsvpSurveys }] =
           await Promise.all([
             api('/api/custom-surveys?action=catalog'),
             api('/api/events?admin=1'),
             collection === 'custom'
-              ? Promise.resolve({ events: [] })
-              : api('/api/surveys?view=all'),
+              ? Promise.resolve({ surveys: [] })
+              : api('/api/surveys?catalog=1'),
           ]);
         if (request !== generation) return;
         const matching = surveys
@@ -889,46 +955,63 @@ export function mountCustomSurveys(root, api, options = {}) {
               Number(b.status === 'draft') - Number(a.status === 'draft'),
           );
         const list = node('div', undefined, 'survey-library-list');
-        if (collection !== 'custom') {
-          // Include registration before the first answer, and keep saved answers
-          // discoverable after registration closes or its event is archived.
-          const registrations = new Map(
-            savedEvents.map((event) => [event.id, event]),
+        let archivedCount = 0;
+        const sectionFor = (name) => {
+          let section = [...list.children].find(
+            (child) => child.dataset.group === name,
           );
-          for (const event of events)
-            if (
-              event.draft?.registrationOpen ||
-              event.published?.registrationOpen
-            )
-              registrations.set(event.id, {
-                id: event.id,
-                title: event.draft?.title || event.published?.title || event.id,
-              });
-          const section = node('section', undefined, 'survey-library-section');
-          section.dataset.group = 'Event surveys';
-          section.append(node('h2', 'Event surveys'));
-          for (const event of registrations.values()) {
-            if (!event.title.toLowerCase().includes(query.trim().toLowerCase()))
-              continue;
-            const link = node(
-              'a',
-              undefined,
-              'survey-library-row survey-library-summary',
-            );
-            link.href =
-              '#/surveys/events?event=' + encodeURIComponent(event.id);
-            const title = node('div');
-            title.append(node('strong', event.title));
-            link.append(
-              title,
-              node('span', 'RSVP', 'chip'),
-              node('span', 'Open responses →', 'hint'),
-            );
-            section.append(link);
+          if (!section) {
+            section = node('section', undefined, 'survey-library-section');
+            section.dataset.group = name;
+            section.append(node('h2', name));
+            list.append(section);
           }
-          if (section.children.length > 1) list.append(section);
+          return section;
+        };
+        for (const saved of rsvpSurveys) {
+          if (!saved.title.toLowerCase().includes(query.trim().toLowerCase()))
+            continue;
+          const survey = {
+            kind: 'rsvp',
+            id: saved.eventId,
+            title: saved.title,
+            status: saved.status,
+            edit_revision: saved.revision,
+            response_count: saved.responseCount,
+            archived_response_count: saved.archivedResponseCount,
+          };
+          const archived = survey.status === 'archived';
+          if (archived) archivedCount++;
+          const row = node(
+            'div',
+            undefined,
+            'survey-library-row rsvp-survey-library-row',
+          );
+          const summary = node('div', undefined, 'survey-library-summary');
+          const title = node('div');
+          title.append(node('strong', survey.title));
+          const link = node('a', 'Open responses →', 'button-link');
+          link.href =
+            '#/surveys/events?event=' +
+            encodeURIComponent(survey.id) +
+            (archived ? '&view=archived' : '');
+          summary.append(
+            title,
+            node('span', archived ? 'RSVP · Archived' : 'RSVP', 'chip'),
+            link,
+          );
+          rowLifecycleActions(
+            summary,
+            survey,
+            api,
+            () => request === generation,
+            () => this.library(target, collection, query),
+          );
+          row.append(summary);
+          sectionFor(archived ? 'Archived' : 'Event surveys').append(row);
         }
         for (const survey of matching) {
+          if (survey.status === 'archived') archivedCount++;
           const sectionName =
             survey.status === 'archived'
               ? 'Archived'
@@ -937,22 +1020,22 @@ export function mountCustomSurveys(root, api, options = {}) {
                 : survey.definition?.eventId
                   ? 'Event surveys'
                   : 'Custom surveys';
-          let section = [...list.children].find(
-            (child) => child.dataset.group === sectionName,
-          );
-          if (!section) {
-            section = node('section', undefined, 'survey-library-section');
-            section.dataset.group = sectionName;
-            section.append(node('h2', sectionName));
-            list.append(section);
-          }
+          const section = sectionFor(sectionName);
           const event = events.find(
             (event) => event.id === survey.definition?.eventId,
           );
           if (event && options.renderEvent) {
             const row = node('details', undefined, 'survey-library-row');
             const body = node('div', undefined, 'custom-survey-group-body');
-            row.append(surveySummary(survey), body);
+            const summary = surveySummary(survey);
+            rowLifecycleActions(
+              summary,
+              survey,
+              api,
+              () => request === generation,
+              () => this.library(target, collection, query),
+            );
+            row.append(summary, body);
             section.append(row);
             let mounted = false;
             row.ontoggle = () => {
@@ -978,7 +1061,12 @@ export function mountCustomSurveys(root, api, options = {}) {
             );
           }
         }
-        for (const name of ['Drafts', 'Event surveys', 'Custom surveys']) {
+        for (const name of [
+          'Drafts',
+          'Event surveys',
+          'Custom surveys',
+          'Archived',
+        ]) {
           const section = [...list.children].find(
             (child) => child.dataset.group === name,
           );
@@ -989,6 +1077,23 @@ export function mountCustomSurveys(root, api, options = {}) {
             ? list
             : node('p', 'No surveys in this collection yet.', 'empty-state'),
         );
+        const archived = [...list.children].find(
+          (child) => child.dataset.group === 'Archived',
+        );
+        if (archived) {
+          const jump = node(
+            'button',
+            'Archived surveys (' + archivedCount + ')',
+            'secondary',
+          );
+          jump.onclick = () => {
+            const heading = archived.querySelector('h2');
+            heading.tabIndex = -1;
+            heading.focus({ preventScroll: true });
+            heading.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          };
+          target.prepend(jump);
+        }
       } catch (error) {
         if (request !== generation) return;
         target.replaceChildren(node('p', error.message));

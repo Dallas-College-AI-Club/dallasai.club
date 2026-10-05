@@ -92,6 +92,13 @@ Keep runtime connections restricted. The original leaderboard setup is retained 
 | 022 | Optional custom-survey short link and permission for officers to update it |
 | 023 | Remove contact addresses from the active list while retaining saved-record relationships |
 | 024 | Survey lifecycle, original response definitions, and archived survey/response deletion |
+| 025 | Independent RSVP survey archive/deletion state and request receipts |
+
+Apply migration 025 before deploying independent RSVP survey lifecycle controls.
+It adds a checked status column to events and request receipt indexing to the existing
+event history. It does not archive events or change saved responses. Keep it on a code
+rollback, and verify that the rollback still enforces closed registration for archived
+and deleted RSVP surveys before switching production.
 
 Apply migrations 023 and 024 before deploying the contact and survey lifecycle update.
 They preserve existing answers. Migration 023 adds an active-address flag; removed
@@ -170,7 +177,8 @@ validation and retries, mobile layouts, sign-in/sign-out, event changes, and cus
 survey creation, preview, submission, replacement, access removal, and result paging.
 The CI office workflow runs `browser-office.mjs`, `browser-survey-groups.mjs`,
 `browser-contact-profile.mjs`, `browser-inbox-recency.mjs`, and
-`browser-survey-lifecycle.mjs` from `backend/tests/`.
+`browser-survey-lifecycle.mjs` and `browser-survey-library-actions.mjs` from
+`backend/tests/`.
 
 Event-participation backend verification (2026-10-04, disposable local PGlite):
 30 targeted tests passed across `event-participation`, `survey-management`,

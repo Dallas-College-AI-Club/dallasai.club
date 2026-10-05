@@ -447,7 +447,7 @@ const generatedPayload = () => {
       '/surveys/#invite=' + privateSurveyToken(f.id),
       process.env.AUTH_BASE_URL,
     ).href,
-    alias = 'dai-' + digest(url).slice(0, 24);
+    alias = 'ai-' + digest(url).slice(0, 24);
   return {
     originalURL: url,
     path: alias,

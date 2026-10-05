@@ -18,6 +18,7 @@ export function eventShortAlias(event, id) {
     .replace(/^ai\s+club\s+(?:members?\s+)?/, '')
     .split(/[^a-z0-9]+/)
     .filter((word) => safeWords.has(word));
+  if (words[0] === 'ai') words.shift();
   const year = /^(\d{4})/.exec(event.date || event.rsvpDeadline || '')?.[1];
   const ending = year ? '-' + year : '';
   let name = '';
@@ -26,7 +27,7 @@ export function eventShortAlias(event, id) {
     if (next.length > 26 - ending.length) break;
     name = next;
   }
-  return 'dai-' + (name || 'event') + ending;
+  return 'ai-' + (name || 'event') + ending;
 }
 
 export const eventURL = (id) =>

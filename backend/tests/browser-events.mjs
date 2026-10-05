@@ -1138,7 +1138,7 @@ try {
   await expect(
     page.getByRole('link', { name: 'View published event ↗' }),
   ).toHaveAttribute('href', 'https://go.dallasai.club/test-published-event');
-  assert.equal(shortAliases.at(-1), 'dai-check');
+  assert.equal(shortAliases.at(-1), 'ai-check');
   // An unfinished email question is pointed out before publishing, then works
   // after correction without losing the first question or event text.
   await page.getByRole('button', { name: 'New event', exact: true }).click();

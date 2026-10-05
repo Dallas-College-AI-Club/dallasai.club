@@ -300,7 +300,7 @@ export async function generateSurveyShareLink(
     if (survey.short_link) return { id, short_link: survey.short_link };
     const link = await createShortLink(
       invitation,
-      'dai-' + digest(invitation).slice(0, 24),
+      'ai-' + digest(invitation).slice(0, 24),
       fetchImpl,
     );
     if (new Date(survey.expires_at) <= new Date())

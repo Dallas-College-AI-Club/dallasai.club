@@ -34,6 +34,35 @@ export function mountEventEditor(api) {
   const q = (s) => document.querySelector(s);
   const form = q('#event-form');
   mountTextFormatting(form);
+  const storyButtons = [...form.querySelectorAll('[data-story-section]')];
+  function storySection(key, visible) {
+    form.querySelector('[data-story-field="' + key + '"]').hidden = !visible;
+    form.elements.namedItem(key).closest('.formatting-editor').hidden =
+      !visible;
+    storyButtons
+      .find((button) => button.dataset.storySection === key)
+      .setAttribute('aria-pressed', String(visible));
+  }
+  for (const button of storyButtons)
+    button.onclick = async () => {
+      if (busy || !editing) return;
+      const key = button.dataset.storySection,
+        input = form.elements.namedItem(key),
+        visible = button.getAttribute('aria-pressed') === 'true';
+      if (
+        visible &&
+        input.value.trim() &&
+        !(await confirmDialog({
+          title: 'Remove ' + button.textContent.trim() + '?',
+          body: 'This clears the text in this section from your unsaved event. Your saved event changes only when you save or publish.',
+          confirmLabel: 'Remove section and text',
+        }))
+      )
+        return;
+      if (visible) input.value = '';
+      storySection(key, !visible);
+      if (!visible) input.focus();
+    };
   const survey = surveyEditor(
     q('#survey-questions'),
     q('#add-survey-question'),
@@ -165,6 +194,13 @@ export function mountEventEditor(api) {
   const say = (message = '') => {
     q('#event-status').textContent = message;
   };
+  function showError(message) {
+    say(message);
+    const status = q('#event-status');
+    status.tabIndex = -1;
+    status.scrollIntoView({ block: 'center' });
+    status.focus({ preventScroll: true });
+  }
   function values() {
     const content = Object.fromEntries(new FormData(form));
     content.requireEduEmail = form.elements.requireEduEmail.checked;
@@ -375,6 +411,13 @@ export function mountEventEditor(api) {
     if (row.draft.requireEduEmail === undefined)
       form.elements.requireEduEmail.checked =
         row.draft.category?.toLowerCase() === 'social';
+    for (const button of storyButtons) {
+      const key = button.dataset.storySection;
+      storySection(
+        key,
+        key === 'summary' || Boolean(form.elements.namedItem(key).value.trim()),
+      );
+    }
     saved = JSON.stringify(values());
     q('#event-heading').textContent = row.archived_at
       ? 'Edit archived event'
@@ -522,6 +565,8 @@ export function mountEventEditor(api) {
   }
   async function save(action) {
     if (busy || !current || !editing) return;
+    if (['draft', 'preview', 'publish'].includes(action) && !survey.validate())
+      return;
     busy = true;
     loadGeneration++;
     const version = generation;
@@ -587,7 +632,7 @@ export function mountEventEditor(api) {
       }
     } catch (e) {
       tabs.forEach((tab) => tab?.close());
-      if (version === generation) say(e.message);
+      if (version === generation) showError(e.message);
     } finally {
       busy = false;
       unlock();

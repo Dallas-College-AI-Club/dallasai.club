@@ -211,16 +211,61 @@ try {
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
 
   await page.getByRole('button', { name: 'New event', exact: true }).click();
+  await expect(page.locator('[data-story-section="summary"]')).toHaveAttribute(
+    'aria-pressed',
+    'true',
+  );
+  await expect(page.locator('[data-story-field="preparation"]')).toBeHidden();
+  await expect(page.locator('[name="preparation"]')).toBeHidden();
+  await expect(page.locator('[name="targetAudience"]')).toBeHidden();
   assert.deepEqual(
     await page.locator('[name="category"] option').allTextContents(),
     ['Workshop', 'Meeting', 'Talk', 'Hackathon', 'Social'],
   );
   for (const [key, value] of Object.entries(workshop)) {
     const input = page.locator('#event-form [name="' + key + '"]');
+    const story = page.locator('[data-story-section="' + key + '"]');
+    if (await story.count()) {
+      if (await input.isHidden()) {
+        if (!value.length) continue;
+        await story.click();
+      }
+    }
     if (key === 'category') await input.selectOption(value);
     else if (typeof value === 'boolean') await input.setChecked(value);
     else await input.fill(Array.isArray(value) ? value.join('\n') : value);
   }
+  const preparationChip = page.locator('[data-story-section="preparation"]');
+  await preparationChip.click();
+  await page.locator('[name="preparation"]').fill('Bring a notebook');
+  await preparationChip.click();
+  await page
+    .locator('#confirm-dialog')
+    .getByRole('button', { name: 'Cancel', exact: true })
+    .click();
+  await expect(page.locator('[name="preparation"]')).toHaveValue(
+    'Bring a notebook',
+  );
+  await preparationChip.click();
+  await page
+    .getByRole('button', { name: 'Remove section and text', exact: true })
+    .click();
+  await expect(page.locator('[name="preparation"]')).toHaveValue('');
+  await expect(page.locator('[data-story-field="preparation"]')).toBeHidden();
+  await page.setViewportSize({ width: 320, height: 820 });
+  assert.ok(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  );
+  await preparationChip.click();
+  await expect(page.locator('[name="preparation"]')).toBeVisible();
+  await page
+    .locator('#event-form .editor-section')
+    .filter({ has: page.locator('#event-story-sections') })
+    .screenshot({ path: path.join(screens, 'story-sections-phone.png') });
+  await preparationChip.click();
+  await page.setViewportSize({ width: 1365, height: 950 });
   // Enter in a one-line field must not save; Enter in the type name adds it.
   const eventPosts = [];
   const countPost = (request) => {
@@ -430,6 +475,14 @@ try {
     })
     .click();
   await page.locator('#edit-selected-event').click();
+  for (const key of ['targetAudience', 'learningOutcomes', 'agenda']) {
+    await expect(
+      page.locator('[data-story-field="' + key + '"]'),
+    ).toBeVisible();
+    await expect(
+      page.locator('[data-story-section="' + key + '"]'),
+    ).toHaveAttribute('aria-pressed', 'true');
+  }
   assert.equal(
     await page.locator('[name="targetAudience"]').inputValue(),
     workshop.targetAudience,
@@ -440,6 +493,8 @@ try {
     .getByRole('button', { name: 'Publish event', exact: true })
     .click();
   await page.getByText('Choose a valid event date.', { exact: true }).waitFor();
+  await expect(page.locator('#event-status')).toBeInViewport();
+  await expect(page.locator('#event-status')).toBeFocused();
   assert.equal(
     await page.locator('[name="title"]').inputValue(),
     workshop.title,
@@ -1084,6 +1139,60 @@ try {
     page.getByRole('link', { name: 'View published event ↗' }),
   ).toHaveAttribute('href', 'https://go.dallasai.club/test-published-event');
   assert.equal(shortAliases.at(-1), 'dai-check');
+  // An unfinished email question is pointed out before publishing, then works
+  // after correction without losing the first question or event text.
+  await page.getByRole('button', { name: 'New event', exact: true }).click();
+  await page.locator('[name="title"]').fill('Question validation check');
+  await page.locator('[name="potential"]').check();
+  await page.locator('[name="checkSharing"]').uncheck();
+  await page.locator('#add-survey-question').click();
+  await page
+    .locator('.survey-editor-question')
+    .nth(0)
+    .getByLabel('Question', { exact: true })
+    .fill('What interests you?');
+  await page.locator('#add-survey-question').click();
+  const secondQuestion = page.locator('.survey-editor-question').nth(1);
+  await secondQuestion.getByLabel('Answer type').selectOption('email');
+  const questionLabel = secondQuestion.getByLabel('Question', { exact: true });
+  await questionLabel.fill('   ');
+  const postsBeforeInvalidQuestion = [];
+  const invalidQuestionPost = (request) => {
+    if (request.method() === 'POST' && request.url().endsWith('/api/events'))
+      postsBeforeInvalidQuestion.push(request.postDataJSON().action);
+  };
+  page.on('request', invalidQuestionPost);
+  await page
+    .getByRole('button', { name: 'Publish event', exact: true })
+    .click();
+  await expect(questionLabel).toBeFocused();
+  await expect(questionLabel).toBeInViewport();
+  assert.equal(
+    await questionLabel.evaluate((input) => input.validationMessage),
+    'Enter question 2.',
+  );
+  assert.deepEqual(postsBeforeInvalidQuestion, []);
+  await questionLabel.fill('Your contact email');
+  await page
+    .getByRole('button', { name: 'Publish event', exact: true })
+    .click();
+  await page
+    .locator('#event-status')
+    .getByText(
+      'Published successfully — live on the website. Editing is complete.',
+      { exact: true },
+    )
+    .waitFor();
+  page.off('request', invalidQuestionPost);
+  assert.deepEqual(postsBeforeInvalidQuestion, ['publish']);
+  const questionEvent = (
+    await db.query(
+      "SELECT published FROM club_forms.events WHERE published->>'title'='Question validation check'",
+    )
+  ).rows[0].published;
+  assert.equal(questionEvent.surveyQuestions.length, 2);
+  assert.equal(questionEvent.surveyQuestions[1].label, 'Your contact email');
+  assert.equal(questionEvent.surveyQuestions[1].type, 'email');
   assert.deepEqual(errors, []);
   console.log(
     'Passed: four event types, fixed Studio design and office-only logo, workshop entry, private image preview, persistence, publish, public refresh, safe rendering, conflict recovery, archived editing, reload, restore as draft, preserved RSVPs/images, republish, unpublish, sign-out, and mobile layouts.',

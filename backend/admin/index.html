@@ -402,35 +402,80 @@
                 </fieldset>
                 <fieldset class="editor-section">
                   <legend><span>03</span> Tell the story</legend>
-                  <label
+                  <p class="hint">
+                    Choose the sections to include. You can select more than
+                    one.
+                  </p>
+                  <div
+                    id="event-story-sections"
+                    role="group"
+                    aria-label="Story sections"
+                  >
+                    <button
+                      type="button"
+                      data-story-section="summary"
+                      aria-pressed="true"
+                    >
+                      Description
+                    </button>
+                    <button
+                      type="button"
+                      data-story-section="targetAudience"
+                      aria-pressed="false"
+                    >
+                      Who is this for?
+                    </button>
+                    <button
+                      type="button"
+                      data-story-section="learningOutcomes"
+                      aria-pressed="false"
+                    >
+                      Learning outcomes
+                    </button>
+                    <button
+                      type="button"
+                      data-story-section="agenda"
+                      aria-pressed="false"
+                    >
+                      Agenda
+                    </button>
+                    <button
+                      type="button"
+                      data-story-section="preparation"
+                      aria-pressed="false"
+                    >
+                      What to bring or prepare
+                    </button>
+                  </div>
+                  <label data-story-field="summary"
                     >Description<textarea
                       name="summary"
                       maxlength="3000"
                       rows="5"
                     ></textarea>
                   </label>
-                  <label
+                  <label data-story-field="targetAudience"
                     >Who is this for?<textarea
                       name="targetAudience"
                       maxlength="1000"
                       rows="2"
                     ></textarea>
                   </label>
-                  <label
+                  <label data-story-field="learningOutcomes"
                     >Learning outcomes<textarea
                       name="learningOutcomes"
                       rows="5"
                       placeholder="One outcome per line"
                     ></textarea>
                   </label>
-                  <label
+                  <label data-story-field="agenda"
                     >Agenda<textarea
                       name="agenda"
                       rows="4"
                       placeholder="One item per line"
                     ></textarea>
                   </label>
-                  <label
+                  <label data-story-field="preparation"
                     >What to bring or prepare<textarea
                       name="preparation"
                       rows="3"

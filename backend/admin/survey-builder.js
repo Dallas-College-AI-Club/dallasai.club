@@ -4,6 +4,26 @@ import { surveyTrial } from './survey-trial.js';
 import { choiceEditor } from './survey-choices.js';
 import { availabilityDateEditor } from '../surveys/availability-ui.js';
 import { drafts } from './session.js';
+const answerTypes = [
+  ['short', 'Short answer', 'Students enter a few words, such as a name.'],
+  ['text', 'Long answer', 'Students write a detailed answer in a text box.'],
+  ['single', 'Single choice', 'Students select one of the choices you add.'],
+  ['multiple', 'Multiple choice', 'Students can select more than one choice.'],
+  ['date', 'Date', 'Students choose one calendar date.'],
+  ['time', 'Time', 'Students choose a time, such as 6:30 PM.'],
+  ['number', 'Number', 'Students enter a number, such as 2 guests.'],
+  [
+    'email',
+    'Email',
+    'Students enter an email address, such as name@example.edu.',
+  ],
+  [
+    'availability',
+    'Date availability',
+    'Students mark the dates and time periods that work for them.',
+  ],
+  ['scale', 'Rating: 1 to 5', 'Students select a rating from 1 to 5.'],
+];
 const audienceNames = {
   students: 'Dallas College students',
   staff: 'Dallas College staff',
@@ -387,34 +407,23 @@ export function mountSurveyBuilder(root, api, onDone, id, eventId, copyId) {
         help.append(textarea);
         card.append(help);
         card.append(
-          select(
-            'Answer type',
-            q.type,
-            [
-              ['text', 'Written answer'],
-              ['short', 'Short answer'],
-              ['single', 'Choose one'],
-              ['multiple', 'Choose several'],
-              ['scale', 'Rating: 1 to 5'],
-              ['date', 'Calendar date'],
-              ['time', 'Time of day'],
-              ['number', 'Number'],
-              ['email', 'Email address'],
-              ['availability', 'Date availability'],
-            ],
-            (v) => {
-              q.type = v;
-              if (v !== 'multiple') delete q.exclusiveOption;
-              if (!['single', 'multiple'].includes(v)) delete q.choiceDate;
-              if (v === 'availability') q.dates ||= [];
-              else delete q.dates;
-              q.options = ['single', 'multiple', 'availability'].includes(v)
-                ? q.options.length
-                  ? q.options
-                  : ['', '']
-                : [];
-              render();
-            },
+          select('Answer type', q.type, answerTypes, (v) => {
+            q.type = v;
+            if (v !== 'multiple') delete q.exclusiveOption;
+            if (!['single', 'multiple'].includes(v)) delete q.choiceDate;
+            if (v === 'availability') q.dates ||= [];
+            else delete q.dates;
+            q.options = ['single', 'multiple', 'availability'].includes(v)
+              ? q.options.length
+                ? q.options
+                : ['', '']
+              : [];
+            render();
+          }),
+          node(
+            'p',
+            answerTypes.find(([value]) => value === q.type)?.[2],
+            'hint',
           ),
         );
         const required = node('label', undefined, 'builder-check'),
@@ -525,18 +534,8 @@ export function mountSurveyBuilder(root, api, onDone, id, eventId, copyId) {
           node('p', q.description),
           node(
             'p',
-            {
-              text: 'Written answer',
-              short: 'Short answer',
-              single: 'Choose one',
-              multiple: 'Choose several',
-              scale: 'Rating from 1 to 5',
-              date: 'Calendar date',
-              time: 'Time of day',
-              number: 'Number',
-              email: 'Email address',
-              availability: 'Date availability',
-            }[q.type] + (q.required ? ' · Required' : ' · Optional'),
+            answerTypes.find(([value]) => value === q.type)?.[1] +
+              (q.required ? ' · Required' : ' · Optional'),
           ),
         );
         if (q.type === 'availability')

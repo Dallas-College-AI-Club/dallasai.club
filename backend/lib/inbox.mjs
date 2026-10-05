@@ -188,11 +188,23 @@ export async function reviewMany(db, body, actor) {
   if (new Set(ids).size !== ids.length)
     throw new RequestError(400, 'Invalid update.');
   return db.transaction(async (tx) => {
+    const events = (
+      await tx.query(
+        "SELECT DISTINCT coalesce((SELECT event_id FROM club_forms.survey_responses WHERE entry_id=e.id),e.data->>'eventId') AS id FROM club_forms.entries e WHERE id=ANY($1::uuid[]) AND kind='rsvp' ORDER BY id",
+        [ids],
+      )
+    ).rows;
+    for (const event of events)
+      await tx.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended('event-rsvp:' || $1,0))",
+        [event.id],
+      );
     const changed = new Set(
       (
         await tx.query(
           `WITH input AS (SELECT * FROM unnest($1::uuid[],$2::text[]) AS i(id,from_status)),
-          updated AS (UPDATE club_forms.entries e SET review_status=$3 FROM input i WHERE e.id=i.id AND (i.from_status IS NULL OR e.review_status=i.from_status) AND e.review_status<>$3 RETURNING e.id),
+          updated AS (UPDATE club_forms.entries e SET review_status=$3 FROM input i WHERE e.id=i.id AND (i.from_status IS NULL OR e.review_status=i.from_status) AND e.review_status<>$3
+            AND NOT(e.kind='rsvp' AND EXISTS(SELECT 1 FROM club_forms.events v WHERE v.id=coalesce((SELECT event_id FROM club_forms.survey_responses WHERE entry_id=e.id),e.data->>'eventId') AND v.rsvp_survey_status<>'active')) RETURNING e.id),
           logged AS (INSERT INTO club_forms.audit(actor,entry_id,action) SELECT $4,id,$5 FROM updated)
           SELECT id FROM updated`,
           [
@@ -209,7 +221,8 @@ export async function reviewMany(db, body, actor) {
     const current = others.length
       ? (
           await tx.query(
-            `SELECT i.id,e.review_status AS status,a.actor,a.created_at AS at
+            `SELECT i.id,e.review_status AS status,a.actor,a.created_at AS at,
+            EXISTS(SELECT 1 FROM club_forms.events v WHERE e.kind='rsvp' AND v.id=coalesce((SELECT event_id FROM club_forms.survey_responses WHERE entry_id=e.id),e.data->>'eventId') AND v.rsvp_survey_status<>'active') AS rsvp_survey_archived
             FROM unnest($1::uuid[]) WITH ORDINALITY AS i(id,n)
             LEFT JOIN club_forms.entries e ON e.id=i.id
             LEFT JOIN LATERAL (SELECT actor,created_at FROM club_forms.audit WHERE entry_id=i.id AND (action LIKE 'review:%' OR action='resubmitted') ORDER BY id DESC LIMIT 1) a ON true
@@ -220,12 +233,15 @@ export async function reviewMany(db, body, actor) {
       : [];
     const from = new Map(ids.map((id, n) => [id, items[n].from ?? null]));
     const same = (row) =>
+      !row.rsvp_survey_archived &&
       row.status === body.status &&
       [null, body.status].includes(from.get(row.id));
     return {
       saved: ids.filter((id) => changed.has(id)),
       unchanged: current.filter(same).map((row) => row.id),
-      skipped: current.filter((row) => !same(row)),
+      skipped: current
+        .filter((row) => !same(row))
+        .map(({ rsvp_survey_archived, ...row }) => row),
     };
   });
 }
@@ -246,9 +262,21 @@ export async function reviewKinds(db, body, actor) {
     throw new RequestError(400, 'Invalid update.');
   const kinds = [...new Set(body.kinds)];
   return db.transaction(async (tx) => {
+    const events = (
+      await tx.query(
+        "SELECT DISTINCT coalesce((SELECT event_id FROM club_forms.survey_responses WHERE entry_id=e.id),e.data->>'eventId') AS id FROM club_forms.entries e WHERE kind='rsvp' AND kind=ANY($1::text[]) AND review_status=$2 AND created_at<=least($3::timestamptz,now()) ORDER BY id",
+        [kinds, body.from, body.before],
+      )
+    ).rows;
+    for (const event of events)
+      await tx.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended('event-rsvp:' || $1,0))",
+        [event.id],
+      );
     const saved = (
       await tx.query(
-        `WITH picked AS (SELECT id FROM club_forms.entries WHERE kind=ANY($1::text[]) AND review_status=$2 AND created_at<=least($4::timestamptz,now()) ORDER BY created_at,id LIMIT 500),
+        `WITH picked AS (SELECT e.id FROM club_forms.entries e WHERE kind=ANY($1::text[]) AND review_status=$2 AND created_at<=least($4::timestamptz,now())
+          AND NOT(e.kind='rsvp' AND EXISTS(SELECT 1 FROM club_forms.events v WHERE v.id=coalesce((SELECT event_id FROM club_forms.survey_responses WHERE entry_id=e.id),e.data->>'eventId') AND v.rsvp_survey_status<>'active')) ORDER BY created_at,id LIMIT 500),
         updated AS (UPDATE club_forms.entries e SET review_status=$3 FROM picked p WHERE e.id=p.id AND e.review_status=$2 RETURNING e.id,e.created_at),
         logged AS (INSERT INTO club_forms.audit(actor,entry_id,action) SELECT $5,id,$6 FROM updated)
         SELECT id FROM updated ORDER BY created_at,id`,
@@ -264,7 +292,7 @@ export async function reviewKinds(db, body, actor) {
     ).rows.map((row) => row.id);
     const more = (
       await tx.query(
-        'SELECT EXISTS(SELECT 1 FROM club_forms.entries WHERE kind=ANY($1::text[]) AND review_status=$2 AND created_at<=least($3::timestamptz,now())) AS more',
+        "SELECT EXISTS(SELECT 1 FROM club_forms.entries e WHERE kind=ANY($1::text[]) AND review_status=$2 AND created_at<=least($3::timestamptz,now()) AND NOT(e.kind='rsvp' AND EXISTS(SELECT 1 FROM club_forms.events v WHERE v.id=coalesce((SELECT event_id FROM club_forms.survey_responses WHERE entry_id=e.id),e.data->>'eventId') AND v.rsvp_survey_status<>'active'))) AS more",
         [kinds, body.from, body.before],
       )
     ).rows[0].more;

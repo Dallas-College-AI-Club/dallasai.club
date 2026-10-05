@@ -21,7 +21,9 @@ controls. Other sign-in provider errors retain their message.
 
 Open **Club office → Surveys → All surveys**. Search by survey title and use
 **Collection** to show all surveys, event feedback, or standalone custom surveys.
-Drafts appear first. Expand a survey to read its saved responses in place; linked
+Drafts appear first. **Archive survey** is visible on each row without expanding it.
+Use **Archived surveys** to jump to the archived rows and restore or permanently
+delete them. Expand a survey to read its saved responses in place; linked
 event surveys show separate RSVP and feedback sections. **Event surveys** also
 groups registrations and linked feedback by event, including past events.
 Officers can expand or collapse answers, compile summaries, export matching CSV,
@@ -74,8 +76,13 @@ with results visible only to admins; officers can restrict access before publish
 Save a new event draft before creating its feedback survey. Linked surveys appear in
 the event overview and in Custom surveys automatically.
 
-RSVP questions collect answers during registration and share the event's publication
-state. Feedback surveys have their own publication, expiration, answering link and QR
+RSVP questions collect answers during registration. Archive an RSVP survey from
+**All surveys** to close registration and move its responses to Archived while
+keeping the event on the calendar. Restore keeps registration closed until an officer
+enables it in the event editor. Deleting an archived RSVP survey removes its RSVP
+submissions and answers; the event, separate feedback surveys, contacts and contact
+notes remain. The deleted survey stays closed even if the event is edited again.
+Feedback surveys have their own publication, expiration, answering link and QR
 code. Publishing feedback does not register anyone for the event. After publishing,
 use **QR code → Download QR** to save a scannable SVG. The QR is generated locally and
 contains the same sharing link as **Copy link**; respondents still verify their email.

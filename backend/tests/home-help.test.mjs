@@ -169,6 +169,25 @@ test('Home groups active RSVPs by event, archived and cancelled ones left out', 
   assert.equal(home.user, officer);
 });
 
+test('Home excludes archived and deleted RSVP parents from new groups and next or potential event totals', async () => {
+  for (const [id, status] of [
+    ['next', 'archived'],
+    ['maybe', 'deleted'],
+  ]) {
+    await db.query(
+      `INSERT INTO club_forms.events(id,draft,published,revision,published_revision,updated_by,rsvp_survey_status)
+      VALUES($1,'{"title":"Published event"}','{"title":"Published event"}',1,1,$2,$3)`,
+      [id, officer, status],
+    );
+    await rsvp(id);
+  }
+  const home = await get('?home=1');
+  assert.deepEqual(home.rsvpGroups, []);
+  assert.equal(home.nextEvent.rsvps, 0);
+  assert.equal(home.potential.find((event) => event.id === 'maybe').rsvps, 0);
+  assert.equal(home.counts.find((row) => row.kind === 'rsvp').new, 0);
+});
+
 test('Home: newest New submissions, next dated event, potential events, drafts and the open survey', async () => {
   await insert({ data: { subject: 'Is the workshop beginner friendly?' } });
   await insert({
@@ -248,6 +267,67 @@ test('Home: newest New submissions, next dated event, potential events, drafts a
   );
   assert.equal(home.survey.title, 'Advisor Studio');
   assert.equal(home.survey.responses, 2);
+});
+
+test('Home survey tile selects open surveys with published events while keeping draft responses and event work', async () => {
+  const legacy = randomUUID();
+  await db.query(
+    `INSERT INTO club_forms.custom_surveys(id,slug,title,content_version,status,link_digest,expires_at,created_at)
+    VALUES($1,'legacy-home','Legacy published survey','1','open','digest',now()+interval '30 days',now()-interval '1 day')`,
+    [legacy],
+  );
+  await db.query(
+    `INSERT INTO club_forms.events(id,draft,published,revision,published_revision,updated_by,archived_at)
+    VALUES('draft-feedback','{"title":"Draft feedback event"}',NULL,1,0,$1,NULL),
+    ('archived-feedback','{"title":"Archived feedback event"}',NULL,1,1,$1,now())`,
+    [officer],
+  );
+  for (const [slug, status, eventId, expired] of [
+    ['draft-home', 'draft', null, false],
+    ['closed-home', 'closed', null, false],
+    ['archived-home', 'archived', null, false],
+    ['expired-home', 'open', null, true],
+    ['unpublished-feedback-home', 'open', 'draft-feedback', false],
+    ['archived-feedback-home', 'open', 'archived-feedback', false],
+    ['missing-feedback-home', 'open', 'missing-event', false],
+  ]) {
+    const id = randomUUID();
+    await db.query(
+      `INSERT INTO club_forms.custom_surveys(id,slug,title,content_version,status,link_digest,expires_at,definition)
+      VALUES($1,$2,$2,'1',$3,$1::uuid::text,now()+($4::int*interval '1 day'),$5)`,
+      [
+        id,
+        slug,
+        status,
+        expired ? -1 : 30,
+        JSON.stringify(eventId ? { eventId } : {}),
+      ],
+    );
+    if (status === 'draft') {
+      await db.query(
+        `INSERT INTO club_forms.custom_survey_members(survey_id,advisor_id,display_name,email) VALUES($1,'saved-draft','Saved draft respondent','draft@example.edu')`,
+        [id],
+      );
+      await db.query(
+        `INSERT INTO club_forms.custom_survey_responses(survey_id,advisor_id,revision,responses) VALUES($1,'saved-draft',1,'[{"id":"q1","value":"yes"}]')`,
+        [id],
+      );
+    }
+    assert.equal((await get('?home=1')).survey.id, legacy, slug);
+  }
+  const home = await get('?home=1');
+  assert.ok(
+    home.newest.some((entry) => entry.name === 'Saved draft respondent'),
+  );
+  assert.equal(home.counts.find((row) => row.kind === 'survey').new, 1);
+  assert.ok(home.unpublished.some((event) => event.id === 'draft-feedback'));
+  const linked = randomUUID();
+  await db.query(
+    `INSERT INTO club_forms.custom_surveys(id,slug,title,content_version,status,link_digest,expires_at,definition)
+    VALUES($1,'published-feedback-home','Published feedback','1','open',$1::uuid::text,now()+interval '30 days','{"eventId":"next"}')`,
+    [linked],
+  );
+  assert.equal((await get('?home=1')).survey.id, linked);
 });
 
 test('potential event counts include reviewed RSVPs and zero-response events without counting closed or cancelled responses', async () => {

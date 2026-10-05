@@ -16,12 +16,12 @@ export async function homeSummary(db, published, upcoming) {
   // Count active RSVPs once for review groups and confirmed/potential events.
   const rsvpTotals = (
     await db.query(
-      `SELECT data->>'eventId' AS id,
+      `${inboxSource} SELECT data->>'eventId' AS id,
         (array_agg(data->>'eventTitle' ORDER BY created_at DESC))[1] AS title,
         (array_agg(data->>'eventDate' ORDER BY created_at DESC))[1] AS date,
         count(*) FILTER (WHERE state<>'cancelled')::int AS total,
         count(*) FILTER (WHERE state<>'cancelled' AND created_at>=now()-interval '14 days')::int AS new
-      FROM club_forms.entries WHERE kind='rsvp' AND review_status<>'closed' AND data->>'eventId' IS NOT NULL
+      FROM inbox_rows WHERE kind='rsvp' AND review_status<>'closed' AND data->>'eventId' IS NOT NULL
       GROUP BY 1`,
     )
   ).rows.map((group) => ({
@@ -83,7 +83,13 @@ export async function homeSummary(db, published, upcoming) {
         LEFT JOIN club_forms.custom_survey_members m ON m.survey_id=s.id
         LEFT JOIN club_forms.custom_survey_responses r ON r.survey_id=m.survey_id AND r.advisor_id=m.advisor_id
         WHERE s.status='open' AND s.expires_at>now()
+          AND (coalesce(s.definition->>'eventId','')='' OR s.definition->>'eventId'=ANY($1::text[]))
         GROUP BY s.id ORDER BY s.created_at DESC,s.id LIMIT 1`,
+        [
+          published
+            .filter((event) => !event.archived_at && event.live !== false)
+            .map((event) => event.id),
+        ],
       )
     ).rows[0] || null;
   // Event surveys archives individual feedback by membership, independently

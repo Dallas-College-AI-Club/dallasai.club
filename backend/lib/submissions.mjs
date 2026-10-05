@@ -76,7 +76,7 @@ async function recordWithdrawalRequest(tx, row) {
   );
 }
 export async function submit(db, body, events, storage = { put, del }) {
-  const input = validate(body, events);
+  let input = validate(body, events);
   const id = randomUUID();
   const stored = [];
   const existing = await db.query(
@@ -112,6 +112,31 @@ export async function submit(db, body, events, storage = { put, del }) {
   let inserted = false;
   try {
     const entry = await db.transaction(async (tx) => {
+      if (input.kind === 'rsvp') {
+        // The same lock covers legacy events without a stored row, too.
+        await tx.query(
+          "SELECT pg_advisory_xact_lock(hashtextextended('event-rsvp:' || $1,0))",
+          [input.data.eventId],
+        );
+        const event = (
+          await tx.query(
+            'SELECT published,archived_at,rsvp_survey_status FROM club_forms.events WHERE id=$1 FOR SHARE',
+            [input.data.eventId],
+          )
+        ).rows[0];
+        if (event) {
+          if (
+            !event.published ||
+            event.archived_at ||
+            event.rsvp_survey_status !== 'active'
+          )
+            throw new RequestError(
+              409,
+              'Registration for this event is unavailable.',
+            );
+          input = validate(body, [event.published]);
+        }
+      }
       const result = await tx.query(
         `INSERT INTO club_forms.entries(id,kind,email,name,data,dedupe_key,state)
         VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(dedupe_key) DO NOTHING RETURNING *`,

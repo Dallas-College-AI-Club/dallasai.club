@@ -93,12 +93,16 @@ export function adminHandler({
               `SELECT e.*,(SELECT row_to_json(s) FROM club_forms.survey_responses s WHERE s.entry_id=e.id) AS survey,
               (SELECT COALESCE(json_agg(json_build_object('id',a.id,'name',a.name,'size',a.size)),'[]') FROM club_forms.attachments a WHERE a.entry_id=e.id) AS attachments,
               (SELECT json_build_object('starred',m.starred,'archived_at',m.archived_at,'updated_by',m.updated_by,'updated_at',m.updated_at) FROM club_forms.survey_response_state m WHERE m.entry_id=e.id) AS survey_state
+              ,EXISTS(SELECT 1 FROM club_forms.events v WHERE e.kind='rsvp' AND v.id=coalesce((SELECT event_id FROM club_forms.survey_responses WHERE entry_id=e.id),e.data->>'eventId') AND v.rsvp_survey_status<>'active') AS rsvp_survey_archived
               FROM club_forms.entries e WHERE e.id=$1`,
               [id],
             )
           ).rows[0];
           if (!row) throw new RequestError(404, 'Submission not found.');
-          const { attachments, survey_state, ...entry } = row;
+          const { attachments, survey_state, rsvp_survey_archived, ...entry } =
+            row;
+          if (rsvp_survey_archived)
+            entry.data = { ...entry.data, rsvpSurveyArchived: true };
           return send(res, 200, {
             entry,
             attachments,
@@ -422,6 +426,29 @@ export function adminHandler({
         throw new RequestError(400, 'Invalid update.');
       // An optional note and the status change commit together or not at all.
       const comment = await db.transaction(async (tx) => {
+        const eventId = (
+          await tx.query(
+            "SELECT coalesce((SELECT event_id FROM club_forms.survey_responses WHERE entry_id=e.id),e.data->>'eventId') AS id FROM club_forms.entries e WHERE e.id=$1 AND kind='rsvp'",
+            [body.id],
+          )
+        ).rows[0]?.id;
+        if (eventId) {
+          await tx.query(
+            "SELECT pg_advisory_xact_lock(hashtextextended('event-rsvp:' || $1,0))",
+            [eventId],
+          );
+          const event = (
+            await tx.query(
+              'SELECT rsvp_survey_status FROM club_forms.events WHERE id=$1',
+              [eventId],
+            )
+          ).rows[0];
+          if (event && event.rsvp_survey_status !== 'active')
+            throw new RequestError(
+              409,
+              'Restore the RSVP survey before changing its submission archive status.',
+            );
+        }
         const saved =
           body.comment != null
             ? await insertSubmissionComment(

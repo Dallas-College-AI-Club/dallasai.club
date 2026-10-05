@@ -471,6 +471,12 @@ export function mountSurveyResults(
         }),
       );
     remove.classList.add('danger');
+    const manageSurvey = node(
+      'a',
+      'Manage archived RSVP survey',
+      'button-link',
+    );
+    manageSurvey.href = '#/surveys';
     actions.append(
       mark,
       archive,
@@ -479,6 +485,7 @@ export function mountSurveyResults(
         editor.open(response.entry_id, { surface: 'survey' }),
       ),
       remove,
+      manageSurvey,
     );
     el.patch = (next) => {
       response = next;
@@ -490,7 +497,9 @@ export function mountSurveyResults(
       mark.textContent = response.starred ? '★ Unstar' : '☆ Star';
       mark.setAttribute('aria-pressed', String(response.starred));
       archive.textContent = response.archived_at ? 'Restore' : 'Archive';
-      remove.hidden = !response.archived_at;
+      archive.hidden = Boolean(response.rsvp_survey_archived);
+      remove.hidden = !response.archived_at || response.rsvp_survey_archived;
+      manageSurvey.hidden = !response.rsvp_survey_archived;
       attendanceValue.value = response.attendance || 'not_recorded';
       const attendanceText = {
         not_recorded: 'Not recorded',
@@ -836,11 +845,12 @@ export function mountSurveyResults(
       eventId = options.eventId || '',
       followupOnly = false,
       responseType = '',
+      responseView = '',
     ) {
       entryId = id;
       offset = 0;
       search.value = '';
-      view.value = id ? 'all' : 'active';
+      view.value = responseView || (id ? 'all' : 'active');
       star.checked = false;
       attendance.value = 'all';
       feedback.value = 'all';

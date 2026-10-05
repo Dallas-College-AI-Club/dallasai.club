@@ -1,6 +1,12 @@
 // One read-only source keeps survey responses in the same Inbox pages/counts.
 export const inboxSource = `WITH inbox_rows AS (
-  SELECT e.*,'entry'::text AS source FROM club_forms.entries e
+  SELECT (jsonb_populate_record(NULL::club_forms.entries,to_jsonb(e) ||
+    CASE WHEN e.kind='rsvp' AND v.rsvp_survey_status<>'active'
+      THEN jsonb_build_object('review_status','closed','data',e.data || jsonb_build_object('rsvpSurveyArchived',true))
+      ELSE '{}'::jsonb END)).*,'entry'::text AS source
+  FROM club_forms.entries e
+  LEFT JOIN club_forms.survey_responses sr ON e.kind='rsvp' AND sr.entry_id=e.id
+  LEFT JOIN club_forms.events v ON e.kind='rsvp' AND v.id=coalesce(sr.event_id,e.data->>'eventId')
   UNION ALL
   SELECT (jsonb_populate_record(NULL::club_forms.entries,jsonb_build_object(
     'id',overlay(overlay(md5('custom-survey:'||s.id::text||':'||m.advisor_id) placing '4' from 13) placing '8' from 17)::uuid,

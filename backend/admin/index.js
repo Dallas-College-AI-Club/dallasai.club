@@ -207,7 +207,10 @@ function renderEntry(entry) {
   const details = node('details');
   details.append(node('summary', 'Submission details'));
   for (const [key, value] of Object.entries(entry.data)) {
-    if (['hasSurvey', 'potential', 'eventId'].includes(key)) continue;
+    if (
+      ['hasSurvey', 'potential', 'eventId', 'rsvpSurveyArchived'].includes(key)
+    )
+      continue;
     details.append(
       node('strong', fieldLabel(key)),
       node('pre', key === 'eventDate' ? day(value) : String(value)),
@@ -224,7 +227,7 @@ function renderEntry(entry) {
   card.append(details);
   const actions = node('div', undefined, 'entry-actions');
   actions.append(button('Edit response', () => responses.open(entry.id), ''));
-  if (entry.review_status === 'closed')
+  if (entry.review_status === 'closed' && !entry.data.rsvpSurveyArchived)
     actions.append(
       button(
         'Delete permanently',
@@ -240,11 +243,16 @@ function renderEntry(entry) {
       ? [['new', 'Restore submission', 'Save note & restore']]
       : []),
   ])
-    if (value !== entry.review_status) {
+    if (value !== entry.review_status && !entry.data.rsvpSurveyArchived) {
       const b = button(label, () => review(card, entry, value), '');
       statusButtons.push([b, label, withNote]);
       actions.append(b);
     }
+  if (entry.data.rsvpSurveyArchived) {
+    const manage = node('a', 'Manage archived RSVP survey', 'button-link');
+    manage.href = '#/surveys';
+    actions.append(manage);
+  }
   const relabel = () => {
     const note = drafts.get('note:' + entry.id);
     for (const [b, label, withNote] of statusButtons)
@@ -1090,7 +1098,9 @@ const sections = {
           ':' +
           (route.query.followup || '') +
           ':' +
-          (route.query.type || '');
+          (route.query.type || '') +
+          ':' +
+          (route.query.view || '');
       if (shownEntry === key) return;
       shownEntry = key;
       surveys.show(
@@ -1098,6 +1108,7 @@ const sections = {
         event,
         route.query.followup === '1',
         route.query.type || '',
+        route.query.view || '',
       );
     },
     // Leaving a custom survey asks its unsaved builder first.

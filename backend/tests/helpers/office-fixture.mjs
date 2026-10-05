@@ -105,6 +105,7 @@ export async function officeFixture() {
     getEvents: () => liveEvents(db, []),
   });
   const surveys = surveysHandler({
+    getOriginalEvents: async () => [],
     authorize,
     getDatabase: () => db,
   });

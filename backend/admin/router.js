@@ -7,7 +7,13 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
   slug = /^[a-z0-9][a-z0-9-]{0,99}$/;
 // The values each query key may take; anything else is dropped.
 const queries = {
-  surveys: { event: slug, copy: uuid, followup: ['1'], type: ['feedback'] },
+  surveys: {
+    event: slug,
+    copy: uuid,
+    followup: ['1'],
+    type: ['feedback'],
+    view: ['archived'],
+  },
   inbox: {
     status: [
       'current',

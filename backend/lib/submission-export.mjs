@@ -38,6 +38,7 @@ const knownFields = new Set([
   'expiresAt',
   'memberActive',
   'surveyArchived',
+  'rsvpSurveyArchived',
 ]);
 export const received = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/Chicago',

@@ -1,5 +1,5 @@
 import { coladdeMark } from '../app/coladde.js';
-import { GAMES } from './registry.js';
+import { GAMES, COMMUNITY_GAMES } from './registry.js';
 import { readArcade } from '../storage/games.js';
 import { readRun } from '../storage/drive.js';
 export function arcadeHeader(title) {
@@ -27,33 +27,33 @@ export function mountHub(root, { open }) {
         </div>
       </section>
       <div class="game-library">
-        ${GAMES.map((g, i) => {
+        ${[...COMMUNITY_GAMES, ...GAMES].map((g, i) => {
           const saved = g.id === 'explore' ? drive : saves.games[g.id]?.state,
-            canResume = saved && saved.phase !== 'over' && saved.phase !== 'ready';
-          return /* HTML */ `<article class="game-card" style="--game-accent:${g.accent}">
+            canResume = saved && saved.phase !== 'over' && saved.phase !== 'ready',
+            link = g.href
+              ? `href="${g.href}" target="_blank" rel="noopener noreferrer"`
+              : `href="club.html?mode=${g.id}" data-game="${g.id}"`;
+          return /* HTML */ `<article class="game-card${g.load ? ' game-card-compact' : ''}" style="--game-accent:${g.accent}">
             <a
               class="game-cover ${g.type}-cover"
-              href="club.html?mode=${g.id}"
-              data-game="${g.id}"
-              aria-label="${canResume ? 'Continue' : 'Play'} ${g.title}"
-              >${g.cover ? /* HTML */ `<img src="${g.cover}" alt="A drive through the Dallas campus world" />` : /* HTML */ `<canvas width="768" height="512" data-cover="${g.id}" aria-hidden="true"></canvas>`}<span
+              ${link}
+              aria-label="${canResume ? 'Continue' : 'Play'} ${g.title}${g.href ? ' (opens in a new tab)' : ''}"
+              >${g.cover ? /* HTML */ `<img src="${g.cover}" alt="${g.coverAlt || 'A drive through the Dallas campus world'}" />` : /* HTML */ `<canvas width="768" height="512" data-cover="${g.id}" aria-hidden="true"></canvas>`}<span
                 class="cover-number"
                 >0${i + 1}</span
               ><span class="cover-play" aria-hidden="true">↗</span
               ><span class="cover-type"
-                >${g.type === 'drive' ? '3D WORLD' : 'RETRO ORIGINAL'}</span
+                >${g.coverLabel || (g.href ? 'COMMUNITY GAME' : g.type === 'drive' ? '3D WORLD' : 'RETRO ORIGINAL')}</span
               ></a
             >
             <div class="game-info">
               <span class="arcade-kicker">${g.genre}</span>
-              <h2>${g.title}</h2>
+              ${g.load ? /* HTML */ `<div class="game-card-heading"><h2>${g.title}</h2><a class="game-card-play" ${link}>${canResume ? 'Continue' : 'Play'} ↗</a></div>` : /* HTML */ `<h2>${g.title}</h2>`}
               ${g.load ? '<span class="game-wip">Work in progress</span>' : ''}
-              <p>${g.description}</p>
+              ${!g.load ? /* HTML */ `<p>${g.description}</p>` : ''}
               <div class="game-card-bottom">
                 <span>${g.controls}</span
-                ><a href="club.html?mode=${g.id}" data-game="${g.id}"
-                  >${canResume ? 'Continue' : 'Play'} ↗</a
-                >
+                >${!g.load ? /* HTML */ `<a ${link}>${canResume ? 'Continue' : 'Play'} ↗</a>` : ''}
               </div>
               ${saves.games[g.id]?.best ? /* HTML */ `<small class="game-personal-best">Personal best · ${saves.games[g.id].best} points</small>` : ''}
             </div>

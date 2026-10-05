@@ -7,7 +7,7 @@ export const GAMES = [
     description: 'Seven campuses. A city full of discoveries.',
     accent: '#afd0bb',
     type: 'drive',
-    controls: 'Keyboard · Touch joystick',
+    controls: 'By Astra-6 & Minjoo Kim',
     cover: 'assets/dallas-drive-cover.jpg',
     load: null,
   },
@@ -51,3 +51,21 @@ export const GAMES = [
   },
 ];
 export const gameById = (id) => GAMES.find((g) => g.id === id);
+
+// Community games open on their creators' sites, outside the player and rankings.
+export const COMMUNITY_GAMES = [
+  {
+    id: 'swarm',
+    title: 'SWARM — The War Council',
+    genre: 'AI STRATEGY',
+    description:
+      'Command five AI agents and watch them reconcile conflicting decisions on the battlefield.',
+    accent: '#e8cd78',
+    type: 'community',
+    controls: 'By Timothy Chan',
+    cover: 'assets/swarm-cover.jpg',
+    coverAlt: 'SWARM — The War Council title screen',
+    coverLabel: 'Inspired by AWS Agentic Football Cup',
+    href: 'https://tjchan001.github.io/DallasCollegeAISwarm/',
+  },
+];

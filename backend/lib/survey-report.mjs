@@ -53,7 +53,7 @@ export async function reportRows(db, filter = {}) {
   if (type !== 'rsvp') {
     const feedback = (
       await db.query(
-        `SELECT cs.id AS survey_id,cs.title AS survey_title,cs.content_version,cs.definition,
+        `SELECT cs.id AS survey_id,cs.title AS survey_title,coalesce(cr.response_definition->>'content_version',cs.content_version) AS content_version,coalesce(cr.response_definition,cs.definition) AS definition,
         s.event_id,coalesce(ev.published->>'title',ev.draft->>'title',registered.event_title,s.event_id) AS event_title,
         coalesce(ev.published->>'date',ev.draft->>'date',registered.event_date,'') AS event_date,
         e.name,e.email,cr.responses,cr.submitted_at AS created_at,m.archived_at,false AS starred,
@@ -69,7 +69,7 @@ export async function reportRows(db, filter = {}) {
        LEFT JOIN LATERAL (SELECT event_title,event_date FROM club_forms.survey_responses sr
          WHERE sr.event_id=s.event_id ORDER BY sr.created_at DESC,sr.entry_id LIMIT 1) registered ON true
        ${participationJoins} ${where}
-       AND s.event_id IS NOT NULL AND cs.status<>'draft' AND jsonb_array_length(cr.responses)>0
+       AND s.event_id IS NOT NULL AND (cs.status<>'draft' OR cs.published_at IS NOT NULL) AND jsonb_array_length(cr.responses)>0
        AND ($8='' OR cs.id::text=$8)
        ORDER BY cr.submitted_at DESC,cs.id,cm.advisor_id LIMIT 10001`,
         [...values, surveyId],

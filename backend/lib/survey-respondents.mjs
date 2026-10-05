@@ -45,7 +45,7 @@ export async function changeRespondent(db, actor, body) {
           'requestId',
         ].includes(k),
     ) ||
-    !['add', 'remove'].includes(body.action) ||
+    !['add', 'remove', 'delete'].includes(body.action) ||
     !uuid.test(body.requestId || '') ||
     !Number.isInteger(body.expectedRevision) ||
     body.expectedRevision < 0
@@ -149,6 +149,36 @@ export async function changeRespondent(db, actor, body) {
         );
         action = 'respondent_added';
       }
+    } else if (body.action === 'delete') {
+      member = (
+        await tx.query(
+          `SELECT m.* FROM club_forms.custom_survey_members m
+         WHERE m.survey_id=$1 AND m.advisor_id=$2
+           AND (NOT m.active OR EXISTS(SELECT 1 FROM club_forms.custom_surveys s WHERE s.id=m.survey_id AND s.status='archived'))
+           AND EXISTS(SELECT 1 FROM club_forms.custom_survey_responses r
+             WHERE r.survey_id=m.survey_id AND r.advisor_id=m.advisor_id)
+         FOR UPDATE`,
+          [id, body.advisorId],
+        )
+      ).rows[0];
+      if (!member)
+        throw new RequestError(
+          409,
+          'Only an archived saved response can be permanently deleted.',
+        );
+      await tx.query(
+        'DELETE FROM club_forms.custom_survey_devices WHERE survey_id=$1 AND advisor_id=$2',
+        [id, member.advisor_id],
+      );
+      await tx.query(
+        'DELETE FROM club_forms.custom_survey_receipts WHERE survey_id=$1 AND advisor_id=$2',
+        [id, member.advisor_id],
+      );
+      await tx.query(
+        'DELETE FROM club_forms.custom_survey_responses WHERE survey_id=$1 AND advisor_id=$2',
+        [id, member.advisor_id],
+      );
+      action = 'response_deleted';
     } else {
       member = (
         await tx.query(

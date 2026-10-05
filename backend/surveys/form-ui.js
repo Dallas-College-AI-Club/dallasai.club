@@ -471,7 +471,7 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
       pending ||= {
         requestId: crypto.randomUUID(),
         expectedRevision: revision,
-        contentVersion: 'custom-form/1',
+        contentVersion: bootstrap.definition.content_version || 'custom-form/1',
         advisorId: bootstrap.advisorId,
         consent: welcome.permissions.results,
         answers: definition.questions
@@ -593,7 +593,12 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
         revision = mine?.revision || 0;
         if (!dirty)
           values = Object.fromEntries(
-            (mine?.responses || []).map((a) => [a.id, a.value]),
+            (mine?.response_definition?.content_version &&
+            mine.response_definition.content_version !==
+              definition.content_version
+              ? []
+              : mine?.responses || []
+            ).map((a) => [a.id, a.value]),
           );
         document.querySelector('#who').textContent =
           bootstrap.definition.respondents.find(

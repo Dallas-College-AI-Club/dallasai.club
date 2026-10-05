@@ -5,7 +5,11 @@ import { expiredAdminCookies } from '../lib/admin-session.mjs';
 import { send, fail, jsonBody, limit } from '../lib/http.mjs';
 import { RequestError } from '../lib/errors.mjs';
 import { definition } from '../lib/survey-contract.mjs';
-import { getDraft, changeDraft } from '../lib/survey-builder.mjs';
+import {
+  getDraft,
+  changeDraft,
+  changeSurveyLifecycle,
+} from '../lib/survey-builder.mjs';
 import { surveyCatalog } from '../lib/survey-catalog.mjs';
 import {
   changeSurveyShareLink,
@@ -66,6 +70,19 @@ export function customSurveysHandler({
           },
         });
       }
+      if (action === 'lifecycle') {
+        const actor = await authorize(req);
+        if (req.method !== 'POST') throw new RequestError(405, 'Use POST.');
+        return send(
+          res,
+          200,
+          await changeSurveyLifecycle(
+            getDatabase(),
+            actor,
+            await jsonBody(req, 20000),
+          ),
+        );
+      }
       if (action === 'archived-responses') {
         await authorize(req);
         if (req.method !== 'GET')
@@ -75,10 +92,10 @@ export function customSurveysHandler({
           throw new RequestError(400, 'Choose a valid archive page.');
         const rows = (
           await getDatabase().query(
-            `SELECT s.id AS survey_id,s.title AS survey_title,s.definition,m.advisor_id,m.display_name,m.email,m.active,r.revision,r.responses,r.submitted_at,
+            `SELECT s.id AS survey_id,s.title AS survey_title,s.definition,m.advisor_id,m.display_name,m.email,m.active,r.revision,r.responses,r.submitted_at,r.response_definition,
           (SELECT max(a.created_at) FROM club_forms.custom_survey_activity a WHERE a.survey_id=m.survey_id AND a.advisor_id=m.advisor_id AND a.action='respondent_removed') AS archived_at
           FROM club_forms.custom_survey_members m JOIN club_forms.custom_survey_responses r USING(survey_id,advisor_id) JOIN club_forms.custom_surveys s ON s.id=m.survey_id
-          WHERE NOT m.active AND jsonb_array_length(r.responses)>0 ORDER BY archived_at DESC NULLS LAST,r.submitted_at DESC,s.id,m.advisor_id LIMIT 11 OFFSET $1`,
+          WHERE (NOT m.active OR s.status='archived') AND jsonb_array_length(r.responses)>0 ORDER BY archived_at DESC NULLS LAST,r.submitted_at DESC,s.id,m.advisor_id LIMIT 11 OFFSET $1`,
             [offset],
           )
         ).rows;
@@ -362,6 +379,7 @@ export function customSurveysHandler({
           nextOffset: shared.nextOffset,
           definition: {
             ...(survey.definition || definition),
+            content_version: survey.content_version,
             respondents: members.map((m) => ({
               id: m.advisor_id,
               name: m.display_name,

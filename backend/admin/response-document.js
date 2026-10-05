@@ -7,6 +7,7 @@ import { fullDateTime, isoDay } from './format.js';
 // screen. A builder question the respondent skipped says 'No answer'. The
 // title is the officer's chosen heading.
 export function responseDocument(result, { title, definition }) {
+  definition = result.response_definition || definition;
   const rank = answerRank(definition),
     chapters = definition?.chapters || [],
     answers = [...result.responses];

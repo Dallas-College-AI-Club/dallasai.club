@@ -184,30 +184,22 @@
             <summary id="counts-summary">Counts</summary>
             <div id="counts" class="counts"></div>
           </details>
-          <nav class="event-views inbox-views" aria-label="Submission status">
+          <nav class="event-views inbox-views" aria-label="Inbox view">
             <button
               type="button"
-              data-inbox-status="active"
+              data-inbox-status="current"
               aria-pressed="true"
               aria-controls="entries"
             >
-              Active
+              Upcoming &amp; New
             </button>
             <button
               type="button"
-              data-inbox-status="new"
+              data-inbox-status="past"
               aria-pressed="false"
               aria-controls="entries"
             >
-              New
-            </button>
-            <button
-              type="button"
-              data-inbox-status="reviewed"
-              aria-pressed="false"
-              aria-controls="entries"
-            >
-              Reviewed
+              Past
             </button>
             <button
               type="button"
@@ -216,14 +208,6 @@
               aria-controls="entries"
             >
               Archived
-            </button>
-            <button
-              type="button"
-              data-inbox-status=""
-              aria-pressed="false"
-              aria-controls="entries"
-            >
-              All saved
             </button>
           </nav>
           <form id="filters" class="filters">
@@ -241,6 +225,8 @@
                 <option value="rsvp-all">RSVPs for all events</option>
                 <option value="workshop">Workshops</option>
                 <option value="contribution">Articles</option>
+                <option value="feedback">Event feedback</option>
+                <option value="survey">Custom surveys</option>
               </select></label
             ><label id="event-filter-label" hidden
               >Event<select name="eventId" aria-label="Event">

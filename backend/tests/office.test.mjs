@@ -136,7 +136,7 @@ test('the counts poll returns counts and arrivals, never rows', async () => {
     'user',
   ]);
   assert.equal(first.user, 'admin@example.com');
-  assert.equal(first.newInView, 2);
+  assert.equal(first.newInView, 0); // These historical submissions are outside What's new.
   assert.deepEqual(first.configured, { uploads: true });
   assert.ok(Number.isFinite(Date.parse(first.asOf)));
   assert.equal(Date.parse(first.latest), Date.parse('2026-01-01T01:00:00Z'));
@@ -144,7 +144,7 @@ test('the counts poll returns counts and arrivals, never rows', async () => {
   assert.deepEqual([first.arrived, first.arrivedInView], [0, 0]);
   assert.deepEqual(
     Object.keys(first.counts.find((row) => row.kind === 'join')).sort(),
-    ['closed', 'kind', 'latest', 'new', 'reviewed', 'total'],
+    ['closed', 'current', 'kind', 'latest', 'new', 'past', 'reviewed', 'total'],
   );
   // Two questions and an RSVP arrive after `since`.
   const since = '2026-01-02T00:00:00Z';
@@ -165,7 +165,7 @@ test('the counts poll returns counts and arrivals, never rows', async () => {
   assert.equal(all.arrivedInView, 3);
   assert.equal(all.entries, undefined);
   assert.equal(all.counts.find((row) => row.kind === 'question').total, 3);
-  assert.equal(all.counts.find((row) => row.kind === 'question').new, 3);
+  assert.equal(all.counts.find((row) => row.kind === 'question').new, 0);
   assert.equal(Date.parse(all.latest), Date.parse('2026-01-03T00:02:00Z'));
   // arrivedInView follows the Inbox filters; arrived does not.
   const questions = await poll('&status=new&kind=question');

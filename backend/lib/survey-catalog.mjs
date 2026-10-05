@@ -24,7 +24,7 @@ export async function eventFeedbackLinks(db, eventIds) {
 
 export async function surveyCatalog(db) {
   const { rows } = await db.query(`
-    SELECT s.id,s.title,s.status,s.published_at,s.expires_at,s.content_version,s.link_digest,s.preview_digest,s.short_link,
+    SELECT s.id,s.title,s.status,s.edit_revision,s.published_at,s.expires_at,s.content_version,s.link_digest,s.preview_digest,s.short_link,
       CASE WHEN s.definition IS NULL THEN NULL
         ELSE jsonb_strip_nulls(jsonb_build_object('permissions',s.definition->'permissions','eventId',s.definition->'eventId')) END AS definition,
       count(r.advisor_id) FILTER (WHERE m.active AND jsonb_array_length(r.responses)>0)::int AS response_count,

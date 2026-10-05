@@ -6,6 +6,8 @@ import {
   manageContact,
   contactHistory,
   contactList,
+  addContactNote,
+  submissionContact,
 } from '../lib/contacts.mjs';
 let db;
 const actor = 'officer@example.edu';
@@ -123,8 +125,27 @@ test('new primary email is searchable, retains flags, and prevents stale edits o
   });
   assert.equal((await contactList(db)).contacts.length, 2);
 });
-test('unused aliases can be removed while used aliases, primary addresses and survey access are protected', async () => {
-  await seed('original@example.edu');
+test('removing an address hides it while preserving linked submissions, RSVP answers, notes and survey membership', async () => {
+  const id = await seed('original@example.edu');
+  await db.query(
+    `INSERT INTO club_forms.survey_responses(entry_id,event_id,event_title,survey_version,questions,answers)
+     VALUES($1,'retained-event','Retained RSVP','v1','[]','[]')`,
+    [id],
+  );
+  await addContactNote(
+    db,
+    {
+      email: 'original@example.edu',
+      noteId: randomUUID(),
+      note: 'Keep this note',
+    },
+    actor,
+  );
+  await db.query(
+    `INSERT INTO club_forms.custom_survey_members(survey_id,advisor_id,display_name,email)
+     VALUES($1,'original','Original Advisor','original@example.edu')`,
+    [surveyId],
+  );
   await edit('original@example.edu', 'unused@example.edu');
   await edit('unused@example.edu', 'chosen@example.edu');
   assert.equal(
@@ -132,33 +153,136 @@ test('unused aliases can be removed while used aliases, primary addresses and su
     true,
   );
   assert.equal((await contact('chosen@example.edu')).emails.length, 2);
-  await assert.rejects(contact('unused@example.edu'), { status: 404 });
+  assert.equal(
+    (await contact('unused@example.edu')).email,
+    'chosen@example.edu',
+  );
   assert.ok(
     (await contactHistory(db, { email: 'chosen@example.edu' })).history.some(
       (row) => row.label === 'Contact edited',
     ),
   );
-  await assert.rejects(remove('chosen@example.edu', 'original@example.edu'), {
-    status: 409,
-  });
+  await remove('chosen@example.edu', 'original@example.edu');
+  const current = await contact('chosen@example.edu');
+  assert.deepEqual(current.emails, ['chosen@example.edu']);
+  assert.deepEqual(
+    current.aliases.map((row) => row.email),
+    ['chosen@example.edu'],
+  );
+  assert.equal(current.submissions, 1);
+  assert.equal(current.counts.survey_responses, 1);
+  assert.equal(current.counts.notes, 1);
+  assert.equal(current.counts.addresses, 3);
+  assert.equal(
+    (await contactList(db, { search: 'original@example.edu' })).contacts.length,
+    0,
+  );
+  assert.equal(
+    (await db.query('SELECT email FROM club_forms.entries WHERE id=$1', [id]))
+      .rows[0].email,
+    'original@example.edu',
+  );
+  assert.equal(
+    (
+      await db.query(
+        'SELECT email FROM club_forms.custom_survey_members WHERE survey_id=$1',
+        [surveyId],
+      )
+    ).rows[0].email,
+    'original@example.edu',
+  );
+  assert.equal(
+    (await submissionContact(db, { id, email: 'original@example.edu' })).email,
+    'chosen@example.edu',
+  );
+  assert.equal(
+    (await contactHistory(db, { email: current.email })).history.filter(
+      (row) => row.type === 'submission' || row.type === 'note',
+    ).length,
+    2,
+  );
   await assert.rejects(remove('chosen@example.edu', 'chosen@example.edu'), {
     status: 400,
   });
-  await edit('chosen@example.edu', 'advisor@example.edu');
-  await db.query(
-    `INSERT INTO club_forms.custom_survey_members(survey_id,advisor_id,display_name,email)
-     VALUES($1,'chosen','Chosen Advisor','chosen@example.edu')`,
-    [surveyId],
-  );
-  await assert.rejects(remove('advisor@example.edu', 'chosen@example.edu'), {
+  await assert.rejects(edit(current.email, 'original@example.edu'), {
     status: 409,
   });
-  assert.equal(
-    (await contact('advisor@example.edu')).aliases.find(
-      (row) => row.email === 'chosen@example.edu',
-    ).membership,
-    true,
+  await seed('original@example.edu', 'Submitted later');
+  assert.equal((await contact(current.email)).submissions, 2);
+  assert.deepEqual((await contact(current.email)).emails, [
+    'chosen@example.edu',
+  ]);
+  assert.equal((await contactList(db)).contacts.length, 1);
+  const latest = await contact(current.email);
+  await manageContact(
+    db,
+    {
+      action: 'contact-purge',
+      email: latest.email,
+      revision: latest.revision,
+      counts: latest.counts,
+      confirmEmail: latest.email,
+    },
+    actor,
   );
+  assert.equal(
+    (await db.query('SELECT count(*)::int n FROM club_forms.entries')).rows[0]
+      .n,
+    0,
+  );
+  assert.equal(
+    (await db.query('SELECT count(*)::int n FROM club_forms.survey_responses'))
+      .rows[0].n,
+    0,
+  );
+  assert.equal(
+    (await db.query('SELECT count(*)::int n FROM club_forms.contact_notes'))
+      .rows[0].n,
+    0,
+  );
+  assert.equal(
+    (await db.query('SELECT count(*)::int n FROM club_forms.contact_emails'))
+      .rows[0].n,
+    0,
+  );
+});
+test('address removal rejects stale revisions and rolls back when its audit cannot be saved', async () => {
+  await seed('history@example.edu');
+  await edit('history@example.edu', 'primary@example.edu');
+  const stale = await contact('primary@example.edu');
+  await edit(stale.email, stale.email, 'Updated name');
+  await assert.rejects(
+    manageContact(
+      db,
+      {
+        action: 'contact-remove-alias',
+        email: stale.email,
+        revision: stale.revision,
+        alias: 'history@example.edu',
+      },
+      actor,
+    ),
+    { status: 409 },
+  );
+  const fresh = await contact(stale.email);
+  await assert.rejects(
+    manageContact(
+      db,
+      {
+        action: 'contact-remove-alias',
+        email: fresh.email,
+        revision: fresh.revision,
+        alias: 'history@example.edu',
+      },
+      null,
+    ),
+  );
+  assert.deepEqual((await contact(fresh.email)).emails, fresh.emails);
+  assert.equal((await contact(fresh.email)).revision, fresh.revision);
+  await remove(fresh.email, 'history@example.edu');
+  await assert.rejects(remove(fresh.email, 'history@example.edu'), {
+    status: 404,
+  });
 });
 test('invalid names, deleted contacts and failed audit writes leave identity unchanged', async () => {
   await seed('person@example.edu');

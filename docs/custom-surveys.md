@@ -30,6 +30,22 @@ always opens the original respondent invitation, whose welcome page still offers
 **Preview questions**. Drafts retain their separate question-preview link. **Manage
 survey** opens the dedicated Office view; it does not open the respondent survey.
 
+**Edit survey** moves a published custom survey into a draft and pauses answering.
+Edit its title, questions or answering period, preview it, then publish it again.
+The invitation stays the same; republishing starts the chosen answering period.
+Access permissions and the linked event remain fixed after first publication.
+Earlier answers retain their original question labels, choices and types in results,
+PDFs, summaries and CSV exports. A form loaded before the edit must be reopened.
+
+**Archive survey** keeps its questions, respondents and answers in **Archived**.
+Restoring a previously published survey leaves answering closed until it is edited
+and published again; an unpublished survey returns to Drafts. **Delete survey
+permanently** is available only from Archived. Its confirmation includes the saved
+response count. It deletes the survey, saved responses, respondent memberships and
+device access together. Existing short URLs remain registered with their provider.
+Digest-only change receipts retain who performed the action without retaining answers.
+Individual archived responses can also be permanently deleted separately.
+
 For a published survey, expand **Short link** to save an existing TinyURL or another
 HTTPS short address. **Copy link** and **QR code** use that address; clearing the field
 restores the original invitation. Check that the short address opens the correct
@@ -94,8 +110,8 @@ definition, with readable text also saved. Use question IDs when joining answers
 use the saved question version when interpreting historical responses.
 
 Event timestamps and submission timestamps use the existing Central Time rules.
-RSVP answers retain a snapshot of the questions at submission. Custom survey
-questions and permissions are fixed when published.
+RSVP answers retain a snapshot of the questions at submission. Custom surveys also
+retain the definition used for each saved response when published questions are edited.
 
 ## Attendance and feedback follow-up
 
@@ -329,11 +345,22 @@ be admin-only or shared with current and future approved respondents, with that
 audience stated before consent. Original Advisor Studio sharing still uses the
 recipient list approved at submission time.
 
-Publishing starts the selected 1–90 day window (30 by default) and freezes
-questions and permissions. Closing ends access while retaining results and
-audit history. Draft changes and publication use revision checks and idempotent
-request receipts. The first Advisor Studio remains its dedicated original
-design; new surveys use the generic form renderer.
+Publishing starts the selected 1–90 day window (30 by default). **Edit survey**
+returns a published survey to draft and pauses answering until it is published
+again. Titles, questions and duration can change; the original audience, sharing
+permissions and linked event stay fixed. Saved responses and downloads retain
+their original questions, choice meanings and version. A previously loaded form
+must reload after publication; older answers are not prefilled into changed forms.
+Closing ends access while retaining results and audit history. **Archive survey**
+keeps responses and membership unchanged. Restoring a previously published survey
+leaves answering closed; a never-published survey restores as draft.
+From Archived, **Delete survey permanently** removes the survey, its respondents,
+saved responses and device access after confirmation. Individual archived
+responses can also be permanently deleted, retaining respondent membership.
+Provider short URLs stay at their provider. Changes and deletion use revision
+checks and idempotent request receipts without retaining deleted answer content.
+The first Advisor Studio keeps its dedicated original design and cannot be edited;
+new surveys use the generic form renderer.
 
 For responsive checks, the isolated fixture also serves `/responsive`, a
 same-origin iframe with six fixed viewport sizes from 320 to 1440 pixels and

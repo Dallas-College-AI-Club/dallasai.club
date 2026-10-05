@@ -8,6 +8,7 @@ import { uuid } from '../lib/validation.mjs';
 import { liveEvents } from '../lib/events.mjs';
 import {
   upcomingEvents,
+  recentEndedEvents,
   inboxFilter,
   inboxPage,
   summarize,
@@ -18,6 +19,11 @@ import {
 } from '../lib/inbox.mjs';
 import { submissionsCSV, exportFilename } from '../lib/submission-export.mjs';
 import { homeSummary } from '../lib/home.mjs';
+import {
+  inboxSource,
+  inboxCountsQuery as countsQuery,
+} from '../lib/inbox-surveys.mjs';
+import { centralTime } from '../lib/event-content.mjs';
 import {
   helpEntries,
   helpHistory,
@@ -39,7 +45,6 @@ import {
 export { csvCell } from '../lib/submission-export.mjs';
 // Per-kind counts; RSVPs for events that are no longer upcoming count as
 // rsvp-past.
-const countsQuery = `SELECT CASE WHEN kind='rsvp' AND NOT(coalesce(data->>'eventId','')=ANY($1::text[])) THEN 'rsvp-past' ELSE kind END AS kind,count(*)::int AS total,count(*) FILTER (WHERE review_status='new')::int AS new,count(*) FILTER (WHERE review_status='reviewed')::int AS reviewed,count(*) FILTER (WHERE review_status='closed')::int AS closed,max(created_at) AS latest FROM club_forms.entries GROUP BY 1`;
 export function adminHandler({
   authorize = requireAdmin,
   getDatabase = database,
@@ -51,6 +56,33 @@ export function adminHandler({
       const user = await authorize(req);
       const db = getDatabase();
       const url = new URL(req.url, 'https://admin.invalid');
+      const inboxEvents = async () => {
+        const published = await getEvents(db);
+        const saved = (
+          await db.query(
+            'SELECT id,draft,published,archived_at FROM club_forms.events',
+          )
+        ).rows.map((row) => {
+          const event = row.published || row.draft;
+          return {
+            ...event,
+            id: row.id,
+            archived_at: row.archived_at,
+            live: Boolean(row.published) && !row.archived_at,
+            ...(event.startTime && event.date
+              ? { date: centralTime(event.date, event.startTime) }
+              : {}),
+            ...(event.endTime && event.date
+              ? { end: centralTime(event.endDate || event.date, event.endTime) }
+              : {}),
+          };
+        });
+        return [
+          ...new Map(
+            [...saved, ...published].map((event) => [event.id, event]),
+          ).values(),
+        ];
+      };
       if (req.method === 'GET') {
         if (url.searchParams.has('edit')) {
           const id = url.searchParams.get('edit');
@@ -122,25 +154,28 @@ export function adminHandler({
           const since = url.searchParams.get('since') || null;
           if (since && !validTime(since))
             throw new RequestError(400, 'Invalid filter.');
-          const events = upcomingEvents(await getEvents(db));
+          const events = await inboxEvents();
           const { values: filters, where } = inboxFilter(
             url.searchParams,
             events,
           );
           const counts = (
-            await db.query(countsQuery, [events.map((event) => event.id)])
+            await db.query(countsQuery, [
+              upcomingEvents(events).map((event) => event.id),
+              recentEndedEvents(events).map((event) => event.id),
+            ])
           ).rows;
           const { asOf, arrived } = (
             await db.query(
               // `since` comes back from JSON in milliseconds; created_at has
               // microseconds, so compare at the same precision.
-              `SELECT now() AS "asOf",count(*) FILTER (WHERE date_trunc('milliseconds',created_at)>$1::timestamptz)::int AS arrived FROM club_forms.entries`,
+              `${inboxSource} SELECT now() AS "asOf",count(*) FILTER (WHERE review_status<>'closed' AND date_trunc('milliseconds',created_at)>$1::timestamptz)::int AS arrived FROM inbox_rows`,
               [since],
             )
           ).rows[0];
           const { arrivedInView, newInView } = (
             await db.query(
-              `SELECT count(*) FILTER (WHERE date_trunc('milliseconds',e.created_at)>$${filters.length + 1}::timestamptz)::int AS "arrivedInView",count(*) FILTER (WHERE review_status='new')::int AS "newInView" FROM club_forms.entries e ${where}`,
+              `${inboxSource} SELECT count(*) FILTER (WHERE date_trunc('milliseconds',e.created_at)>$${filters.length + 1}::timestamptz)::int AS "arrivedInView",count(*) FILTER (WHERE review_status<>'closed' AND created_at>=now()-interval '14 days')::int AS "newInView" FROM inbox_rows e ${where}`,
               [...filters, since],
             )
           ).rows[0];
@@ -162,10 +197,17 @@ export function adminHandler({
         }
         // Home: one read-only summary, with the same counts as the poll.
         if (url.searchParams.get('home') === '1') {
-          const published = await getEvents(db),
-            upcoming = upcomingEvents(published);
+          const published = await inboxEvents(),
+            upcoming = upcomingEvents(
+              published.filter(
+                (event) => !event.archived_at && event.live !== false,
+              ),
+            );
           const counts = (
-            await db.query(countsQuery, [upcoming.map((event) => event.id)])
+            await db.query(countsQuery, [
+              upcoming.map((event) => event.id),
+              recentEndedEvents(published).map((event) => event.id),
+            ])
           ).rows;
           return send(res, 200, {
             user: user.email,
@@ -196,7 +238,7 @@ export function adminHandler({
             `SELECT DISTINCT ON (data->>'eventId') data->>'eventId' AS id,data->>'eventTitle' AS title,data->>'eventDate' AS date,(data->>'potential')='true' AS potential FROM club_forms.entries WHERE kind='rsvp' ORDER BY data->>'eventId',created_at DESC,id`,
           )
         ).rows;
-        const publishedEvents = await getEvents(db);
+        const publishedEvents = await inboxEvents();
         const allEvents = [
           ...new Map(
             [...savedEvents, ...publishedEvents].map((event) => [
@@ -210,18 +252,22 @@ export function adminHandler({
         const upcomingIds = events.map((event) => event.id);
         const { values: filters, where } = inboxFilter(
           url.searchParams,
-          events,
+          publishedEvents,
           { search: true },
         );
         // $7 is the offset; the cursor uses $8 and $9.
-        const page = inboxPage(url.searchParams, filters.length + 2);
+        const page = inboxPage(
+          url.searchParams,
+          filters.length + 2,
+          'inbox_rows',
+        );
         const offset = Number(url.searchParams.get('offset') || 0);
         if (!Number.isSafeInteger(offset) || offset < 0 || offset > 100000)
           throw new RequestError(400, 'Choose a valid inbox page.');
         if (url.searchParams.get('export') === 'csv') {
           const rows = (
             await db.query(
-              `SELECT id,kind,email,name,state,review_status,created_at,data FROM club_forms.entries e ${where} ORDER BY ${page.order} LIMIT 10001`,
+              `${inboxSource} SELECT id,kind,email,name,state,review_status,created_at,data FROM inbox_rows e ${where} ORDER BY ${page.order} LIMIT 10001`,
               filters,
             )
           ).rows;
@@ -242,7 +288,7 @@ export function adminHandler({
               status: filters[1],
               kind: filters[0],
               eventId: filters[3],
-              search: filters[5],
+              search: filters[6],
             })}"`,
           );
           res.end(submissionsCSV(rows));
@@ -256,7 +302,7 @@ export function adminHandler({
         // The page is chosen first, so the per-row extras run for 51 rows; an
         // empty page still returns one row, with a null id, for the totals.
         const result = await db.query(
-          `SELECT list.total AS list_total,list."newInView" AS list_new,list."asOf" AS list_as_of,e.*,
+          `${inboxSource} SELECT list.total AS list_total,list."newInView" AS list_new,list."asOf" AS list_as_of,e.*,
         (SELECT COALESCE(json_agg(json_build_object('id',a.id,'name',a.name,'size',a.size)),'[]') FROM club_forms.attachments a WHERE a.entry_id=e.id) AS attachments,
         (SELECT count(*)::int FROM club_forms.entry_comments c WHERE c.entry_id=e.id) AS comment_count,
         (SELECT json_build_object('action',a.action,'actor',a.actor,'at',a.created_at) FROM club_forms.audit a WHERE a.entry_id=e.id AND a.action LIKE 'review:%' ORDER BY a.id DESC LIMIT 1) AS last_review,
@@ -264,8 +310,8 @@ export function adminHandler({
         (SELECT count(*)::int FROM club_forms.contact_emails a JOIN club_forms.entries o ON o.email=a.email WHERE a.contact_email=link.contact_email AND o.id<>e.id) AS contact_others,
         (SELECT count(*)::int FROM club_forms.contact_emails a JOIN club_forms.contact_notes n ON n.email=a.email WHERE a.contact_email=link.contact_email) AS contact_notes,
         person.deleted_at AS contact_deleted_at
-        FROM (SELECT count(*)::int AS total,count(*) FILTER (WHERE review_status='new')::int AS "newInView",now() AS "asOf" FROM club_forms.entries e ${where}) list
-        LEFT JOIN (SELECT e.*,to_char(e.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at FROM club_forms.entries e ${where}${page.where} ORDER BY ${page.order} LIMIT 51 OFFSET $7) e ON true
+        FROM (SELECT count(*)::int AS total,count(*) FILTER (WHERE review_status<>'closed' AND created_at>=now()-interval '14 days')::int AS "newInView",now() AS "asOf" FROM inbox_rows e ${where}) list
+        LEFT JOIN (SELECT e.*,to_char(e.created_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS cursor_at FROM inbox_rows e ${where}${page.where} ORDER BY ${page.order} LIMIT 51 OFFSET $${filters.length + 1}) e ON true
         LEFT JOIN club_forms.contact_emails link ON link.email=e.email
         LEFT JOIN club_forms.contacts person ON person.email=link.contact_email
         ORDER BY ${page.order}`,
@@ -303,12 +349,17 @@ export function adminHandler({
             }),
           );
         const last = rows[49];
-        const counts = (await db.query(countsQuery, [upcomingIds])).rows;
+        const counts = (
+          await db.query(countsQuery, [
+            upcomingIds,
+            recentEndedEvents(publishedEvents).map((event) => event.id),
+          ])
+        ).rows;
         // Each event group's true size under these filters, not just the page.
         const eventCounts = Object.fromEntries(
           (
             await db.query(
-              `SELECT e.data->>'eventId' AS id,count(*)::int AS n FROM club_forms.entries e ${where} AND e.kind='rsvp' GROUP BY 1`,
+              `${inboxSource} SELECT e.data->>'eventId' AS id,count(*)::int AS n FROM inbox_rows e ${where} AND e.kind='rsvp' GROUP BY 1`,
               filters,
             )
           ).rows.map((row) => [row.id, row.n]),

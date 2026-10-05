@@ -53,7 +53,7 @@ const insert = async ({
   state = 'active',
 } = {}) => {
   const id = randomUUID(),
-    created = new Date(Date.UTC(2026, 0, 1, 0, minute++)).toISOString();
+    created = new Date(Date.now() - 60000 + minute++ * 1000).toISOString();
   await db.query(
     'INSERT INTO club_forms.entries(id,kind,email,name,data,dedupe_key,created_at,updated_at,review_status,state) VALUES($1::uuid,$2,$3,$4,$5,$1::text,$6,$6,$7,$8)',
     [id, kind, email, name, JSON.stringify(data), created, status, state],
@@ -102,13 +102,13 @@ test('Home preserves shared status counts and does not report permanent deletion
   const home = await get('?home=1');
   const question = home.counts.find((row) => row.kind === 'question');
   assert.equal(question.total, 3);
-  assert.equal(question.new, 1);
-  assert.equal(question.reviewed, 1);
+  assert.equal(question.new, 2);
+  assert.equal(question.reviewed, 0);
   assert.equal(question.closed, 1);
   assert.equal(home.deletedSubmissions, undefined);
 });
 
-test('Home feedback total matches event surveys active responses independently of survey expiry', async () => {
+test('Home current feedback excludes events that have not ended or ended over fourteen days ago', async () => {
   for (const [status, eventId, active, answered] of [
     ['open', 'past', true, true],
     ['closed', 'next', true, true],
@@ -134,7 +134,7 @@ test('Home feedback total matches event surveys active responses independently o
       [id, answered ? '[{"id":"q1","text":"Good event"}]' : '[]'],
     );
   }
-  assert.equal((await get('?home=1')).eventFeedback, 2);
+  assert.equal((await get('?home=1')).eventFeedback, 0);
 });
 
 test('Home groups active RSVPs by event, archived and cancelled ones left out', async () => {
@@ -158,12 +158,13 @@ test('Home groups active RSVPs by event, archived and cancelled ones left out', 
     })),
     [
       // Upcoming first; the published title wins over the saved snapshot.
-      { id: 'next', title: 'Next event', total: 3, new: 2, past: false },
+      { id: 'next', title: 'Next event', total: 3, new: 3, past: false },
+      { id: 'later', title: 'Later event', total: 1, new: 1, past: false },
       { id: 'past', title: 'Past', total: 1, new: 1, past: true },
     ],
   );
   // The counts are the poll's: per kind, RSVPs for past events apart.
-  assert.equal(home.counts.find((row) => row.kind === 'rsvp').new, 3);
+  assert.equal(home.counts.find((row) => row.kind === 'rsvp').new, 5);
   assert.equal(home.counts.find((row) => row.kind === 'rsvp-past').new, 1);
   assert.equal(home.user, officer);
 });
@@ -218,10 +219,13 @@ test('Home: newest New submissions, next dated event, potential events, drafts a
   const home = await get('?home=1');
   // RSVPs are grouped by event instead; only other kinds are listed.
   assert.deepEqual(
-    home.newest.map((entry) => [entry.kind, entry.name, entry.preview]),
+    home.newest.map((entry) => [entry.kind, entry.name, entry.preview]).sort(),
     [
       ['join', 'Second Person', 'Richland'],
       ['question', 'Member Person', 'Is the workshop beginner friendly?'],
+      ['question', 'Member Person', 'Old'],
+      ['survey', 'Advisor a1', 'Advisor Studio'],
+      ['survey', 'Advisor a2', 'Advisor Studio'],
     ],
   );
   assert.equal(home.newest[0].data, undefined);
@@ -279,7 +283,7 @@ test('potential event counts include reviewed RSVPs and zero-response events wit
     );
     assert.equal(
       home.rsvpGroups.some((e) => e.id === 'maybe'),
-      false,
+      true,
     );
   } finally {
     events.splice(-2);

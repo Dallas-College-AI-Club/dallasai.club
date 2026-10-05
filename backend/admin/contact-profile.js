@@ -52,7 +52,7 @@ export function contactProfile(
     node('h4', 'Linked addresses'),
     node(
       'p',
-      'An address can be removed when no saved submission, follow-up note or survey membership uses it. Open the relevant submission in the history below to correct or remove its response first.',
+      'Choose any linked address as the primary email. Removing an address keeps its saved submissions, RSVPs, notes and survey membership in this contact history. To remove the primary email, save a different primary first.',
       'hint',
     ),
   );
@@ -64,7 +64,6 @@ export function contactProfile(
     const row = node('div', undefined, 'contact-alias-row'),
       details = node('div');
     details.append(node('strong', alias.email));
-    const used = Boolean(alias.submissions || alias.notes || alias.membership);
     details.append(
       node(
         'p',
@@ -106,15 +105,15 @@ export function contactProfile(
         sync();
         email.focus();
       });
-      const remove = button('Remove unused address', () => {
-        if (used || dirty()) return;
+      const remove = button('Remove address', () => {
+        if (dirty()) return;
         const confirmation = node('div', undefined, 'contact-confirmation');
         confirmation.append(
           node(
             'p',
             'Remove ' +
               alias.email +
-              ' from this contact? Existing admin activity stays in this history. A future submission using this address will create a separate contact.',
+              ' from the linked addresses? Saved submissions, RSVPs, notes and survey membership stay in this contact history.',
           ),
           button('Cancel removal', () => {
             confirmation.remove();
@@ -123,7 +122,7 @@ export function contactProfile(
           button('Confirm remove address', () =>
             save(
               { action: 'contact-remove-alias', alias: alias.email },
-              'Unused address removed.',
+              'Address removed. Its saved records stay in this contact history.',
             ),
           ),
         );
@@ -131,7 +130,7 @@ export function contactProfile(
         confirmation.querySelector('button').focus();
         remove.disabled = true;
       });
-      removeButtons.push({ button: remove, used });
+      removeButtons.push(remove);
       row.append(use, remove);
     }
     aliases.append(row);
@@ -140,7 +139,7 @@ export function contactProfile(
     name.value !== contact.name || email.value !== contact.email;
   function sync() {
     remember(dirty() ? { name: name.value, primaryEmail: email.value } : null);
-    for (const row of removeButtons) row.button.disabled = row.used || dirty();
+    for (const remove of removeButtons) remove.disabled = dirty();
     hint.textContent = dirty()
       ? 'Save or cancel the name and primary email changes before removing an address.'
       : '';

@@ -58,6 +58,7 @@ export function mountSurveyBuilder(root, api, onDone, id, eventId, copyId) {
     previewLink = '',
     saved = true,
     published = false,
+    fixedAccess = false,
     active = true,
     events = [];
   const status = node('p');
@@ -121,6 +122,7 @@ export function mountSurveyBuilder(root, api, onDone, id, eventId, copyId) {
         if (survey.status !== 'draft')
           throw Error('This survey has already been published.');
         definition = survey.definition;
+        fixedAccess = Boolean(survey.published_at);
         revision = survey.edit_revision;
         previewLink = survey.previewLink;
         saved = true;
@@ -239,7 +241,7 @@ export function mountSurveyBuilder(root, api, onDone, id, eventId, copyId) {
       node('h2', 'Create a custom survey'),
       node(
         'p',
-        'Choose who can preview, answer, and read results. Questions and permissions are fixed once published.',
+        'Choose who can preview, answer, and read results. Published surveys can be edited; their audience and sharing permissions stay fixed.',
         'hint',
       ),
     );
@@ -269,6 +271,7 @@ export function mountSurveyBuilder(root, api, onDone, id, eventId, copyId) {
           },
         ),
       );
+      if (fixedAccess) panel.querySelector('select').disabled = true;
       panel.append(
         select(
           'Starting template',
@@ -362,6 +365,18 @@ export function mountSurveyBuilder(root, api, onDone, id, eventId, copyId) {
             'hint',
           ),
         );
+      if (fixedAccess) {
+        panel
+          .querySelectorAll('select')
+          .forEach((input) => (input.disabled = true));
+        panel.append(
+          node(
+            'p',
+            'The published audience and sharing permissions are kept to preserve saved consent. Create a new survey to use different permissions.',
+            'hint',
+          ),
+        );
+      }
       const members = node('section');
       panel.append(members);
       if (revision)
@@ -613,7 +628,7 @@ export function mountSurveyBuilder(root, api, onDone, id, eventId, copyId) {
       panel.append(
         node(
           'p',
-          'Publishing opens the answering link and starts the expiration period. You can manage respondents and close the survey afterward. Changes to questions or permissions require a new survey.',
+          'Publishing opens the answering link and starts the expiration period. Edit survey returns it to a draft and pauses new answers. Previously saved responses keep their original questions and answers.',
           'hint',
         ),
       );

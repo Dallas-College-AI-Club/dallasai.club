@@ -133,15 +133,15 @@ test('old links are rewritten to their routes', () => {
   // A malformed old link becomes a not-found route, never a request.
   assert.equal(parse(legacy('#entry=abc')).name, 'not-found');
 });
-test('Inbox defaults to Active while New, Reviewed, Archived and All remain addressable', () => {
-  assert.equal(apiStatus(undefined), 'active');
+test('Inbox defaults to Upcoming & New with legacy views addressable', () => {
+  assert.equal(apiStatus(undefined), 'current');
   assert.equal(apiStatus('active'), 'active');
   assert.equal(apiStatus('new'), 'new');
   assert.equal(apiStatus('reviewed'), 'reviewed');
   assert.equal(apiStatus('archived'), 'closed');
   assert.equal(apiStatus('all'), '');
   assert.equal(routeStatus('closed'), 'archived');
-  assert.equal(routeStatus('active'), '');
+  assert.equal(routeStatus('active'), 'active');
   assert.equal(routeStatus('new'), 'new');
   assert.equal(routeStatus(''), 'all');
   for (const status of ['active', 'new', 'reviewed', 'archived', 'all']) {

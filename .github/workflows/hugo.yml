@@ -39,6 +39,9 @@ jobs:
         run: |
           node tests/browser-office.mjs
           node tests/browser-survey-groups.mjs
+          node tests/browser-contact-profile.mjs
+          node tests/browser-inbox-recency.mjs
+          node tests/browser-survey-lifecycle.mjs
 
   build:
     runs-on: ubuntu-latest

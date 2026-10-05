@@ -118,7 +118,7 @@ export function contactHistory(api, onChange = () => {}, root) {
           : 'No matching contacts.';
       } else {
         email = data.contact.email;
-        heading.textContent = data.contact.name || email;
+        heading.textContent = 'Contacts';
         const back = node('button', '← All contacts', 'secondary');
         back.onclick = () => {
           email = '';
@@ -127,6 +127,7 @@ export function contactHistory(api, onChange = () => {}, root) {
         };
         content.append(
           back,
+          node('h2', data.contact.name || email, 'contact-note-text'),
           node('p', 'Primary email: ' + email, 'contact-note-text'),
           node(
             'p',
@@ -144,7 +145,7 @@ export function contactHistory(api, onChange = () => {}, root) {
         );
         content.append(management(data.contact, version));
         const form = node('form', undefined, 'contact-note-form'),
-          noteLabel = node('label', 'Record a follow-up note'),
+          noteLabel = node('label', 'Internal notes'),
           note = node('textarea'),
           save = node('button', 'Save note'),
           noteStatus = node('p');

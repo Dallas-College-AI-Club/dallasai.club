@@ -1,7 +1,10 @@
 import { createHash, createHmac, randomBytes, randomUUID } from 'node:crypto';
 import { RequestError } from './errors.mjs';
 import { definition, validateSubmission } from './survey-contract.mjs';
-import { FORM_VERSION, validateFormResponse } from './survey-builder.mjs';
+import {
+  supportedFormVersion,
+  validateFormResponse,
+} from './survey-builder.mjs';
 export const digest = (value) =>
   createHash('sha256').update(value).digest('hex');
 export function privateSurveyToken(id) {
@@ -43,8 +46,9 @@ export async function linkedSurvey(db, token, lock = false) {
       'This private survey link is unavailable or has expired. Contact the club for a current link.',
     );
   if (
-    survey.content_version !==
-    (survey.definition ? FORM_VERSION : definition.content_version)
+    survey.definition
+      ? !supportedFormVersion(survey.content_version)
+      : survey.content_version !== definition.content_version
   )
     throw new RequestError(503, 'This survey version is not available.');
   return survey;
@@ -58,7 +62,7 @@ export async function linkedPreview(db, token) {
       [digest(token)],
     )
   ).rows[0];
-  if (!survey?.definition || survey.content_version !== FORM_VERSION)
+  if (!survey?.definition || !supportedFormVersion(survey.content_version))
     throw new RequestError(404, 'This preview link is unavailable or expired.');
   return survey;
 }
@@ -165,7 +169,7 @@ export async function currentResponses(
 ) {
   return (
     await db.query(
-      `SELECT m.advisor_id,m.display_name,m.active,r.revision,r.responses,r.submitted_at
+      `SELECT m.advisor_id,m.display_name,m.active,r.revision,r.responses,r.submitted_at,r.response_definition
        FROM club_forms.custom_survey_members m LEFT JOIN club_forms.custom_survey_responses r
        ON r.survey_id=m.survey_id AND r.advisor_id=m.advisor_id
        AND ($2::text IS NULL OR r.advisor_id=$2 OR $2=ANY(r.shared_with))
@@ -239,7 +243,7 @@ export async function submitSurvey(db, req, link, body) {
       );
     const revision = body.expectedRevision + 1;
     await tx.query(
-      `INSERT INTO club_forms.custom_survey_responses(survey_id,advisor_id,revision,responses,shared_with) VALUES($1,$2,$3,$4,$5) ON CONFLICT(survey_id,advisor_id) DO UPDATE SET revision=EXCLUDED.revision,responses=EXCLUDED.responses,shared_with=EXCLUDED.shared_with,submitted_at=now()`,
+      `INSERT INTO club_forms.custom_survey_responses(survey_id,advisor_id,revision,responses,shared_with,response_definition) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(survey_id,advisor_id) DO UPDATE SET revision=EXCLUDED.revision,responses=EXCLUDED.responses,shared_with=EXCLUDED.shared_with,response_definition=EXCLUDED.response_definition,submitted_at=now()`,
       [
         survey.id,
         member.advisor_id,
@@ -248,6 +252,12 @@ export async function submitSurvey(db, req, link, body) {
         (survey.definition?.permissions.results === 'admins' ? [] : members)
           .filter((m) => m.advisor_id !== member.advisor_id)
           .map((m) => m.advisor_id),
+        survey.definition
+          ? JSON.stringify({
+              ...survey.definition,
+              content_version: survey.content_version,
+            })
+          : null,
       ],
     );
     const receipt = (

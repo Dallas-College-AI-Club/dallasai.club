@@ -1,4 +1,4 @@
-import { copyText, download as save, lock, node } from './ui.js';
+import { confirmDialog, copyText, download as save, lock, node } from './ui.js';
 import { actionLabel, actorLabel, dateTime, isoDay, plural } from './format.js';
 import { currentOfficer } from './session.js';
 import { mountRespondents } from './survey-respondents.js';
@@ -50,19 +50,20 @@ function consolidatedAnswers(results, definition) {
   const root = node('div', undefined, 'survey-report');
   const questions = new Map(
     (definition?.questions || []).map((question) => [
-      question.id,
-      { title: question.title, answers: [] },
+      question.id + ':' + question.title,
+      { id: question.id, title: question.title, answers: [] },
     ]),
   );
   for (const result of results)
     for (const answer of result.responses) {
-      if (!questions.has(answer.id))
-        questions.set(answer.id, { title: answer.title, answers: [] });
-      questions.get(answer.id).answers.push({ result, answer });
+      const key = answer.id + ':' + answer.title;
+      if (!questions.has(key))
+        questions.set(key, { id: answer.id, title: answer.title, answers: [] });
+      questions.get(key).answers.push({ result, answer });
     }
   const rank = answerRank(definition);
   for (const [id, question] of [...questions].sort(
-    ([a], [b]) => rank({ id: a }) - rank({ id: b }),
+    ([, a], [, b]) => rank(a) - rank(b),
   )) {
     const section = node('section', undefined, 'response-answer');
     section.append(node('h4', question.title));
@@ -297,6 +298,82 @@ export function mountCustomSurveys(root, api, options = {}) {
               'hint',
             );
             content.prepend(related);
+          }
+          const lifecycleButton = (label, action, message) => {
+            const button = node('button', label, 'secondary');
+            button.onclick = async () => {
+              if (
+                !(await confirmDialog({
+                  title: label + '?',
+                  body: message,
+                  confirmLabel: label,
+                }))
+              )
+                return;
+              if (!isCurrent()) return;
+              button.disabled = true;
+              try {
+                await api('/api/custom-surveys?action=lifecycle', {
+                  id: survey.id,
+                  action,
+                  expectedRevision: survey.edit_revision,
+                  requestId: crypto.randomUUID(),
+                });
+                if (!isCurrent()) return;
+                options.onChange?.();
+                if (action === 'delete') {
+                  selected = '';
+                  go('#/surveys');
+                  return;
+                }
+                if (
+                  action === 'edit' ||
+                  (action === 'restore' &&
+                    survey.definition &&
+                    !survey.published_at)
+                ) {
+                  if (options.inline) go('#/surveys/custom/' + survey.id);
+                  else edit(survey.id);
+                } else await load();
+              } catch (error) {
+                if (isCurrent()) content.append(node('p', error.message));
+                button.disabled = false;
+              }
+            };
+            content.append(button);
+          };
+          if (survey.status === 'archived') {
+            lifecycleButton(
+              survey.definition && !survey.published_at
+                ? 'Restore as draft'
+                : 'Restore survey',
+              'restore',
+              'Restore this survey for review. Saved responses stay unchanged. Answering stays closed until the editable survey is published.',
+            );
+            lifecycleButton(
+              'Delete survey permanently',
+              'delete',
+              'Permanently delete ' +
+                survey.title +
+                ' and ' +
+                plural(
+                  survey.response_count + survey.archived_response_count,
+                  'saved response',
+                ) +
+                ', including respondents, answer data and device access. This cannot be undone. Existing short URLs are kept at their provider.',
+            );
+          } else {
+            if (survey.definition && survey.status !== 'draft')
+              lifecycleButton(
+                'Edit survey',
+                'edit',
+                'Move this survey to a draft and stop new answers while you edit. Saved responses keep their original questions and answers. Publish when the changes are ready.',
+              );
+            lifecycleButton(
+              'Archive survey',
+              'archive',
+              'Stop answering and move this survey to Archived. Its questions, respondents and saved responses are kept.',
+            );
           }
           if (survey.definition) {
             const duplicate = node('a', 'Duplicate survey', 'button-link');
@@ -568,6 +645,43 @@ export function mountCustomSurveys(root, api, options = {}) {
                 trigger: button,
               });
             actions.append(button, status);
+            if (!result.active || survey.status === 'archived') {
+              const remove = node(
+                'button',
+                'Delete response permanently',
+                'danger',
+              );
+              remove.onclick = async () => {
+                if (
+                  !(await confirmDialog({
+                    title: 'Delete this response permanently?',
+                    body: 'This removes the saved answers and submission receipts. This cannot be undone. The respondent membership is kept.',
+                    confirmLabel: 'Delete response permanently',
+                  }))
+                )
+                  return;
+                remove.disabled = true;
+                try {
+                  const roster = await api(
+                    '/api/custom-surveys?action=members&id=' + survey.id,
+                  );
+                  await api('/api/custom-surveys?action=member-change', {
+                    surveyId: survey.id,
+                    advisorId: result.advisor_id,
+                    expectedRevision: roster.revision,
+                    requestId: crypto.randomUUID(),
+                    action: 'delete',
+                  });
+                  if (!isCurrent()) return;
+                  await load();
+                  options.onChange?.();
+                } catch (error) {
+                  if (isCurrent()) status.textContent = error.message;
+                  remove.disabled = false;
+                }
+              };
+              actions.append(remove);
+            }
             return actions;
           };
           let expanded = options.expanded ?? (options.inline ? false : null);
@@ -711,9 +825,9 @@ export function mountCustomSurveys(root, api, options = {}) {
           ) {
             const archived = node(
               'a',
-              'View archived responses in Inbox → Archived → Questions',
+              'View archived responses in Inbox → Archived',
             );
-            archived.href = '#/inbox?status=archived&type=question';
+            archived.href = '#/inbox?status=archived';
             content.append(archived);
           }
         } catch (error) {
@@ -816,11 +930,13 @@ export function mountCustomSurveys(root, api, options = {}) {
         }
         for (const survey of matching) {
           const sectionName =
-            survey.status === 'draft'
-              ? 'Drafts'
-              : survey.definition?.eventId
-                ? 'Event surveys'
-                : 'Custom surveys';
+            survey.status === 'archived'
+              ? 'Archived'
+              : survey.status === 'draft'
+                ? 'Drafts'
+                : survey.definition?.eventId
+                  ? 'Event surveys'
+                  : 'Custom surveys';
           let section = [...list.children].find(
             (child) => child.dataset.group === sectionName,
           );

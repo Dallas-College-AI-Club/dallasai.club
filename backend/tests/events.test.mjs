@@ -240,10 +240,10 @@ test('readable event paths retain meaning and only replace legacy links on expli
     endTime: '',
     rsvpDeadline: '2026-10-11',
   };
-  assert.equal(eventShortAlias(event, 'new-event'), 'dai-game-night-2026');
+  assert.equal(eventShortAlias(event, 'new-event'), 'ai-game-night-2026');
   assert.match(
     eventShortAlias({ title: 'É'.repeat(80), date: '2026-10-11' }, 'new-event'),
-    /^dai-event-2026$/,
+    /^ai-event-2026$/,
   );
   await save('publish', 0, event);
   const old = 'https://tinyurl.com/dai-' + 'a'.repeat(24);
@@ -267,8 +267,8 @@ test('readable event paths retain meaning and only replace legacy links on expli
     create,
     true,
   );
-  assert.equal(calls[0][1], 'dai-game-night-2026');
-  assert.match(calls[1][1], /^dai-game-night-2026-[a-f0-9]{6}$/);
+  assert.equal(calls[0][1], 'ai-game-night-2026');
+  assert.match(calls[1][1], /^ai-game-night-2026-[a-f0-9]{6}$/);
   assert.equal(calls[0][0], eventURL('new-event'));
   assert.equal(calls[1][0], calls[0][0]);
   assert.equal(updated.draft.shortLink, updated.published.shortLink);
@@ -288,7 +288,7 @@ test('automatic short-link names use known topic words without raw unknown words
   ])
     assert.equal(
       eventShortAlias({ title, date: '2026-10-11' }, 'unknown-event'),
-      'dai-event-2026',
+      'ai-event-2026',
     );
   assert.equal(
     eventShortAlias(
@@ -298,21 +298,21 @@ test('automatic short-link names use known topic words without raw unknown words
       },
       'unknown-event',
     ),
-    'dai-ai-game-night-2026',
+    'ai-game-night-2026',
   );
   assert.equal(
     eventShortAlias(
       { title: 'AI Club Members Gáme Night!!!', rsvpDeadline: '2026-10-11' },
       'unknown-event',
     ),
-    'dai-game-night-2026',
+    'ai-game-night-2026',
   );
   assert.equal(
     eventShortAlias(
       { title: 'Programming Learning Workshop Showcase', date: '2026-10-11' },
       'unknown-event',
     ),
-    'dai-programming-learning-2026',
+    'ai-programming-learning-2026',
   );
   await save('publish', 0, {
     ...draft,
@@ -327,12 +327,12 @@ test('automatic short-link names use known topic words without raw unknown words
     async (_, alias) => {
       calls++;
       if (calls === 1) throw new RequestError(409, 'Occupied');
-      assert.match(alias, /^dai-programming-2026-[a-f0-9]{6}$/);
+      assert.match(alias, /^ai-programming-2026-[a-f0-9]{6}$/);
       assert.ok(alias.length <= 30);
       return 'https://tinyurl.com/' + alias;
     },
   );
-  assert.match(row.published.shortLink, /dai-programming-2026-/);
+  assert.match(row.published.shortLink, /ai-programming-2026-/);
 });
 
 test('custom short-link names replace only on explicit save, validate before provider calls, and retain links on collision', async () => {

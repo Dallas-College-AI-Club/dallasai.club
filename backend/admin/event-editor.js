@@ -237,6 +237,10 @@ export function mountEventEditor(api) {
       .filter((r) => r.draft.title.toLowerCase().includes(search))
       .sort(
         (a, b) =>
+          (showArchived
+            ? 0
+            : Number(!b.published || b.revision !== b.published_revision) -
+              Number(!a.published || a.revision !== a.published_revision)) ||
           Number(Boolean(b.draft.potential)) -
             Number(Boolean(a.draft.potential)) ||
           Number(!b.published || b.revision !== b.published_revision) -
@@ -251,10 +255,10 @@ export function mountEventEditor(api) {
         (!row.published || row.revision !== row.published_revision);
       const group = row.archived_at
         ? 'Archived events'
-        : row.draft.potential
-          ? 'Potential events · gather interest'
-          : isDraft
-            ? 'Drafts & unpublished changes'
+        : isDraft
+          ? 'Drafts & unpublished changes'
+          : row.draft.potential
+            ? 'Potential events · gather interest'
             : 'Published events';
       if (group !== previousGroup) {
         listItems.push(node('h3', group, 'event-list-group'));

@@ -2767,6 +2767,12 @@ html.survey-report-open {
   margin-right: 8px;
   color: var(--muted);
 }
+a.survey-library-summary {
+  text-decoration: none;
+}
+a.survey-library-summary > div:first-child::before {
+  content: none;
+}
 .survey-library-row[open] > .survey-library-summary > div:first-child::before {
   content: '▾';
 }

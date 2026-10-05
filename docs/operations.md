@@ -271,6 +271,18 @@ Keep the live event API available during rollback. Original event files are a ba
 registry; database drafts, unpublishing and archives override them. Reverting to a
 static calendar would restore intentionally unpublished events.
 
+Admin stress audit (2026-10-04): all 271 backend tests, 67 Office browser
+scenarios, and 10 grouped-survey scenarios passed. Event editing and public
+forms/Inbox/Contacts browser workflows also passed. A disposable local PGlite
+database with 10,006 synthetic submissions answered 120 concurrent HTTP reads
+successfully in 3.94 seconds; 64 simultaneous retries saved one submission.
+Live navigation and desktop/phone inspection found RSVP-only events missing from
+All surveys. The local fix adds searchable registration links, retains closed
+and archived events with answers, and preserves collection filters. Its regression
+failed before the fix and detected seven deliberately removed protections.
+The corrected library was checked at 320px, 390px, and 1280px without horizontal
+overflow. Release verification is recorded separately.
+
 ## Local preview
 
 Run Hugo on `127.0.0.1:4174`. To test local services, build the backend and run

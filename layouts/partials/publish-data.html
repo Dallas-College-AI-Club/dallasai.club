@@ -5,3 +5,4 @@
 {{- $json.Publish -}}
 {{- $feed := resources.Get "review-feed.xml.gotmpl" | resources.ExecuteAsTemplate "review-feed.xml" $data -}}
 {{- $feed.Publish -}}
+{{- return $module -}}

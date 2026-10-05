@@ -1,0 +1,10 @@
+{{- /* Keep files in their original directories so relative module imports and font URLs resolve. */ -}}
+{{- $urls := dict -}}
+{{- range resources.Match "**" -}}
+  {{- if in (slice ".js" ".css") (path.Ext .Name) -}}
+    {{- $urls = merge $urls (dict .RelPermalink (. | fingerprint).RelPermalink) -}}
+  {{- end -}}
+{{- end -}}
+{{- $published := partialCached "publish-data.html" . -}}
+{{- $urls = merge $urls (dict "/content/published.js" ($published | fingerprint).RelPermalink) -}}
+{{- return $urls -}}

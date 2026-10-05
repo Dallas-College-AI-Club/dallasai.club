@@ -29,3 +29,23 @@ enableRobotsTXT = true
 [[module.mounts]]
   source = "backend/surveys/availability.css"
   target = "static/app/availability.css"
+
+# Expose the same public files to Hugo's content fingerprinting.
+[[module.mounts]]
+  source = "assets"
+  target = "assets"
+[[module.mounts]]
+  source = "static"
+  target = "assets"
+[[module.mounts]]
+  source = "backend/lib/event-format.mjs"
+  target = "assets/app/event-format.js"
+[[module.mounts]]
+  source = "backend/surveys/availability-ui.js"
+  target = "assets/app/availability-ui.js"
+[[module.mounts]]
+  source = "backend/surveys/availability-values.js"
+  target = "assets/app/availability-values.js"
+[[module.mounts]]
+  source = "backend/surveys/availability.css"
+  target = "assets/app/availability.css"

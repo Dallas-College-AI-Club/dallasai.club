@@ -192,6 +192,15 @@ try {
     .locator('.rsvp-survey-library-row')
     .filter({ hasText: f.event.draft.title });
   const rsvpEntry = f.entries.find((entry) => entry.kind === 'rsvp');
+  const activeEntry = randomUUID();
+  await f.db.query(
+    "INSERT INTO club_forms.entries(id,kind,email,name,dedupe_key,data) SELECT $1::uuid,kind,'parent-active@example.edu','Parent active response',$1::text,data FROM club_forms.entries WHERE id=$2",
+    [activeEntry, rsvpEntry.id],
+  );
+  await f.db.query(
+    'INSERT INTO club_forms.survey_responses(entry_id,event_id,event_title,event_date,survey_version,questions,answers) SELECT $1,event_id,event_title,event_date,survey_version,questions,answers FROM club_forms.survey_responses WHERE entry_id=$2',
+    [activeEntry, rsvpEntry.id],
+  );
   await f.db.query(
     "INSERT INTO club_forms.survey_response_state(entry_id,archived_at,updated_by) VALUES($1,now()-interval '1 day','officer@example.com')",
     [rsvpEntry.id],
@@ -259,6 +268,37 @@ try {
     }),
   ).toBeHidden();
   await expect(page.locator('#survey-view')).toHaveValue('archived');
+  const activeResponse = page.locator(
+    '#event-surveys-root .survey-response[data-entry-id="' + activeEntry + '"]',
+  );
+  await expect(activeResponse).toBeVisible();
+  if (!(await activeResponse.getAttribute('open'))) await activeResponse.evaluate(card => { card.open = true; });
+  for (const [button, starred] of [
+    ['☆ Star', true],
+    ['★ Unstar', false],
+  ]) {
+    await activeResponse
+      .getByRole('button', { name: button, exact: true })
+      .click();
+    await expect(activeResponse).toBeVisible();
+    await expect(activeResponse.locator(':scope > summary')).toContainText(
+      'Archived',
+    );
+    await expect(
+      activeResponse.getByRole('button', {
+        name: starred ? '★ Unstar' : '☆ Star',
+        exact: true,
+      }),
+    ).toBeVisible();
+    const raw = (
+      await f.db.query(
+        'SELECT archived_at,starred FROM club_forms.survey_response_state WHERE entry_id=$1',
+        [activeEntry],
+      )
+    ).rows[0];
+    assert.equal(raw.archived_at, null);
+    assert.equal(raw.starred, starred);
+  }
   await page.goto(f.origin + '/admin/#/surveys/events?event=' + f.event.id);
   await expect(page.locator('#survey-view')).toHaveValue('active');
   await expect(
@@ -315,7 +355,7 @@ try {
     })
     .click();
   await expect(page.locator('#confirm-dialog')).toContainText(
-    '1 saved response',
+    '2 saved responses',
   );
   await page.locator('#confirm-dialog [data-confirm]').click();
   await expect(rsvp).toHaveCount(0);

@@ -443,7 +443,9 @@ export function mountSurveyResults(
         patch({
           ...response,
           starred: result.starred,
-          archived_at: result.archived_at,
+          archived_at: response.rsvp_survey_archived
+            ? response.archived_at
+            : result.archived_at,
         });
         // Say it beside the button while the card stays, so nothing above
         // it changes height and the page does not shift.

@@ -49,6 +49,8 @@ Preview the pages affected by your edit, check links and phone layouts, and requ
 
 GitHub Actions builds each pull request and saves a downloadable `hugo-preview` artifact. Passing changes on `main` or `hugo` publish to GitHub Pages at **dallasai.club**. Pages must use GitHub Actions. A daily rebuild at 08:15 UTC publishes scheduled articles; maintainers can also run the workflow manually.
 
+Hugo gives public scripts and styles content-based filenames. The generated import map also versions nested and dynamically loaded modules, including published content. Edit the source files normally; a new page load selects the matching assets without clearing browser storage. GitHub Pages may cache the HTML itself for up to ten minutes, and an already-open page needs a reload to pick up a release.
+
 ## Leaderboard
 
 Shared rankings use the Vercel backend in `backend/` and the Neon `dallasai_club` database. The endpoint is set in `data/club.json`: `https://dallasai-leaderboard.vercel.app/api/leaderboard`. Games keep local progress if the service is unavailable.

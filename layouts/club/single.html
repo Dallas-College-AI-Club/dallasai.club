@@ -1,4 +1,4 @@
-{{ partial "publish-data.html" . }}
+{{ $assetURLs := partialCached "asset-urls.html" . }}
 <!doctype html>
 <html lang="en">
   <head>
@@ -15,23 +15,11 @@
       type="font/woff2"
       crossorigin
     />
-    <link rel="stylesheet" href="styles/fonts.css" />
-    <link rel="stylesheet" href="styles/site.css" />
-    <link rel="stylesheet" href="styles/navigation.css" />
-    <link rel="stylesheet" href="styles/review.css" />
-    <link rel="stylesheet" href="styles/contribute.css" />
-    <link rel="stylesheet" href="styles/forms.css" />
-    <link rel="stylesheet" href="styles/about.css" />
-    <link rel="stylesheet" href="styles/events.css" />
-    <link rel="stylesheet" href="styles/lab.css" />
-    <link rel="stylesheet" href="styles/projects.css" />
-    <link rel="stylesheet" href="styles/arcade.css" />
-    <link rel="stylesheet" href="styles/drive.css" />
-    <link rel="stylesheet" href="styles/concepts.css" />
-    <link rel="stylesheet" href="styles/desktop.css" />
-    <link rel="stylesheet" href="styles/footer.css" />
-    <link rel="stylesheet" href="styles/coladde.css" />
-    <script src="app/boot.js"></script>
+    {{ range slice "styles/fonts.css" "styles/site.css" "styles/navigation.css" "styles/review.css" "styles/contribute.css" "app/availability.css" "styles/forms.css" "styles/about.css" "styles/events.css" "styles/lab.css" "styles/projects.css" "styles/arcade.css" "styles/drive.css" "styles/concepts.css" "styles/desktop.css" "styles/footer.css" "styles/coladde.css" }}
+    <link rel="stylesheet" href="{{ index $assetURLs (printf "/%s" .) }}" />
+    {{ end }}
+    <script type="importmap">{{ dict "imports" $assetURLs | jsonify | safeHTML }}</script>
+    <script src="{{ index $assetURLs "/app/boot.js" }}"></script>
   </head>
   <body>
     <a class="skip" href="#content">Skip to content</a
@@ -286,6 +274,6 @@
       <p>© 2026 Dallas College AI Club</p>
       <nav aria-label="Follow the club"></nav>
     </footer>
-    <script type="module" src="app/shell.js"></script>
+    <script type="module" src="{{ index $assetURLs "/app/shell.js" }}"></script>
   </body>
 </html>

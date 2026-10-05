@@ -1,4 +1,4 @@
-{{ partial "publish-data.html" . }}
+{{ $assetURLs := partialCached "asset-urls.html" . }}
 <!doctype html>
 <html lang="en">
   <head>
@@ -8,10 +8,10 @@
     <meta name="description" content="{{ site.Params.description }}" />
     <link rel="alternate" type="application/rss+xml" title="The AI Review" href="{{ "review-feed.xml" | absURL }}" />
     <link rel="canonical" href="{{ .Permalink }}" />
-    <link rel="stylesheet" href="styles/fonts.css" />
-    <link rel="stylesheet" href="styles/entrance.css" />
-    <link rel="stylesheet" href="styles/footer.css" />
-    <link rel="stylesheet" href="styles/coladde.css" />
+    {{ range slice "styles/fonts.css" "styles/entrance.css" "styles/footer.css" "styles/coladde.css" }}
+    <link rel="stylesheet" href="{{ index $assetURLs (printf "/%s" .) }}" />
+    {{ end }}
+    <script type="importmap">{{ dict "imports" $assetURLs | jsonify | safeHTML }}</script>
   </head>
   <body>
     <main class="entrance">
@@ -76,7 +76,7 @@
       <p>© 2026 Dallas College AI Club</p>
       <nav aria-label="Follow the club"></nav>
     </footer>
-    <script src="app/entrance.js"></script>
-    <script type="module" src="app/footer.js"></script>
+    <script src="{{ index $assetURLs "/app/entrance.js" }}"></script>
+    <script type="module" src="{{ index $assetURLs "/app/footer.js" }}"></script>
   </body>
 </html>

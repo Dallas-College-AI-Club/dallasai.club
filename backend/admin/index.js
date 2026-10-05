@@ -436,7 +436,8 @@ function groupedEntries(entries, eventCounts = {}) {
   const groups = new Map();
   for (const entry of entries) {
     const key = entry.data.eventId
-      ? 'event:' + entry.data.eventId
+      ? (entry.kind === 'rsvp' ? 'event:' : entry.kind + ':event:') +
+        entry.data.eventId
       : 'kind:' + entry.kind;
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(entry);
@@ -451,7 +452,7 @@ function groupedEntries(entries, eventCounts = {}) {
         : rows[0].kind === 'survey'
           ? 'Custom surveys'
           : kindLabel(rows[0].kind, 'plural'));
-    const eventId = key.startsWith('event:') ? rows[0].data.eventId : '';
+    const eventId = rows[0].kind === 'rsvp' ? rows[0].data.eventId : '';
     if (eventId && eventCounts[eventId])
       group.dataset.total = eventCounts[eventId];
     group.open = true;

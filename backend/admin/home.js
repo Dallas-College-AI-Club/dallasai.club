@@ -191,10 +191,9 @@ export function renderHome(root, data, actions) {
         )
         .reduce(
           (sum, row) => ({
-            new: sum.new + row.new,
             total: sum.total + (row.current ?? row.new + row.reviewed),
           }),
-          { new: 0, total: 0 },
+          { total: 0 },
         ),
       cell = link(
         '',
@@ -206,17 +205,15 @@ export function renderHome(root, data, actions) {
             }),
         'total',
       );
-    cell.classList.toggle('has-new', count.new > 0);
     cell.append(
       node('strong', count.total.toLocaleString('en-US')),
       node(
         'span',
-        (kind === 'feedback'
+        kind === 'feedback'
           ? 'Event feedback'
           : kind === 'survey'
             ? 'Custom surveys'
-            : kindLabel(kind, 'plural')) +
-          (count.new ? ' · ' + count.new.toLocaleString('en-US') + ' new' : ''),
+            : kindLabel(kind, 'plural'),
       ),
     );
     grid.append(cell);

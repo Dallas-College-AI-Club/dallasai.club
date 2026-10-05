@@ -16,6 +16,44 @@ try {
   await page.goto(fixture.origin + '/test-signin');
   await page.goto(fixture.origin + '/admin/#/home');
   await expect(page.getByText("What's new", { exact: true })).toBeVisible();
+  await fixture.db.query(
+    `UPDATE club_forms.custom_surveys SET definition=jsonb_set(coalesce(definition,'{}'::jsonb),'{eventId}','"office-audit-event"') WHERE id=$1`,
+    [fixture.id],
+  );
+  await page.goto(fixture.origin + '/admin/#/inbox');
+  await page.goto(fixture.origin + '/admin/#/home');
+  const feedbackTotal = page
+    .locator('.total')
+    .filter({ hasText: 'Event feedback' });
+  await expect(feedbackTotal.locator('strong')).toHaveText('0');
+  await expect(feedbackTotal.locator('span')).toHaveText('Event feedback');
+  await expect(feedbackTotal).not.toHaveClass(/has-new/);
+  await expect(
+    page.locator('[aria-labelledby="tile-what-s-new"] .tile-number strong'),
+  ).toHaveText('7');
+  await page.goto(fixture.origin + '/admin/#/inbox?status=recent');
+  const feedbackGroup = page
+    .locator('.inbox-group')
+    .filter({ hasText: 'Advisor Studio' });
+  await expect(feedbackGroup.locator(':scope > summary')).toContainText(
+    'Event feedback',
+  );
+  await expect(feedbackGroup.locator('.group-tools')).toHaveCount(0);
+  await expect(
+    page.getByRole('link', {
+      name: 'Show all RSVPs for Office audit event',
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.goto(fixture.origin + '/admin/#/inbox?status=past');
+  await expect(feedbackGroup.locator(':scope > summary')).toContainText(
+    'Event feedback',
+  );
+  await expect(feedbackGroup.locator('.group-tools')).toHaveCount(0);
+  await fixture.db.query(
+    `UPDATE club_forms.custom_surveys SET definition=definition-'eventId' WHERE id=$1`,
+    [fixture.id],
+  );
   await page.goto(fixture.origin + '/admin/#/inbox');
   await expect(
     page.getByRole('button', { name: 'Upcoming & New', exact: true }),

@@ -886,6 +886,22 @@ dialog::backdrop {
 .editor-section p {
   margin: 0;
 }
+#event-story-sections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 12px 0 20px;
+}
+#event-story-sections button {
+  border-radius: 999px;
+  min-height: 44px;
+  white-space: normal;
+}
+#event-story-sections button[aria-pressed='true'] {
+  background: var(--selected);
+  border-color: var(--accent);
+  color: var(--accent);
+}
 .editor-section details {
   background: var(--subtle);
   border: 1px solid var(--line);

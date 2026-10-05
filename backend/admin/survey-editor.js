@@ -1,6 +1,25 @@
 import { node } from './ui.js';
 import { choiceEditor } from './survey-choices.js';
 import { availabilityDateEditor } from '../surveys/availability-ui.js';
+const answerTypes = [
+  ['short', 'Short answer', 'Students enter a few words, such as a name.'],
+  ['text', 'Long answer', 'Students write a detailed answer in a text box.'],
+  ['single', 'Single choice', 'Students select one of the choices you add.'],
+  ['multiple', 'Multiple choice', 'Students can select more than one choice.'],
+  ['date', 'Date', 'Students choose one calendar date.'],
+  ['time', 'Time', 'Students choose a time, such as 6:30 PM.'],
+  ['number', 'Number', 'Students enter a number, such as 2 guests.'],
+  [
+    'email',
+    'Email',
+    'Students enter an email address, such as name@example.edu.',
+  ],
+  [
+    'availability',
+    'Date availability',
+    'Students mark the dates and time periods that work for them.',
+  ],
+];
 export function surveyEditor(root, addButton) {
   let questions = [];
   function render() {
@@ -20,21 +39,21 @@ export function surveyEditor(root, addButton) {
           box.append(wrapper);
           return input;
         }
-        field('Question', 'label');
+        const title = field('Question', 'label');
+        title.required = true;
+        title.setCustomValidity(
+          question.label.trim() ? '' : 'Enter question ' + (index + 1) + '.',
+        );
+        title.oninput = () => {
+          question.label = title.value;
+          title.setCustomValidity(
+            title.value.trim() ? '' : 'Enter question ' + (index + 1) + '.',
+          );
+        };
         field('Help text (optional)', 'description', 'textarea', 1000);
         const typeLabel = node('label', 'Answer type'),
           type = node('select');
-        for (const [value, label] of [
-          ['text', 'Written answer'],
-          ['short', 'Short answer'],
-          ['single', 'Choose one'],
-          ['multiple', 'Choose several'],
-          ['date', 'Calendar date'],
-          ['time', 'Time of day'],
-          ['number', 'Number'],
-          ['email', 'Email address'],
-          ['availability', 'Date availability'],
-        ])
+        for (const [value, label] of answerTypes)
           type.append(new Option(label, value));
         type.value = question.type;
         type.onchange = () => {
@@ -47,7 +66,14 @@ export function surveyEditor(root, addButton) {
           render();
         };
         typeLabel.append(type);
-        box.append(typeLabel);
+        box.append(
+          typeLabel,
+          node(
+            'p',
+            answerTypes.find(([value]) => value === question.type)?.[2],
+            'hint',
+          ),
+        );
         function check(label, key) {
           const wrapper = node('label'),
             input = node('input');
@@ -113,7 +139,15 @@ export function surveyEditor(root, addButton) {
           };
           refreshChoices();
           wrapper.append(input);
-          box.append(wrapper, choices);
+          box.append(
+            wrapper,
+            node(
+              'p',
+              'The list above and the individual choices below edit the same choices.',
+              'hint',
+            ),
+            choices,
+          );
           if (question.type !== 'availability')
             check('Allow an Other answer', 'allowOther');
         }
@@ -165,6 +199,20 @@ export function surveyEditor(root, addButton) {
     root.lastElementChild.querySelector('input').focus();
   };
   return {
+    validate() {
+      for (const [index, question] of questions.entries()) {
+        const title = root.children[index].querySelector('input');
+        title.setCustomValidity(
+          question.label.trim() ? '' : 'Enter question ' + (index + 1) + '.',
+        );
+        if (!title.checkValidity()) {
+          title.focus();
+          title.reportValidity();
+          return false;
+        }
+      }
+      return true;
+    },
     set(value = []) {
       questions = structuredClone(value);
       render();

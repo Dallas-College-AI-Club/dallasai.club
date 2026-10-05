@@ -10,6 +10,9 @@ import {
 } from './survey-availability.mjs';
 import { availabilityValues } from '../surveys/availability-values.js';
 export const FORM_VERSION = 'custom-form/1';
+export const supportedFormVersion = (version) =>
+  version === FORM_VERSION ||
+  /^custom-form\/1:[1-9][0-9]*$/.test(version || '');
 const uuid = /^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i;
 const invalid = (message) => {
   throw new RequestError(400, message);
@@ -292,6 +295,19 @@ export async function changeDraft(db, actor, body) {
         409,
         'Published questions and permissions are fixed. Create a new survey to change them.',
       );
+    if (row?.published_at) {
+      const previous = validateDefinition(row.definition);
+      if (
+        definition.audience !== previous.audience ||
+        (definition.eventId || '') !== (previous.eventId || '') ||
+        JSON.stringify(definition.permissions) !==
+          JSON.stringify(previous.permissions)
+      )
+        throw new RequestError(
+          409,
+          'Keep the published audience, linked event and access permissions. Create a new survey for different sharing permissions.',
+        );
+    }
     if (body.action === 'publish' && !row)
       throw new RequestError(
         400,
@@ -339,8 +355,13 @@ export async function changeDraft(db, actor, body) {
           'Save and preview your latest changes before publishing.',
         );
       await tx.query(
-        `UPDATE club_forms.custom_surveys SET status='open',published_at=now(),expires_at=now()+($2::int*interval '1 day'),edit_revision=$3 WHERE id=$1`,
-        [body.id, definition.durationDays, revision],
+        `UPDATE club_forms.custom_surveys SET status='open',published_at=now(),expires_at=now()+($2::int*interval '1 day'),edit_revision=$3,content_version=$4 WHERE id=$1`,
+        [
+          body.id,
+          definition.durationDays,
+          revision,
+          row.published_at ? FORM_VERSION + ':' + revision : FORM_VERSION,
+        ],
       );
     } else
       await tx.query(
@@ -353,6 +374,128 @@ export async function changeDraft(db, actor, body) {
         body.requestId,
         body.id,
         { save: 'draft_saved', publish: 'published', close: 'closed' }[
+          body.action
+        ],
+        actor.email,
+        revision,
+        signature,
+      ],
+    );
+    return { id: body.id, revision };
+  });
+}
+export async function changeSurveyLifecycle(db, actor, body) {
+  object(body, ['id', 'requestId', 'expectedRevision', 'action']);
+  if (
+    !uuid.test(body.id) ||
+    !uuid.test(body.requestId) ||
+    !Number.isInteger(body.expectedRevision) ||
+    body.expectedRevision < 0 ||
+    !['edit', 'archive', 'restore', 'delete'].includes(body.action)
+  )
+    invalid('Check the survey change.');
+  const signature = digest(
+    JSON.stringify([body.id, body.action, body.expectedRevision, actor.email]),
+  );
+  return db.transaction(async (tx) => {
+    await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [body.id]);
+    const row = (
+      await tx.query(
+        'SELECT * FROM club_forms.custom_surveys WHERE id=$1 FOR UPDATE',
+        [body.id],
+      )
+    ).rows[0];
+    const receipt = (
+      await tx.query(
+        'SELECT * FROM club_forms.custom_survey_changes WHERE id=$1',
+        [body.requestId],
+      )
+    ).rows[0];
+    if (receipt) {
+      if (receipt.request_digest !== signature)
+        throw new RequestError(
+          409,
+          'This change reference was already used. Reload the survey.',
+        );
+      return {
+        id: body.id,
+        revision: receipt.revision,
+        ...(receipt.action === 'deleted' ? { deleted: true } : {}),
+      };
+    }
+    if (!row) throw new RequestError(404, 'Survey not found.');
+    if (row.edit_revision !== body.expectedRevision)
+      throw new RequestError(
+        409,
+        'Another admin changed this survey. Reload before saving.',
+      );
+    if (body.action === 'delete') {
+      if (row.status !== 'archived')
+        throw new RequestError(
+          409,
+          'Archive the survey before permanently deleting it and its saved responses.',
+        );
+      for (const table of [
+        'devices',
+        'receipts',
+        'responses',
+        'activity',
+        'members',
+      ])
+        await tx.query(
+          'DELETE FROM club_forms.custom_survey_' +
+            table +
+            ' WHERE survey_id=$1',
+          [body.id],
+        );
+      const revision = row.edit_revision + 1;
+      await tx.query(
+        'INSERT INTO club_forms.custom_survey_changes(id,survey_id,action,actor_email,revision,request_digest) VALUES($1,$2,$3,$4,$5,$6)',
+        [body.requestId, body.id, 'deleted', actor.email, revision, signature],
+      );
+      await tx.query('DELETE FROM club_forms.custom_surveys WHERE id=$1', [
+        body.id,
+      ]);
+      return { id: body.id, revision, deleted: true };
+    }
+    if ((body.action === 'restore') !== (row.status === 'archived'))
+      throw new RequestError(
+        409,
+        'Refresh the survey before changing its archive status.',
+      );
+    if (body.action === 'edit' && !row.definition)
+      throw new RequestError(
+        409,
+        'The original Advisor Studio questions are fixed. Use Create custom survey for editable questions.',
+      );
+    if (body.action === 'edit')
+      await tx.query(
+        'UPDATE club_forms.custom_survey_responses SET response_definition=$2 WHERE survey_id=$1 AND response_definition IS NULL',
+        [
+          body.id,
+          JSON.stringify({
+            ...row.definition,
+            content_version: row.content_version,
+          }),
+        ],
+      );
+    const status =
+      body.action === 'archive'
+        ? 'archived'
+        : body.action === 'restore' && (row.published_at || !row.definition)
+          ? 'closed'
+          : 'draft';
+    const revision = row.edit_revision + 1;
+    await tx.query(
+      "UPDATE club_forms.custom_surveys SET status=$2,edit_revision=$3,expires_at=CASE WHEN $4='edit' THEN now()+interval '30 days' ELSE expires_at END WHERE id=$1",
+      [body.id, status, revision, body.action],
+    );
+    await tx.query(
+      'INSERT INTO club_forms.custom_survey_changes(id,survey_id,action,actor_email,revision,request_digest) VALUES($1,$2,$3,$4,$5,$6)',
+      [
+        body.requestId,
+        body.id,
+        { edit: 'editing', archive: 'archived', restore: 'restored' }[
           body.action
         ],
         actor.email,
@@ -376,7 +519,7 @@ export function validateFormResponse(body, survey, member) {
     !uuid.test(body.requestId) ||
     !Number.isInteger(body.expectedRevision) ||
     body.expectedRevision < 0 ||
-    body.contentVersion !== FORM_VERSION ||
+    body.contentVersion !== (survey.content_version || FORM_VERSION) ||
     body.advisorId !== member.advisor_id ||
     body.consent !== survey.definition.permissions.results ||
     !Array.isArray(body.answers)

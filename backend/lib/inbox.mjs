@@ -1,20 +1,30 @@
 import { kinds, uuid } from './validation.mjs';
 import { RequestError } from './errors.mjs';
+import { currentInbox } from './inbox-surveys.mjs';
+import { centralTime } from './event-content.mjs';
+export function eventEnd(event) {
+  const value = event.end || event.date;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value || '')) {
+    const next = new Date(value + 'T00:00:00Z');
+    next.setUTCDate(next.getUTCDate() + 1);
+    return new Date(centralTime(next.toISOString().slice(0, 10), '00:00'));
+  }
+  return new Date(value);
+}
+export function recentEndedEvents(events, now = new Date()) {
+  return events.filter(
+    (event) =>
+      eventEnd(event) <= now &&
+      eventEnd(event) >= new Date(now.getTime() - 14 * 86400000),
+  );
+}
 export function upcomingEvents(events, now = new Date()) {
-  const today = new Intl.DateTimeFormat('en-CA', {
-    timeZone: 'America/Chicago',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(now);
   return events
     .filter(
       (e) =>
-        (e.potential === true && !e.date) ||
-        (e.date &&
-          (/^\d{4}-\d{2}-\d{2}$/.test(e.date)
-            ? e.date >= today
-            : new Date(e.end || e.date) > now)),
+        !e.archived_at &&
+        e.live !== false &&
+        ((e.potential === true && !e.date) || (e.date && eventEnd(e) > now)),
     )
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 }
@@ -32,8 +42,23 @@ export function inboxFilter(params, events, { search = false } = {}) {
   if (
     (kind &&
       !kinds.includes(kind) &&
-      !['rsvp-past', 'rsvp-all', 'questions-requests'].includes(kind)) ||
-    (status && !['active', 'new', 'reviewed', 'closed'].includes(status)) ||
+      ![
+        'rsvp-past',
+        'rsvp-all',
+        'questions-requests',
+        'feedback',
+        'survey',
+      ].includes(kind)) ||
+    (status &&
+      ![
+        'current',
+        'past',
+        'recent',
+        'active',
+        'new',
+        'reviewed',
+        'closed',
+      ].includes(status)) ||
     (id && !uuid.test(id)) ||
     (eventId && !/^[a-z0-9][a-z0-9-]{0,99}$/.test(eventId))
   )
@@ -44,14 +69,22 @@ export function inboxFilter(params, events, { search = false } = {}) {
   if (/[\u0000-\u001f\u007f]/.test(q))
     throw new RequestError(400, 'Search for letters, numbers or symbols.');
   return {
-    values: [kind, status, id, eventId, events.map((e) => e.id)].concat(
-      search ? [q] : [],
-    ),
+    values: [
+      kind,
+      status,
+      id,
+      eventId,
+      upcomingEvents(events).map((e) => e.id),
+      recentEndedEvents(events).map((e) => e.id),
+    ].concat(search ? [q] : []),
     where:
-      `WHERE ($1='' OR e.kind=$1 OR ($1 IN ('rsvp-past','rsvp-all') AND e.kind='rsvp') OR ($1='questions-requests' AND e.kind IN ('question','workshop'))) AND ($2='' OR e.review_status=$2 OR ($2='active' AND e.review_status IN ('new','reviewed'))) AND ($3='' OR e.id::text=$3)
+      `WHERE ($1='' OR e.kind=$1 OR ($1 IN ('rsvp-past','rsvp-all') AND e.kind='rsvp') OR ($1='questions-requests' AND e.kind IN ('question','workshop'))) AND
+      ($3<>'' OR $2='' OR ($2='closed' AND e.review_status='closed') OR ($2 IN ('current','past','recent') AND e.review_status<>'closed' AND
+        CASE WHEN $2='recent' THEN e.created_at>=now()-interval '14 days' WHEN $2='current' THEN ${currentInbox()} ELSE NOT(${currentInbox()}) END)
+        OR ($2 IN ('active','new','reviewed') AND (e.review_status=$2 OR ($2='active' AND e.review_status IN ('new','reviewed'))))) AND ($3='' OR e.id::text=$3)
       AND ($4='' OR (e.kind='rsvp' AND e.data->>'eventId'=$4))
       AND ($1 NOT IN ('rsvp','rsvp-past') OR (coalesce(e.data->>'eventId','')=ANY($5::text[]))=($1='rsvp'))` +
-      (search ? ` AND ($6='' OR strpos(${searchText},lower($6))>0)` : ''),
+      (search ? ` AND ($7='' OR strpos(${searchText},lower($7))>0)` : ''),
   };
 }
 // Postgres refuses UTC offsets of 16 hours or more.
@@ -78,7 +111,7 @@ export function validTime(value) {
 // of its millisecond (or second, or minute) when newest first: the next page
 // may then repeat a row already shown, but never skips one.
 // `index` is the number of the first of its two placeholders.
-export function inboxPage(params, index) {
+export function inboxPage(params, index, source = 'club_forms.entries') {
   const sort = params.get('sort') || 'newest',
     before = params.get('before') || '',
     [, at, id] = /^([^|]+)\|([^|]+)$/.exec(before) || [];
@@ -104,7 +137,7 @@ export function inboxPage(params, index) {
     // Past year 9999 the ISO form changes; keep the time as sent.
     if (!validTime(fallback)) fallback = at;
   }
-  const time = `coalesce((SELECT c.created_at FROM club_forms.entries c WHERE c.id=$${index + 1}::uuid),$${index}::timestamptz)`;
+  const time = `coalesce((SELECT c.created_at FROM ${source} c WHERE c.id=$${index + 1}::uuid),$${index}::timestamptz)`;
   return {
     values: before ? [fallback, id.toLowerCase()] : [null, null],
     where: ` AND ($${index + 1}::uuid IS NULL OR e.created_at${sort === 'oldest' ? '>' : '<'}${time} OR (e.created_at=${time} AND e.id>$${index + 1}::uuid))`,

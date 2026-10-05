@@ -2,6 +2,8 @@
 // Member names appear only on the newest New submissions, as in the Inbox.
 // Recent activity is officers' own actions with labels: no member names,
 // emails, comment bodies or entry data.
+import { inboxSource, currentInbox } from './inbox-surveys.mjs';
+import { recentEndedEvents } from './inbox.mjs';
 const preview = (data) => {
   const text = [data?.subject, data?.topic, data?.title, data?.campus].find(
     (value) => typeof value === 'string' && value.trim(),
@@ -17,9 +19,9 @@ export async function homeSummary(db, published, upcoming) {
       `SELECT data->>'eventId' AS id,
         (array_agg(data->>'eventTitle' ORDER BY created_at DESC))[1] AS title,
         (array_agg(data->>'eventDate' ORDER BY created_at DESC))[1] AS date,
-        count(*)::int AS total,
-        count(*) FILTER (WHERE review_status='new')::int AS new
-      FROM club_forms.entries WHERE kind='rsvp' AND review_status IN ('new','reviewed') AND state<>'cancelled' AND data->>'eventId' IS NOT NULL
+        count(*) FILTER (WHERE state<>'cancelled')::int AS total,
+        count(*) FILTER (WHERE state<>'cancelled' AND created_at>=now()-interval '14 days')::int AS new
+      FROM club_forms.entries WHERE kind='rsvp' AND review_status<>'closed' AND data->>'eventId' IS NOT NULL
       GROUP BY 1`,
     )
   ).rows.map((group) => ({
@@ -38,10 +40,14 @@ export async function homeSummary(db, published, upcoming) {
     );
   const newest = (
     await db.query(
-      `SELECT id,kind,name,email,created_at,review_status,data FROM club_forms.entries
-      WHERE review_status='new' AND kind<>'rsvp' ORDER BY created_at DESC,id LIMIT 5`,
+      `${inboxSource} SELECT id,kind,name,email,created_at,review_status,data,source FROM inbox_rows
+      WHERE review_status<>'closed' AND created_at>=now()-interval '14 days' AND kind<>'rsvp' ORDER BY created_at DESC,id LIMIT 5`,
     )
-  ).rows.map(({ data, ...entry }) => ({ ...entry, preview: preview(data) }));
+  ).rows.map(({ data, ...entry }) => ({
+    ...entry,
+    surveyId: data.surveyId,
+    preview: preview(data),
+  }));
   const dated = upcoming.find((event) => event.date && !event.potential);
   const nextEvent = dated
     ? {
@@ -84,11 +90,9 @@ export async function homeSummary(db, published, upcoming) {
   // of the survey's publication/expiry state. Count the same active answers.
   const eventFeedback = (
     await db.query(
-      `SELECT count(*)::int AS total FROM club_forms.custom_surveys s
-      JOIN club_forms.custom_survey_members m ON m.survey_id=s.id
-      JOIN club_forms.custom_survey_responses r USING(survey_id,advisor_id)
-      WHERE s.definition->>'eventId' IS NOT NULL AND s.status<>'draft'
-        AND m.active AND jsonb_array_length(r.responses)>0`,
+      `${inboxSource} SELECT count(*)::int AS total FROM inbox_rows e
+      WHERE e.kind='feedback' AND e.review_status<>'closed' AND ${currentInbox('$1', '$2')}`,
+      [upcomingIds, recentEndedEvents(published).map((event) => event.id)],
     )
   ).rows[0].total;
   // Officer actions only. Submission actions name the kind, never the person.

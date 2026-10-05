@@ -90,6 +90,16 @@ Keep runtime connections restricted. The original leaderboard setup is retained 
 | 020 | Help guidebook categories, editable starter topics, and topic-linked audit receipts |
 | 021 | Officer-recorded event attendance and registration snapshots for RSVPs without questions |
 | 022 | Optional custom-survey short link and permission for officers to update it |
+| 023 | Remove contact addresses from the active list while retaining saved-record relationships |
+| 024 | Survey lifecycle, original response definitions, and archived survey/response deletion |
+
+Apply migrations 023 and 024 before deploying the contact and survey lifecycle update.
+They preserve existing answers. Migration 023 adds an active-address flag; removed
+addresses remain linked to their historical records. Migration 024 adds the saved
+question-definition field, extends change receipts, and grants the runtime role the
+deletion permissions used by authenticated officer actions. Survey change receipts
+survive parent deletion through a nullable foreign key; they contain a request digest,
+actor and revision, not a copy of answers. Keep these additive migrations on a code rollback.
 
 Apply `018_survey_maintenance.sql` before deploying the new maintenance handler.
 It grants deletion only for device tokens, not survey responses. The migration is
@@ -158,7 +168,9 @@ From the repository root run `hugo --cleanDestinationDir --panicOnWarning`.
 Browser fixtures use synthetic data and local databases. Test public routes, form
 validation and retries, mobile layouts, sign-in/sign-out, event changes, and custom
 survey creation, preview, submission, replacement, access removal, and result paging.
-The CI office workflow runs `node tests/browser-office.mjs`.
+The CI office workflow runs `browser-office.mjs`, `browser-survey-groups.mjs`,
+`browser-contact-profile.mjs`, `browser-inbox-recency.mjs`, and
+`browser-survey-lifecycle.mjs` from `backend/tests/`.
 
 Event-participation backend verification (2026-10-04, disposable local PGlite):
 30 targeted tests passed across `event-participation`, `survey-management`,

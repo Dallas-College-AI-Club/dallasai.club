@@ -642,7 +642,7 @@ try {
       await expect(page.locator('#filters [name="kind"]')).toHaveValue('');
       await expect(page.locator('#filters [name="eventId"]')).toHaveValue('');
       await expect(
-        page.locator('[data-inbox-status="active"]'),
+        page.locator('[data-inbox-status="current"]'),
       ).toHaveAttribute('aria-pressed', 'true');
     },
   );
@@ -945,10 +945,10 @@ try {
   );
 
   await check(
-    'Home totals and default Inbox show only active submissions',
+    'Home totals match Upcoming & New while other saved feedback stays in Past',
     async (page, fixture) => {
       await expect(
-        page.locator('[data-inbox-status="active"]'),
+        page.locator('[data-inbox-status="current"]'),
       ).toHaveAttribute('aria-pressed', 'true');
       await expect(page.locator('#entries')).not.toContainText(
         'Archived question',
@@ -964,7 +964,7 @@ try {
         )
       ).rows[0].n;
       await expect(totals.locator('.tile-number')).toHaveText(
-        expected + 2 + ' active submissions',
+        expected + ' upcoming & new submissions',
       );
       await expect(totals).not.toContainText('permanently deleted');
       await expect(totals).not.toContainText('saved (including');
@@ -978,7 +978,7 @@ try {
       await expect(question.locator('strong')).toHaveText('3');
       await question.click();
       await expect(
-        page.locator('[data-inbox-status="active"]'),
+        page.locator('[data-inbox-status="current"]'),
       ).toHaveAttribute('aria-pressed', 'true');
       await expect(page.locator('#entries')).toContainText('Reviewed question');
       await expect(page.locator('#entries')).toContainText('Office workshop');
@@ -994,21 +994,23 @@ try {
       const feedback = totals
         .getByRole('link')
         .filter({ hasText: 'Event feedback' });
-      await expect(feedback.locator('strong')).toHaveText('2');
+      await expect(feedback.locator('strong')).toHaveText('0');
       await feedback.click();
-      const responses = page.locator('#event-surveys-root');
-      await expect(
-        responses.getByRole('combobox', { name: /^Response type/ }),
-      ).toHaveValue('feedback');
-      await expect(responses).toContainText('Office feedback A');
-      await expect(responses).toContainText('Office feedback B');
-      await expect(responses).not.toContainText('Archived feedback');
-      await expect(responses.locator('.survey-response')).toHaveCount(0);
+      await expect(page.locator('#filters [name="kind"]')).toHaveValue(
+        'feedback',
+      );
+      await expect(page.locator('#entries .entry')).toHaveCount(0);
+      await page.getByRole('button', { name: 'Past', exact: true }).click();
+      await expect(page.locator('#entries')).toContainText('Office feedback A');
+      await expect(page.locator('#entries')).toContainText('Office feedback B');
+      await expect(page.locator('#entries')).not.toContainText(
+        'Archived feedback',
+      );
     },
   );
 
   await check(
-    'Inbox status actions retain matching Active and All cards and remove New-only matches',
+    'Inbox archive and restore preserve responses and group counts',
     async (page, fixture, ids) => {
       await page.goto(
         fixture.origin + '/admin/#/inbox?type=rsvp-all&event=' + ids.event,
@@ -1016,16 +1018,9 @@ try {
       const alex = page.locator('#entry-' + ids.alex);
       await expect(page.locator('#entries .entry')).toHaveCount(2);
       await alex.locator(':scope > summary').click();
-      await alex
-        .getByRole('button', { name: 'Mark reviewed', exact: true })
-        .click();
-      await expect(alex.locator('.badge.reviewed')).toBeVisible();
-      await expect(page.locator('#entries .entry')).toHaveCount(2);
-      await expect(page.locator('.inbox-group > summary')).toHaveText(
-        'Office audit event · 2 RSVPs',
-      );
-      await alex.getByRole('button', { name: 'Mark new', exact: true }).click();
-      await expect(alex.locator('.badge.new')).toBeVisible();
+      await expect(
+        alex.getByRole('button', { name: 'Mark reviewed', exact: true }),
+      ).toHaveCount(0);
       await alex
         .getByRole('button', { name: 'Archive submission', exact: true })
         .click();
@@ -1033,26 +1028,20 @@ try {
       await expect(page.locator('.inbox-group > summary')).toHaveText(
         'Office audit event · 1 RSVP',
       );
-      await page.locator('[data-inbox-status=""]').click();
-      await expect(page.locator('#entries .entry')).toHaveCount(2);
+      await page.locator('[data-inbox-status="closed"]').click();
+      await expect(alex).toHaveCount(1);
       await alex.locator(':scope > summary').click();
-      await alex.getByRole('button', { name: 'Mark new', exact: true }).click();
-      await expect(alex.locator('.badge.new')).toBeVisible();
+      await expect(
+        alex.getByRole('button', { name: 'Delete permanently', exact: true }),
+      ).toBeVisible();
       await alex
-        .getByRole('button', { name: 'Archive submission', exact: true })
+        .getByRole('button', { name: 'Restore submission', exact: true })
         .click();
-      await expect(alex.locator('.badge.closed')).toBeVisible();
+      await expect(alex).toHaveCount(0);
+      await page.locator('[data-inbox-status="current"]').click();
       await expect(page.locator('#entries .entry')).toHaveCount(2);
-      await page.locator('[data-inbox-status="new"]').click();
-      const jordan = page.locator('#entry-' + ids.jordan);
-      await expect(page.locator('#entries .entry')).toHaveCount(1);
-      await jordan.locator(':scope > summary').click();
-      await jordan
-        .getByRole('button', { name: 'Mark reviewed', exact: true })
-        .click();
-      await expect(jordan).toHaveCount(0);
-      await expect(page.locator('#entries')).toContainText(
-        'No submissions match these filters.',
+      await expect(page.locator('.inbox-group > summary')).toHaveText(
+        'Office audit event · 2 RSVPs',
       );
     },
   );

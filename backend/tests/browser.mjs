@@ -484,7 +484,7 @@ try {
     await expect(card).toBeVisible();
     if ((await card.getAttribute('open')) === null)
       await card.locator(':scope > summary').click();
-    await expect(card.locator('.badge')).toHaveText('New');
+    await expect(card.locator('.badge')).toHaveText('Received');
     await expect(
       card.getByRole('link', { name: entry.email, exact: true }),
     ).toBeVisible();
@@ -549,7 +549,7 @@ try {
         review_status: 'new',
         state: 'active',
         email_verified: true,
-        created_at: '2026-09-20T17:00:00Z',
+        created_at: new Date().toISOString(),
         data: {
           campus: 'Richland',
           interests: '<img src=x onerror=alert(1)> Learning AI',
@@ -559,8 +559,24 @@ try {
       },
     ],
     counts: [
-      { kind: 'join', new: 1, reviewed: 0, closed: 0, total: 1 },
-      { kind: 'subscribe', new: 1, reviewed: 0, closed: 0, total: 1 },
+      {
+        kind: 'join',
+        new: 1,
+        current: 1,
+        past: 0,
+        reviewed: 0,
+        closed: 0,
+        total: 1,
+      },
+      {
+        kind: 'subscribe',
+        new: 1,
+        current: 1,
+        past: 0,
+        reviewed: 0,
+        closed: 0,
+        total: 1,
+      },
     ],
     queue: { pending: 0, failed: 0 },
     configured: {
@@ -612,6 +628,7 @@ try {
       fixture.counts[0].new = body.status === 'new' ? 1 : 0;
       fixture.counts[0].reviewed = body.status === 'reviewed' ? 1 : 0;
       fixture.counts[0].closed = body.status === 'closed' ? 1 : 0;
+      fixture.counts[0].current = body.status === 'closed' ? 0 : 1;
       activity.unshift({
         id: String(activity.length + 1),
         actor: 'officer@example.com',
@@ -621,7 +638,7 @@ try {
       });
     }
     const params = new URL(route.request().url()).searchParams;
-    const newInView = ['reviewed', 'closed'].includes(params.get('status'))
+    const newInView = ['past', 'closed'].includes(params.get('status'))
       ? 0
       : fixture.counts
           .filter(
@@ -657,7 +674,7 @@ try {
           configured: fixture.configured,
         }),
       });
-    if (slowReview && params.get('status') === 'reviewed') {
+    if (slowReview && params.get('status') === 'past') {
       const hold = slowReview;
       slowReview = null;
       hold.arrived();
@@ -666,7 +683,7 @@ try {
     const entries = fixture.entries.filter(
       (entry) =>
         (!params.get('status') ||
-          (params.get('status') === 'active' &&
+          (['current', 'recent'].includes(params.get('status')) &&
             entry.review_status !== 'closed') ||
           entry.review_status === params.get('status')) &&
         (!params.get('kind') || entry.kind === params.get('kind')),
@@ -692,7 +709,7 @@ try {
   await admin.getByRole('button', { name: 'Sign in', exact: true }).click();
   await admin.locator('#inbox-pane').waitFor();
   testSignedIn = true;
-  await expect(admin.locator('[data-inbox-status="active"]')).toHaveAttribute(
+  await expect(admin.locator('[data-inbox-status="current"]')).toHaveAttribute(
     'aria-pressed',
     'true',
   );
@@ -718,7 +735,7 @@ try {
     }),
   ).toBeVisible();
   await admin.locator('#inbox-tab').click();
-  await admin.locator('[data-inbox-status="new"]').click();
+  await admin.locator('[data-inbox-status="current"]').click();
   // The count cards are folded; the summary still says what is new.
   await expect(admin.locator('#counts-summary')).toHaveText(/^Counts · /);
   await admin.locator('#counts-summary').click();
@@ -744,7 +761,7 @@ try {
   await admin.locator('#entries .entry > summary').click();
   await admin.getByText('Submission details', { exact: true }).click();
   assert.equal(await admin.locator('.entry img').count(), 0);
-  await admin.getByRole('button', { name: 'Mark reviewed' }).click();
+  await admin.getByRole('button', { name: 'Archive submission' }).click();
   await expect(admin.locator('#entries .entry')).toHaveCount(0);
   // Counts and the title follow an officer's own change without a Refresh.
   await expect(admin).toHaveTitle('Inbox · Club Office');
@@ -753,34 +770,27 @@ try {
       .locator('#counts .count')
       .filter({ hasText: 'Signups' })
       .locator('strong'),
-  ).toHaveText('1');
-  await admin.locator('[data-inbox-status="reviewed"]').click();
-  await admin.locator('#entries .entry').waitFor();
-  if (!(await admin.locator('#entries .entry').evaluate((el) => el.open)))
-    await admin.locator('#entries .entry > summary').click();
-  await admin.locator('.badge').filter({ hasText: 'reviewed' }).waitFor();
-  await admin
-    .getByRole('button', { name: 'Archive submission', exact: true })
-    .click();
-  await expect(admin.locator('#entries .entry')).toHaveCount(0);
+  ).toHaveText('0');
   await admin.locator('[data-inbox-status="closed"]').click();
   await admin.locator('#entries .entry').waitFor();
   if (!(await admin.locator('#entries .entry').evaluate((el) => el.open)))
     await admin.locator('#entries .entry > summary').click();
-  await admin.locator('.badge').filter({ hasText: 'archived' }).waitFor();
+  await admin.locator('.badge').filter({ hasText: 'Archived' }).waitFor();
   await expect(admin.locator('#export')).toHaveAttribute(
     'href',
     /status=closed/,
   );
   await admin.getByText('Activity & comments', { exact: true }).click();
-  await admin.getByRole('button', { name: 'Mark new', exact: true }).click();
+  await admin
+    .getByRole('button', { name: 'Restore submission', exact: true })
+    .click();
   await expect(admin.locator('#entries .entry')).toHaveCount(0);
   await expect(admin).toHaveTitle('Inbox · Club Office');
-  await admin.locator('[data-inbox-status="new"]').click();
+  await admin.locator('[data-inbox-status="current"]').click();
   await admin.locator('#entries .entry').waitFor();
   if (!(await admin.locator('#entries .entry').evaluate((el) => el.open)))
     await admin.locator('#entries .entry > summary').click();
-  await admin.locator('.badge').filter({ hasText: 'new' }).waitFor();
+  await admin.locator('.badge').filter({ hasText: 'Received' }).waitFor();
   // Reopening an entry is not an arrival.
   await expect(admin.locator('#arrivals')).toBeHidden();
   await admin.getByText('Activity & comments', { exact: true }).click();
@@ -788,7 +798,6 @@ try {
     .getByText('Visible to all authorized club admins.', { exact: false })
     .waitFor();
   const timeline = admin.locator('.submission-timeline');
-  await timeline.getByText('Marked reviewed', { exact: true }).waitFor();
   await timeline.getByText('Archived', { exact: true }).waitFor();
   await admin
     .getByLabel('Add a comment', { exact: true })
@@ -868,11 +877,14 @@ try {
       release = resolve;
     }),
   };
-  await admin.locator('[data-inbox-status="reviewed"]').click();
+  await admin.locator('[data-inbox-status="past"]').click();
   await pendingRequest;
-  await admin.locator('[data-inbox-status="new"]').click();
+  await admin.locator('[data-inbox-status="current"]').click();
   release();
-  await expect(admin.locator('#export')).toHaveAttribute('href', /status=new/);
+  await expect(admin.locator('#export')).toHaveAttribute(
+    'href',
+    /status=current/,
+  );
   await expect(admin.locator('#entries .entry')).toHaveCount(0);
   await expect(admin.locator('#entries')).toHaveAttribute('aria-busy', 'false');
   const alertsSwitch = admin.getByRole('switch', {

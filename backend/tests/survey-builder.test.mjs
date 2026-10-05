@@ -10,10 +10,12 @@ import {
   validateDefinition,
   validateFormResponse,
   FORM_VERSION,
+  changeSurveyLifecycle,
 } from '../lib/survey-builder.mjs';
 import { changeRespondent } from '../lib/survey-respondents.mjs';
 import { surveyCatalog } from '../lib/survey-catalog.mjs';
-import { surveyResultsCSV } from '../lib/survey-results.mjs';
+import { surveyResultsCSV, surveyExportRows } from '../lib/survey-results.mjs';
+import { responseDocument } from '../admin/response-document.js';
 import {
   privateSurveyToken,
   linkedSurvey,
@@ -57,6 +59,253 @@ const action = (id, definition, expectedRevision = 0, action = 'save') => ({
   expectedRevision,
   action,
   requestId: randomUUID(),
+});
+
+test('survey lifecycle archives and restores drafts without changing responses, and rejects stale or reused changes', async () => {
+  const f = await fixture();
+  process.env.AUTH_BASE_URL = 'https://club.example';
+  try {
+    const definition = {
+      ...draft(),
+      audience: 'public',
+      permissions: { preview: 'link', answer: 'verified', results: 'admins' },
+    };
+    definition.questions[0].type = 'multiple';
+    definition.questions[0].options = ['Morning', 'Evening'];
+    const id = randomUUID();
+    await changeDraft(f.db, actor, action(id, definition));
+    await changeDraft(f.db, actor, action(id, definition, 1, 'publish'));
+    const survey = await linkedSurvey(f.db, privateSurveyToken(id));
+    const device = await rememberDevice(f.db, survey, {
+      id: 'lifecycle-user',
+      email: 'lifecycle@example.edu',
+      emailVerified: true,
+    });
+    await submitSurvey(
+      f.db,
+      { headers: { cookie: deviceCookie(survey) + '=' + device.token } },
+      privateSurveyToken(id),
+      {
+        requestId: randomUUID(),
+        expectedRevision: 0,
+        contentVersion: FORM_VERSION,
+        advisorId: device.member.advisor_id,
+        consent: 'admins',
+        answers: [{ id: definition.questions[0].id, value: [1] }],
+      },
+    );
+    const responses = await currentResponses(f.db, id);
+    const archive = {
+      id,
+      requestId: randomUUID(),
+      expectedRevision: 2,
+      action: 'archive',
+    };
+    await changeSurveyLifecycle(f.db, actor, archive);
+    assert.equal((await getDraft(f.db, id)).status, 'archived');
+    assert.deepEqual(await currentResponses(f.db, id), responses);
+    await assert.rejects(linkedSurvey(f.db, privateSurveyToken(id)), {
+      status: 404,
+    });
+    assert.deepEqual(await changeSurveyLifecycle(f.db, actor, archive), {
+      id,
+      revision: 3,
+    });
+    await assert.rejects(
+      changeSurveyLifecycle(f.db, actor, { ...archive, action: 'restore' }),
+      { status: 409 },
+    );
+    await assert.rejects(
+      changeSurveyLifecycle(f.db, actor, {
+        ...archive,
+        requestId: randomUUID(),
+        action: 'restore',
+      }),
+      { status: 409 },
+    );
+    await changeSurveyLifecycle(f.db, actor, {
+      id,
+      requestId: randomUUID(),
+      expectedRevision: 3,
+      action: 'restore',
+    });
+    const restored = await getDraft(f.db, id);
+    assert.equal(restored.status, 'closed');
+    assert.equal(restored.previewLink, null);
+    assert.deepEqual(restored.definition, survey.definition);
+    assert.deepEqual(await currentResponses(f.db, id), responses);
+    await assert.rejects(
+      changeSurveyLifecycle(f.db, actor, {
+        id,
+        requestId: randomUUID(),
+        expectedRevision: 4,
+        action: 'restore',
+      }),
+      { status: 409 },
+    );
+    await assert.rejects(
+      changeSurveyLifecycle(f.db, actor, {
+        id: f.id,
+        requestId: randomUUID(),
+        expectedRevision: 0,
+        action: 'edit',
+      }),
+      { status: 409 },
+    );
+    await assert.rejects(
+      changeSurveyLifecycle(f.db, actor, {
+        id: randomUUID(),
+        requestId: randomUUID(),
+        expectedRevision: 0,
+        action: 'archive',
+      }),
+      { status: 404 },
+    );
+    await f.db.query(
+      'UPDATE club_forms.custom_survey_responses SET response_definition=NULL WHERE survey_id=$1',
+      [id],
+    );
+    await changeSurveyLifecycle(f.db, actor, {
+      id,
+      requestId: randomUUID(),
+      expectedRevision: 4,
+      action: 'edit',
+    });
+    await assert.rejects(
+      changeDraft(
+        f.db,
+        actor,
+        action(
+          id,
+          {
+            ...definition,
+            permissions: { ...definition.permissions, results: 'respondents' },
+          },
+          5,
+        ),
+      ),
+      { status: 409 },
+    );
+    assert.equal(
+      (await getDraft(f.db, id)).definition.permissions.results,
+      'admins',
+    );
+    const changed = structuredClone(definition);
+    changed.questions[0].title = 'Updated rating';
+    changed.questions[0].type = 'text';
+    changed.questions[0].options = [];
+    await changeDraft(f.db, actor, action(id, changed, 5));
+    await changeDraft(f.db, actor, action(id, changed, 6, 'publish'));
+    const republished = await linkedSurvey(f.db, privateSurveyToken(id));
+    assert.equal(republished.content_version, FORM_VERSION + ':7');
+    const oldRows = await surveyExportRows(f.db, id);
+    assert.equal(
+      oldRows[0].response_definition.questions[0].title,
+      'Your rating',
+    );
+    assert.equal(
+      new Date(oldRows[0].submitted_at).getTime(),
+      new Date(responses[0].submitted_at).getTime(),
+    );
+    const csv = surveyResultsCSV(oldRows, changed);
+    assert.match(csv.split('\r\n')[0], /Updated rating.*Your rating/);
+    const pdf = responseDocument(
+      { ...oldRows[0], responses: oldRows[0].responses },
+      { title: 'Saved response', definition: changed },
+    );
+    assert.equal(pdf.blocks[0].question, 'Your rating');
+    assert.equal(pdf.blocks[0].kind, 'choices');
+    assert.deepEqual(pdf.blocks[0].lines, ['Evening']);
+    const req = {
+      headers: { cookie: deviceCookie(survey) + '=' + device.token },
+    };
+    const body = {
+      requestId: randomUUID(),
+      expectedRevision: 1,
+      contentVersion: FORM_VERSION,
+      advisorId: device.member.advisor_id,
+      consent: 'admins',
+      answers: [{ id: changed.questions[0].id, value: 'Fresh feedback' }],
+    };
+    await assert.rejects(
+      submitSurvey(f.db, req, privateSurveyToken(id), body),
+      { status: 400 },
+    );
+    assert.deepEqual(
+      (await currentResponses(f.db, id))[0].responses,
+      responses[0].responses,
+    );
+    await submitSurvey(f.db, req, privateSurveyToken(id), {
+      ...body,
+      contentVersion: republished.content_version,
+    });
+    assert.equal(
+      (await currentResponses(f.db, id))[0].responses[0].title,
+      'Updated rating',
+    );
+    const deletion = {
+      id,
+      requestId: randomUUID(),
+      expectedRevision: 7,
+      action: 'delete',
+    };
+    await assert.rejects(changeSurveyLifecycle(f.db, actor, deletion), {
+      status: 409,
+    });
+    await changeSurveyLifecycle(f.db, actor, {
+      ...deletion,
+      requestId: randomUUID(),
+      action: 'archive',
+    });
+    deletion.expectedRevision = 8;
+    const deleted = await changeSurveyLifecycle(f.db, actor, deletion);
+    assert.deepEqual(deleted, { id, revision: 9, deleted: true });
+    assert.deepEqual(
+      await changeSurveyLifecycle(f.db, actor, deletion),
+      deleted,
+    );
+    await assert.rejects(
+      changeSurveyLifecycle(f.db, actor, { ...deletion, action: 'archive' }),
+      { status: 409 },
+    );
+    await assert.rejects(getDraft(f.db, id), { status: 404 });
+    await assert.rejects(linkedSurvey(f.db, privateSurveyToken(id)), {
+      status: 404,
+    });
+    for (const table of [
+      'devices',
+      'receipts',
+      'responses',
+      'activity',
+      'members',
+    ])
+      assert.equal(
+        (
+          await f.db.query(
+            'SELECT count(*)::int n FROM club_forms.custom_survey_' +
+              table +
+              ' WHERE survey_id=$1',
+            [id],
+          )
+        ).rows[0].n,
+        0,
+      );
+    const deleteReceipt = (
+      await f.db.query(
+        'SELECT * FROM club_forms.custom_survey_changes WHERE id=$1',
+        [deletion.requestId],
+      )
+    ).rows[0];
+    assert.equal(deleteReceipt.survey_id, null);
+    assert.equal(deleteReceipt.action, 'deleted');
+    assert.doesNotMatch(
+      JSON.stringify(deleteReceipt),
+      /Fresh feedback|Morning|Evening/,
+    );
+    assert.equal((await getDraft(f.db, f.id)).status, 'open');
+  } finally {
+    await f.db.close();
+  }
 });
 test('custom availability preserves optional answers, dates and suggested times through saves', async () => {
   const f = await fixture();
@@ -769,6 +1018,27 @@ test('HTTP preview capability cannot answer or read results; restricted preview 
     assert.equal(
       (await call('draft-change', {}, action(id, d, 1))).status,
       401,
+    );
+    const lifecycle = {
+      id,
+      requestId: randomUUID(),
+      expectedRevision: 1,
+      action: 'archive',
+    };
+    assert.equal((await call('lifecycle', {}, lifecycle)).status, 401);
+    assert.equal(
+      (await call('lifecycle', { Cookie: 'test-officer=yes' })).status,
+      405,
+    );
+    assert.equal(
+      (
+        await call(
+          'lifecycle',
+          { Cookie: 'test-officer=yes', Origin: 'https://outside.example' },
+          lifecycle,
+        )
+      ).status,
+      403,
     );
     d.permissions.preview = 'respondents';
     await changeDraft(f.db, actor, action(id, d, 1));

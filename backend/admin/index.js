@@ -1,6 +1,7 @@
 import {
   busy,
   button,
+  confirmDialog,
   download,
   focusFallback,
   h,
@@ -12,7 +13,6 @@ import {
 } from './ui.js';
 import { mountSurveyResults, mountEventSurveyGroup } from './survey-results.js';
 import { mountCustomSurveys } from './custom-surveys.js';
-import { mountSurveyArchive } from './survey-archive.js';
 import { mountEventEditor } from './event-editor.js';
 import { mountBrowserAlerts } from './browser-alerts.js';
 import { submissionActivity } from './submission-activity.js';
@@ -29,7 +29,6 @@ import {
   kindLabel,
   newSummary,
   plural,
-  statusLabel,
 } from './format.js';
 import * as router from './router.js';
 import {
@@ -47,7 +46,7 @@ let offset = 0,
   sessionGeneration = 0;
 // The Inbox list shown: API status, kind and event, or one submission (id).
 // It comes from the route; loadedKey is the request it shows.
-let view = { status: 'active', kind: '', eventId: '', id: '' },
+let view = { status: 'current', kind: '', eventId: '', id: '' },
   loadedKey = null,
   listRequest = null,
   homeRequest = null;
@@ -137,7 +136,6 @@ function clearOffice() {
   surveys.clear();
   customSurveys.clear();
   q('#survey-library').replaceChildren();
-  surveyArchive.clear();
   responses.clear();
 }
 function filters() {
@@ -152,6 +150,7 @@ function filters() {
   return params;
 }
 function renderEntry(entry) {
+  if (entry.source === 'custom-survey') return renderSurveyEntry(entry);
   const card = node('details', undefined, 'entry survey-response');
   card.id = 'entry-' + entry.id;
   const heading = node('summary');
@@ -166,8 +165,8 @@ function renderEntry(entry) {
   top.append(
     node(
       'span',
-      statusLabel(entry.review_status),
-      'badge ' + entry.review_status,
+      entry.review_status === 'closed' ? 'Archived' : 'Received',
+      'badge',
     ),
     node('span', kindLabel(entry.kind)),
     time(entry.created_at),
@@ -236,9 +235,10 @@ function renderEntry(entry) {
   // While the comment box has text, a status button also saves the note.
   const statusButtons = [];
   for (const [value, label, withNote] of [
-    ['reviewed', 'Mark reviewed', 'Save note & mark reviewed'],
     ['closed', 'Archive submission', 'Save note & archive'],
-    ['new', 'Mark new', 'Save note & mark new'],
+    ...(entry.review_status === 'closed'
+      ? [['new', 'Restore submission', 'Save note & restore']]
+      : []),
   ])
     if (value !== entry.review_status) {
       const b = button(label, () => review(card, entry, value), '');
@@ -252,6 +252,93 @@ function renderEntry(entry) {
   };
   card.append(actions, submissionActivity(entry, api, relabel));
   relabel();
+  return card;
+}
+function renderSurveyEntry(entry) {
+  const card = node('details', undefined, 'entry survey-response');
+  card.id = 'entry-' + entry.id;
+  card.append(
+    h(
+      'summary',
+      {},
+      node('strong', entry.name || entry.email),
+      node('span', entry.data.title),
+      time(entry.created_at),
+    ),
+  );
+  card.append(
+    node('p', entry.email),
+    node(
+      'p',
+      entry.review_status === 'closed'
+        ? 'Archived response'
+        : 'Received response',
+    ),
+  );
+  const open = node('a', 'View survey and response');
+  open.href = '#/surveys/custom/' + entry.data.surveyId;
+  card.append(open);
+  const actions = node('div', undefined, 'entry-actions');
+  for (const action of entry.review_status === 'closed'
+    ? ['add', 'delete']
+    : ['remove']) {
+    if (action === 'add' && entry.data.surveyArchived) continue;
+    actions.append(
+      button(
+        action === 'delete'
+          ? 'Delete permanently'
+          : action === 'add'
+            ? 'Restore response'
+            : 'Archive response',
+        async () => {
+          const version = sessionGeneration;
+          if (
+            action === 'delete' &&
+            !(await confirmDialog({
+              title: 'Delete this response permanently?',
+              body: 'This removes the saved answers and cannot be undone.',
+              confirmLabel: 'Delete permanently',
+            }))
+          )
+            return;
+          if (version !== sessionGeneration) return;
+          const unlock = lock(actions);
+          try {
+            const roster = await api(
+              '/api/custom-surveys?action=members&id=' + entry.data.surveyId,
+            );
+            if (version !== sessionGeneration) return;
+            await api('/api/custom-surveys?action=member-change', {
+              surveyId: entry.data.surveyId,
+              expectedRevision: roster.revision,
+              requestId: crypto.randomUUID(),
+              action,
+              ...(action === 'add'
+                ? { email: entry.email, name: entry.name }
+                : { advisorId: entry.data.advisorId }),
+            });
+            if (version !== sessionGeneration) return;
+            await load();
+            if (version !== sessionGeneration) return;
+            loadHome();
+            say(
+              action === 'delete'
+                ? 'Response deleted permanently.'
+                : action === 'add'
+                  ? 'Response restored.'
+                  : 'Response archived.',
+            );
+          } catch (error) {
+            if (version === sessionGeneration) say(error.message, 'error');
+          } finally {
+            unlock();
+          }
+        },
+        action === 'delete' ? 'danger' : '',
+      ),
+    );
+  }
+  card.append(actions);
   return card;
 }
 // One request saves the typed note and the new status together. The note
@@ -279,7 +366,8 @@ async function review(card, entry, value) {
         view.id ||
         !view.status ||
         view.status === value ||
-        (view.status === 'active' && ['new', 'reviewed'].includes(value));
+        (['active', 'current', 'past', 'recent'].includes(view.status) &&
+          value !== 'closed');
       if (retained) {
         entry.review_status = value;
         const fresh = renderEntry(entry),
@@ -294,7 +382,7 @@ async function review(card, entry, value) {
     say(
       (value === 'closed'
         ? 'Submission moved to Archived. Comments and history are kept.'
-        : 'Submission moved to ' + (value === 'new' ? 'New.' : 'Reviewed.')) +
+        : 'Submission restored. Its event date and received date determine where it appears.') +
         (note ? ' Your note was saved with it.' : ''),
     );
     poll();
@@ -357,7 +445,12 @@ function groupedEntries(entries, eventCounts = {}) {
     const group = node('details', undefined, 'survey-event-group inbox-group');
     group.dataset.group = key;
     group.dataset.label =
-      rows[0].data.eventTitle || kindLabel(rows[0].kind, 'plural');
+      rows[0].data.eventTitle ||
+      (rows[0].kind === 'feedback'
+        ? 'Event feedback'
+        : rows[0].kind === 'survey'
+          ? 'Custom surveys'
+          : kindLabel(rows[0].kind, 'plural'));
     const eventId = key.startsWith('event:') ? rows[0].data.eventId : '';
     if (eventId && eventCounts[eventId])
       group.dataset.total = eventCounts[eventId];
@@ -403,7 +496,7 @@ function updateCounts(data) {
       'nothing new',
     );
   q('#counts').replaceChildren(
-    ...KINDS.map((kind) => {
+    ...[...KINDS, 'feedback', 'survey'].map((kind) => {
       const count = data.counts
           .filter(
             (x) =>
@@ -412,15 +505,25 @@ function updateCounts(data) {
           .reduce(
             (sum, row) => ({
               new: sum.new + row.new,
-              active: sum.active + row.new + row.reviewed,
+              active: sum.active + (row.current ?? row.new + row.reviewed),
             }),
             { new: 0, active: 0 },
           ),
         box = node('div', undefined, count.new ? 'count has-new' : 'count');
       box.append(
-        node('span', kindLabel(kind, 'plural')),
+        node(
+          'span',
+          kind === 'feedback'
+            ? 'Event feedback'
+            : kind === 'survey'
+              ? 'Custom surveys'
+              : kindLabel(kind, 'plural'),
+        ),
         node('strong', count.active.toLocaleString('en-US')),
-        node('small', `active · ${count.new.toLocaleString('en-US')} new`),
+        node(
+          'small',
+          `upcoming & new · ${count.new.toLocaleString('en-US')} received in 14 days`,
+        ),
       );
       return box;
     }),
@@ -599,7 +702,6 @@ async function fetchList(key) {
     q('#next').disabled = !data.hasMore;
     q('#page').textContent = 'Page ' + (offset / 50 + 1);
     q('#export').href = '/api/admin?' + filters() + '&export=csv';
-    surveyArchive.load(filters());
     // A submission's own address opens its card.
     const card = view.id && document.getElementById('entry-' + view.id);
     if (card) {
@@ -832,7 +934,6 @@ async function fetchHome() {
     toast.resolve('home-load');
     renderHome(q('#home-tiles'), data, {
       me: data.user,
-      review: homeReview,
       openEvent(id) {
         eventTarget = id;
         router.go('#/events');
@@ -862,40 +963,6 @@ async function fetchHome() {
       q('#home-tiles').setAttribute('aria-busy', 'false');
   }
 }
-// Mark reviewed from Home: the Inbox's request, with a typed note saved too.
-async function homeReview(entry, row) {
-  const key = 'note:' + entry.id,
-    note = drafts.get(key),
-    version = sessionGeneration,
-    release = busy(row);
-  try {
-    await api('/api/admin', {
-      action: 'review',
-      id: entry.id,
-      status: 'reviewed',
-      from: 'new',
-      ...(note ? { comment: { id: note.id, body: note.text.trim() } } : {}),
-    });
-    saves++;
-    if (note) drafts.delete(key);
-    if (version !== sessionGeneration) return;
-    loadedKey = null;
-    if (row.isConnected) {
-      focusFallback(row, q('#home-tiles'));
-      row.remove();
-    }
-    say(
-      'Submission moved to Reviewed.' +
-        (note ? ' Your note was saved with it.' : ''),
-    );
-    poll();
-  } catch (error) {
-    if (version !== sessionGeneration) return;
-    release();
-    say(error.message, 'error');
-    if (error.code === 'stale-status') loadHome();
-  }
-}
 const customSurveys = mountCustomSurveys(q('#custom-surveys-root'), api, {
   renderEvent: (target, event, options) =>
     mountEventSurveyGroup(target, api, event, {
@@ -919,7 +986,6 @@ q('#survey-title-clear').onclick = () => {
   loadSurveyLibrary();
   q('#survey-title-search').focus();
 };
-const surveyArchive = mountSurveyArchive(q('#archived-survey-questions'), api);
 // Surveys: the sub-section and what each one shows.
 let surveysSub = 'events',
   shownEntry = null,
@@ -1168,7 +1234,6 @@ startSession({
     surveys.reset();
     customSurveys.reset();
     q('#survey-library').replaceChildren();
-    surveyArchive.clear();
   },
   clear: clearOffice,
 });

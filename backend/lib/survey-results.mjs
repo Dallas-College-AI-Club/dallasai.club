@@ -25,10 +25,10 @@ export async function surveyResultPage(
   // Officers see the stored name and the email.
   const { rows } = await db.query(
     `
-    SELECT advisor_id,CASE WHEN $3::text IS NOT NULL AND (btrim(display_name)='' OR strpos(display_name,'@')>0)
+    SELECT advisor_id,response_definition,CASE WHEN $3::text IS NOT NULL AND (btrim(display_name)='' OR strpos(display_name,'@')>0)
       THEN 'Respondent ' || ordinal ELSE display_name END AS display_name,email,active,revision,responses,submitted_at
     FROM (
-      SELECT m.advisor_id,m.display_name,m.email,m.active,r.revision,r.responses,r.submitted_at,
+      SELECT m.advisor_id,m.display_name,m.email,m.active,r.revision,r.responses,r.submitted_at,r.response_definition,
         row_number() OVER (ORDER BY (
           SELECT min(c.created_at) FROM club_forms.custom_survey_receipts c
           WHERE c.survey_id=m.survey_id AND c.advisor_id=m.advisor_id
@@ -37,6 +37,7 @@ export async function surveyResultPage(
       JOIN club_forms.custom_survey_responses r USING(survey_id,advisor_id)
       WHERE m.survey_id=$1 AND jsonb_array_length(r.responses)>0
         AND (NOT $2::boolean OR m.active)
+        AND ($3::text IS NULL OR r.response_definition IS NULL OR r.response_definition->'permissions'->>'results'='respondents')
         AND ($5='all' OR m.active=($5='active'))
         AND strpos(lower(m.display_name || ' ' || m.email),lower($6))>0
     ) shown
@@ -60,7 +61,7 @@ export async function surveyExportRows(
   { view = 'active', search = '' } = {},
 ) {
   const { rows } = await db.query(
-    `SELECT m.display_name,m.email,m.active,r.responses,r.submitted_at
+    `SELECT m.display_name,m.email,m.active,r.responses,r.submitted_at,r.response_definition
     FROM club_forms.custom_survey_members m
     JOIN club_forms.custom_survey_responses r USING(survey_id,advisor_id)
     WHERE m.survey_id=$1 AND ($2='all' OR m.active=($2='active')) AND jsonb_array_length(r.responses)>0
@@ -83,17 +84,20 @@ export async function surveyExportRows(
 export function surveyResultsCSV(rows, definition) {
   const rank = answerRank(definition),
     columns = new Map();
+  const columnTitle = (column) =>
+    (column.choiceDate ? column.choiceDate + ' · ' : '') + column.title;
+  const key = (column) => column.id + ':' + columnTitle(column);
   if (!definition?.chapters)
-    for (const q of definition?.questions || []) columns.set(q.id, q);
+    for (const q of definition?.questions || []) columns.set(key(q), q);
   for (const row of rows)
     for (const answer of row.responses)
-      if (!columns.has(answer.id)) columns.set(answer.id, answer);
+      if (!columns.has(key(answer))) columns.set(key(answer), answer);
   const ordered = [...columns.values()].sort(
     (a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id),
   );
-  const cell = (answer) => {
+  const cell = (answer, savedDefinition) => {
     if (!answer) return '';
-    const { kind, lines, dial } = answerFormat(answer, definition),
+    const { kind, lines, dial } = answerFormat(answer, savedDefinition),
       text = lines.filter(Boolean).join(kind === 'choices' ? '; ' : ' ');
     return (
       (answer.mode === 'narrative' ? '[Shared wording only] ' : '') +
@@ -105,10 +109,7 @@ export function surveyResultsCSV(rows, definition) {
     'Email',
     'Submitted (Central)',
     'Status',
-    ...ordered.map(
-      (column) =>
-        (column.choiceDate ? column.choiceDate + ' · ' : '') + column.title,
-    ),
+    ...ordered.map(columnTitle),
   ];
   const lines = rows.map((row) => [
     // As on screen, a respondent without a name is shown by email.
@@ -117,7 +118,10 @@ export function surveyResultsCSV(rows, definition) {
     received.format(new Date(row.submitted_at)),
     row.active ? 'Active' : 'Archived',
     ...ordered.map((column) =>
-      cell(row.responses.find((answer) => answer.id === column.id)),
+      cell(
+        row.responses.find((answer) => key(answer) === key(column)),
+        row.response_definition || definition,
+      ),
     ),
   ]);
   return (

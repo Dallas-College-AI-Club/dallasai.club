@@ -47,13 +47,10 @@ function draftCard(event, openEvent) {
   return card;
 }
 export function renderHome(root, data, actions) {
-  const { me, review, openEvent, newEvent, newSurvey, findContact } = actions;
+  const { me, openEvent, newEvent, newSurvey, findContact } = actions;
   const totalNew = data.counts.reduce((sum, row) => sum + row.new, 0);
-  // Needs review: RSVPs by event, then the newest other submissions.
-  const needs = tile(
-    'Needs review',
-    'tile-wide' + (totalNew ? ' has-new' : ''),
-  );
+  // Received in the past fourteen days, with RSVPs grouped by event.
+  const needs = tile("What's new", 'tile-wide' + (totalNew ? ' has-new' : ''));
   needs.append(
     number(totalNew, totalNew === 1 ? 'new submission' : 'new submissions'),
   );
@@ -77,7 +74,7 @@ export function renderHome(root, data, actions) {
       ),
       link(
         'Show all',
-        build('inbox', { type: 'rsvp-all', event: group.id, status: 'active' }),
+        build('inbox', { type: 'rsvp-all', event: group.id, status: 'recent' }),
         'button-link',
       ),
     );
@@ -85,7 +82,12 @@ export function renderHome(root, data, actions) {
   }
   for (const entry of data.newest) {
     const item = node('li', undefined, 'tile-row'),
-      who = link(entry.name || entry.email, '#/inbox/' + entry.id);
+      who = link(
+        entry.name || entry.email,
+        entry.source === 'custom-survey'
+          ? '#/surveys/custom/' + entry.surveyId
+          : '#/inbox/' + entry.id,
+      );
     who.dataset.focus = '';
     item.append(
       h(
@@ -98,7 +100,6 @@ export function renderHome(root, data, actions) {
         ),
         time(entry.created_at),
       ),
-      button('Mark reviewed', () => review(entry, item)),
     );
     list.append(item);
   }
@@ -106,7 +107,7 @@ export function renderHome(root, data, actions) {
     list.children.length
       ? list
       : node('p', 'Nothing new. You’re all caught up.', 'hint'),
-    link('Open inbox', '#/inbox', 'button-link primary'),
+    link('Open inbox', '#/inbox?status=recent', 'button-link primary'),
   );
   // The next confirmed event and each potential event's received RSVPs.
   const next = tile('Next event');
@@ -177,6 +178,7 @@ export function renderHome(root, data, actions) {
     'subscribe',
     'rsvp',
     'feedback',
+    'survey',
     'contribution',
   ]) {
     const count = data.counts
@@ -190,43 +192,46 @@ export function renderHome(root, data, actions) {
         .reduce(
           (sum, row) => ({
             new: sum.new + row.new,
-            total: sum.total + row.new + row.reviewed,
+            total: sum.total + (row.current ?? row.new + row.reviewed),
           }),
           { new: 0, total: 0 },
         ),
       cell = link(
         '',
         kind === 'feedback'
-          ? build('surveys/events', { type: 'feedback' })
+          ? build('inbox', { type: 'feedback' })
           : build('inbox', {
               type: kind === 'rsvp' ? 'rsvp-all' : kind,
-              status: 'active',
+              status: 'current',
             }),
         'total',
       );
     cell.classList.toggle('has-new', count.new > 0);
     cell.append(
-      node(
-        'strong',
-        (kind === 'feedback'
-          ? data.eventFeedback || 0
-          : count.total
-        ).toLocaleString('en-US'),
-      ),
+      node('strong', count.total.toLocaleString('en-US')),
       node(
         'span',
-        (kind === 'feedback' ? 'Event feedback' : kindLabel(kind, 'plural')) +
+        (kind === 'feedback'
+          ? 'Event feedback'
+          : kind === 'survey'
+            ? 'Custom surveys'
+            : kindLabel(kind, 'plural')) +
           (count.new ? ' · ' + count.new.toLocaleString('en-US') + ' new' : ''),
       ),
     );
     grid.append(cell);
   }
   const active = data.counts.reduce(
-    (sum, row) => sum + row.new + row.reviewed,
-    data.eventFeedback || 0,
+    (sum, row) => sum + (row.current ?? row.new + row.reviewed),
+    0,
   );
   totals.append(
-    number(active, active === 1 ? 'active submission' : 'active submissions'),
+    number(
+      active,
+      active === 1
+        ? 'upcoming or new submission'
+        : 'upcoming & new submissions',
+    ),
     grid,
   );
   // Officers' own actions; never a member's name, email or text.

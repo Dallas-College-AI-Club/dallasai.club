@@ -111,7 +111,7 @@ test('questions and requests filter combines questions and workshops across list
     new Set(result.entries.map((entry) => entry.id)),
     new Set([question, requestId]),
   );
-  assert.equal((await list('?counts=1&' + query)).newInView, 1);
+  assert.equal((await list('?counts=1&' + query)).newInView, 0);
   const csv = await (await request('/api/admin?export=csv&' + query)).text();
   for (const name of ['Question member', 'Workshop member'])
     assert.ok(csv.includes(name));
@@ -207,11 +207,11 @@ test('rsvp-all lists past and upcoming RSVPs; status=all is the same as no statu
     '?counts=1&since=2025-12-31T00:00:00Z&kind=rsvp-all&status=all',
   );
   assert.equal(poll.arrivedInView, 2);
-  assert.equal(poll.newInView, 1);
+  assert.equal(poll.newInView, 0);
   for (const [query, expected] of [
-    ['kind=rsvp-all&status=active', 1],
+    ['kind=rsvp-all&status=active', 0],
     ['kind=rsvp-all&eventId=past', 0],
-    ['kind=rsvp&eventId=next', 1],
+    ['kind=rsvp&eventId=next', 0],
     ['kind=rsvp-past', 0],
     ['status=reviewed', 0],
     ['status=closed', 0],

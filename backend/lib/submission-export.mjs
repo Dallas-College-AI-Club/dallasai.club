@@ -14,6 +14,8 @@ const types = {
   contribution: 'AI Review submissions',
   workshop: 'Workshop requests',
   question: 'Questions',
+  feedback: 'Event feedback',
+  survey: 'Custom survey responses',
 };
 const knownFields = new Set([
   'subject',
@@ -31,6 +33,11 @@ const knownFields = new Set([
   // Internal flags, not details anyone submitted.
   'hasSurvey',
   'potential',
+  'surveyId',
+  'advisorId',
+  'expiresAt',
+  'memberActive',
+  'surveyArchived',
 ]);
 export const received = new Intl.DateTimeFormat('en-US', {
   timeZone: 'America/Chicago',

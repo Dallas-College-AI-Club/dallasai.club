@@ -4,21 +4,21 @@ Hugo serves the public website on GitHub Pages. The Vercel backend stores club s
 
 ## How officers learn about a signup
 
-Open the protected backend `/admin/` page. It opens on **Home**, a page of tiles showing what needs officers this week (see below); **Inbox** holds the full list. New submissions appear with review status **New**. Counts update every minute while the office is open. New arrivals show a **N new · Show** button instead of reshuffling the list, and Refresh reloads it immediately. Officers can filter by submission type and review status, review or close submissions, download private attachments, and export up to 10,000 matching records. Name/email search is not shown. The Event RSVPs view, counts and CSV exports include only currently published upcoming events (including potential events with TBD dates); an Event dropdown selects one. Past RSVP records remain stored. Administrative updates, downloads, and exports are logged.
+Open the protected backend `/admin/` page. It opens on **Home**, where **What’s new** shows submissions received within the last 14 days; **Inbox** holds the full list, including custom survey responses. Archived and deleted responses are excluded from What’s new. Counts update every minute while the office is open. New arrivals show a **N new · Show** button instead of reshuffling the list, and Refresh reloads it immediately. Officers can filter by submission type and time period, archive or restore submissions, download private attachments, and export up to 10,000 matching records. Name/email search is not shown. The Event RSVPs view, counts and CSV exports include only currently published upcoming events (including potential events with TBD dates); an Event dropdown selects one. Past RSVP records remain stored. Administrative updates, downloads, and exports are logged.
 
 The **Browser alerts** switch in the account menu requests browser permission and shows an alert, with counts by type, when a newer submission arrives. An officer’s own status changes never raise one. The officer must keep the office tab open; browser throttling can delay background checks. New counts and an on-screen notice also update without notification permission. The on/off preference is remembered in this browser and synchronized across office tabs. Alerts stop at sign-out or when the office is closed; reopening the office resumes a remembered on preference only when browser permission is still granted. Email alerts remain disconnected; the UI states this explicitly. Neon login-code delivery is a separate service and does not send inbox alerts.
 
-The office uses the approved Studio appearance with locally served Geist typography. The header shows the black-square club logo (white artwork on black, in light and dark mode alike), the club name and the account button, and the sections are tabs across the top at every width: **Home**, **Inbox** (with the New count), **Events**, **Surveys**, **Contacts** and **Help**. On narrow phones the tabs wrap onto a second line so every tab stays in view, and a focused tab shows its whole focus ring. On wider screens the account menu scrolls with its button. Events uses the Desk layout (event list beside the editor). Count cards and Home tiles with new submissions, and the selected event chip, are highlighted with the selected tint and an accent line; the open submission and the open survey response get the accent line; everything else keeps plain lines. Group labels use small capitals, and unpublished events keep the yellow **DRAFT · Not published** badge. The header offers Light, Dark and System buttons and remembers the choice in this browser. System follows the device appearance. Surveys uses the Quiet Office library, and Help uses the Guidebook reading layout; the rest retains the Studio design. The supplied 500×500 black-on-white and white-on-black logos are used only in the office: the header and sign-in page use the black-square logo, and the favicon follows the light/dark setting. The public website's branding is unchanged.
+The office uses the approved Studio appearance with locally served DM Sans and Plus Jakarta Sans typography. The header shows the black-square club logo (white artwork on black, in light and dark mode alike), the club name and the account button, and the sections are tabs across the top at every width: **Home**, **Inbox** (with the New count), **Events**, **Surveys**, **Contacts** and **Help**. On narrow phones the tabs wrap onto a second line so every tab stays in view, and a focused tab shows its whole focus ring. On wider screens the account menu scrolls with its button. Events uses the Desk layout (event list beside the editor). Count cards and Home tiles with new submissions, and the selected event chip, are highlighted with the selected tint and an accent line; the open submission and the open survey response get the accent line; everything else keeps plain lines. Group labels use small capitals, and unpublished events keep the yellow **DRAFT · Not published** badge. The header offers Light, Dark and System buttons and remembers the choice in this browser. System follows the device appearance. Surveys uses the Quiet Office library, and Help uses the Guidebook reading layout; the rest retains the Studio design. The supplied 500×500 black-on-white and white-on-black logos are used only in the office: the header and sign-in page use the black-square logo, and the favicon follows the light/dark setting. The public website's branding is unchanged.
 
 ### Home
 
 **Home** is the landing page (`#/home`; the brand link returns to it). One read of `/api/admin?home=1` fills its tiles, and like the Inbox list it signs the officer in, shares the counts poll and is cleared on sign-out or after ten minutes paused:
 
-- **Needs review** counts every New submission. New RSVPs are grouped by event (cancelled RSVPs are not counted), each with **Show all**, which opens that event's RSVPs in the Inbox (`#/inbox?type=rsvp-all&event=<id>`). The newest other New submissions are listed with **Mark reviewed**, which works like the Inbox button (a typed note is saved with it) and refreshes the counts; **Open inbox** opens the list.
+- **What’s new** counts non-archived submissions received in the last 14 days, including custom surveys and event feedback. Recent RSVPs are grouped by event, including responses to past events. **Show all** and **Open inbox** open the same recent-response filter. Marking a record reviewed no longer changes this view.
 - **Next event** is the first upcoming event with a date: its date, type, RSVP count and **Open event**. Potential events without a date are listed on their own line.
 - **Custom survey** is the open custom survey with its response count and link expiry; **Open responses** opens it in Surveys › Custom surveys, where each response's PDF and the CSV export are.
 - **Drafts & unpublished changes** shows unpublished events as event cards; choosing one opens it in Events.
-- **Inbox totals** include active New and Reviewed records, with past and upcoming RSVPs combined. Archived and deleted records are excluded. Type links open active submissions for that type; archived records remain accessible from the Inbox status filter.
+- **Inbox totals** counts **Upcoming & New** submissions, including custom surveys and event feedback. Each type opens the matching Inbox filter. Older saved records remain in **Past**, and manually archived records remain in **Archived**.
 - **Recent activity** is collapsed until opened and lists officers' recent actions (reviews, exports, event and custom-survey changes, Help topic changes). It never shows a member's name, email, comment or submitted text.
 - **Quick actions**: **New event**, **Create custom survey** (opens the survey builder) and **Find a contact** (opens Contacts with the search box focused).
 
@@ -26,13 +26,15 @@ While Home is shown, the minute-by-minute check redraws it only when a count has
 
 ### Inbox counts and RSVPs by event
 
-The Inbox count cards are folded by default. The fold's summary still says what is new, for example “Counts · 3 new: 2 RSVPs, 1 question”; open it to see each type's New and total counts. Browser alerts use the same wording and keep **The AI Review** capitalized. The browser-tab number counts only **New** submissions matching the current Inbox type, event and status filters, across every page. Reviewed and Archived views have no tab number. The Inbox navigation badge and count cards retain the overall totals.
+The Inbox count cards are folded by default. The fold's summary still says what is new, for example “Counts · 3 new: 2 RSVPs, 1 question”; open it to see each type's New and total counts. Browser alerts use the same wording and keep **The AI Review** capitalized. The browser-tab number counts submissions received in the last 14 days matching the current Inbox type, event and period filters, across every page. Archived submissions have no tab number. The Inbox navigation badge and count cards retain the overall totals.
 
 RSVPs in the list are grouped by event. Each event group shows how many RSVPs match the current filters in total, not only those on the page, and has **Show all** for that event. The Type filter also offers **RSVPs for all events** (upcoming and past). For any RSVP type, event chips with **All events** appear above the list on wider screens; on phones, and when there are more than eight events, the Event dropdown is used instead. The chosen event stays in the address, and Export filtered CSV follows it.
 
 ## Submission activity and comments
 
-**Received in club inbox** means the record is stored in Neon. **Mark reviewed** means an officer has looked at it; **Archive submission** means no further action is planned. Neither action sends a reply, removes the record, unsubscribes a person, or publishes an article. An archived record can be marked new or reviewed again.
+**Upcoming & New** includes RSVPs for upcoming or potential events, feedback for events that ended within the last 14 days, and custom survey responses whose survey has not expired or whose response arrived within 14 days. Other submission types use their received date. RSVPs move to **Past** immediately when their event ends; the other records move there when their applicable period passes. **Archived** contains manually archived submissions and responses belonging to archived surveys.
+
+**Received in club inbox** means the record is stored in Neon. **Archive submission** preserves its answers, comments and history. **Restore submission** returns it to the period appropriate for its dates. From Archived, **Delete permanently** requires confirmation before removing the selected saved response. These actions do not send email or change an event’s publication.
 
 Each entry’s **Activity & comments** panel shows existing status-change and attachment-download audit records as well as new comments. It shows the acting officer (your own actions as **You**) and the Central time, newest first, with pagination for older activity. Comments are private to authenticated officers. Unsaved comment text stays in memory during inbox refreshes and is cleared on sign-out; it is persisted only after Add comment succeeds.
 
@@ -120,22 +122,28 @@ Search for and select the contact to keep, then review **Confirm merge**. Its
 primary email is retained. Both email addresses find the same combined history,
 including future submissions. Original submission emails, answers and notes are
 preserved. Contacts with the same name are never automatically merged.
-The directory shows one primary address per person; other addresses are listed
-separately inside that person's history. **Edit contact** lets an admin correct
+The directory shows one primary address per person; other active addresses are listed
+separately inside that person's history. The page heading stays **Contacts**, with
+the person's name between **All contacts** and **Primary email**. **Edit contact**
+lets an admin correct
 the displayed name and choose an existing or new primary email. Future form
 submissions keep the admin-edited name. An address owned by a different contact
 must be merged first. Changing the primary address preserves all saved responses
 and their original addresses.
 
-The same editor lists linked addresses and offers **Remove unused address** with
-a confirmation. Addresses tied to submissions, notes or private survey membership
-cannot be removed until those records are corrected or removed. This prevents
-cleanup from silently discarding history. Unsubmitted profile edits and follow-up
-notes survive closing the contact dialog; Cancel discards profile edits explicitly.
-Apply `backend/017_contact_profile_editing.sql` after migration 016 before deploying
-these profile controls. Identity changes and alias cleanup are recorded in history.
+The same editor lists linked addresses and offers **Use as primary** and
+**Remove address** with a confirmation. Any active linked address can become primary.
+Save a different primary before removing the current one; a contact always keeps
+at least one active address. Removing an address hides it from the linked-address
+list and directory search while its submissions, RSVPs, notes and private survey
+membership stay attached to the same contact. Original records retain the address
+used when submitted. Later submissions using a removed address stay in the same
+history without adding it back to the active list. Unsubmitted profile edits and
+internal notes survive closing the contact dialog; Cancel discards profile edits explicitly.
+Apply migrations through `backend/023_contact_email_visibility.sql` before deploying
+these profile controls. Identity changes and address removals are recorded in history.
 A contact shows the names used, submitted
-messages, Inbox comments, response-management activity and officer follow-up notes.
+messages, Inbox comments, response-management activity and **Internal notes**.
 Notes carry the authenticated author and database timestamp. Retrying a saved note
 does not create duplicates. This does not read a mailbox or send emails. Private
 standalone-survey drafts and unsubmitted answers are not included.
@@ -192,7 +200,7 @@ overwrite another officer's changes. Starter topics are editable too.
 ## Editing and deleting submissions
 
 Inbox groups submissions by event, or by form type when there is no event. Expand
-a person to read details, edit, or change their review status. **Event RSVPs (past)**
+a person to read details, edit, archive or restore a submission. **Event RSVPs (past)**
 is separate from the upcoming filter. **All submissions** includes both, and past
 RSVP links and exports remain available.
 

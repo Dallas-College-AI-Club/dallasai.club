@@ -9,8 +9,24 @@ const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
 const queries = {
   surveys: { event: slug, copy: uuid, followup: ['1'], type: ['feedback'] },
   inbox: {
-    status: ['active', 'new', 'reviewed', 'archived', 'all'],
-    type: [...KINDS, 'rsvp-past', 'rsvp-all', 'questions-requests'],
+    status: [
+      'current',
+      'past',
+      'recent',
+      'active',
+      'new',
+      'reviewed',
+      'archived',
+      'all',
+    ],
+    type: [
+      ...KINDS,
+      'rsvp-past',
+      'rsvp-all',
+      'questions-requests',
+      'feedback',
+      'survey',
+    ],
     event: slug,
   },
   help: {
@@ -138,15 +154,21 @@ export function legacy(hash) {
 // The Inbox defaults to active (New + Reviewed); Archived maps to closed.
 export const apiStatus = (status) =>
   ({
+    current: 'current',
+    past: 'past',
+    recent: 'recent',
     active: 'active',
     new: 'new',
     reviewed: 'reviewed',
     archived: 'closed',
     all: '',
-  })[status] ?? 'active';
+  })[status] ?? 'current';
 export const routeStatus = (status) =>
   ({
-    active: '',
+    current: '',
+    past: 'past',
+    recent: 'recent',
+    active: 'active',
     new: 'new',
     reviewed: 'reviewed',
     closed: 'archived',

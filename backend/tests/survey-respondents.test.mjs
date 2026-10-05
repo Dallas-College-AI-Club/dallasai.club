@@ -109,6 +109,85 @@ test('respondent additions, removals and restores record the real admin and retr
   }
 });
 
+test('permanent response deletion requires Archived, erases answers receipts and devices once, and keeps membership', async () => {
+  for (const archiveParent of [false, true]) {
+    const f = await fixture();
+    try {
+      const d = await device(f, 'pearlman@example.com');
+      await submitSurvey(f.db, d.req, f.token, answer(f));
+      const input = {
+        surveyId: f.id,
+        advisorId: 'pearlman',
+        action: 'delete',
+        expectedRevision: 0,
+        requestId: randomUUID(),
+      };
+      await assert.rejects(changeRespondent(f.db, actor, input), {
+        status: 409,
+      });
+      assert.equal(
+        (await currentResponses(f.db, f.id))[0].responses?.length ||
+          (await currentResponses(f.db, f.id))[1].responses?.length,
+        1,
+      );
+      if (archiveParent)
+        await f.db.query(
+          "UPDATE club_forms.custom_surveys SET status='archived' WHERE id=$1",
+          [f.id],
+        );
+      else {
+        await changeRespondent(f.db, actor, {
+          ...input,
+          action: 'remove',
+          requestId: randomUUID(),
+        });
+        input.expectedRevision = 1;
+      }
+      const result = await changeRespondent(f.db, actor, input);
+      assert.deepEqual(await changeRespondent(f.db, actor, input), result);
+      for (const table of ['responses', 'receipts', 'devices'])
+        assert.equal(
+          (
+            await f.db.query(
+              'SELECT count(*)::int n FROM club_forms.custom_survey_' +
+                table +
+                ' WHERE survey_id=$1 AND advisor_id=$2',
+              [f.id, 'pearlman'],
+            )
+          ).rows[0].n,
+          0,
+        );
+      const member = (
+        await f.db.query(
+          'SELECT active FROM club_forms.custom_survey_members WHERE survey_id=$1 AND advisor_id=$2',
+          [f.id, 'pearlman'],
+        )
+      ).rows[0];
+      assert.equal(member.active, archiveParent);
+      assert.equal(
+        (await respondentList(f.db, f.id)).activity.filter(
+          (a) => a.action === 'response_deleted',
+        ).length,
+        1,
+      );
+      await assert.rejects(
+        changeRespondent(f.db, actor, {
+          ...input,
+          requestId: randomUUID(),
+          expectedRevision: result.revision,
+        }),
+        { status: 409 },
+      );
+      await assert.rejects(
+        changeRespondent(f.db, actor, { ...input, action: 'remove' }),
+        { status: 409 },
+      );
+    } finally {
+      await f.db.close();
+    }
+  }
+});
+
 test('new respondents cannot read summaries shared before they joined; new consent can include them', async () => {
   const f = await fixture();
   try {

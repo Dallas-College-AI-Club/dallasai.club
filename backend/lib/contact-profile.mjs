@@ -9,7 +9,7 @@ export async function contactAliases(db, primary) {
     (SELECT count(*)::int FROM club_forms.contact_notes n WHERE n.email=a.email) AS notes,
     (SELECT coalesce(jsonb_agg(recent),'[]'::jsonb) FROM (SELECT e.id,e.kind,coalesce(e.data->>'eventTitle',e.data->>'subject',e.data->>'topic',e.data->>'title',e.kind) AS title FROM club_forms.entries e WHERE e.email=a.email ORDER BY e.created_at DESC,e.id LIMIT 5) recent) AS responses,
     EXISTS(SELECT 1 FROM club_forms.custom_survey_members m WHERE m.email=a.email) AS membership
-    FROM club_forms.contact_emails a WHERE contact_email=$1 ORDER BY a.email`,
+    FROM club_forms.contact_emails a WHERE contact_email=$1 AND is_active ORDER BY a.email`,
       [primary],
     )
   ).rows;
@@ -70,35 +70,29 @@ export async function editContact(db, body, actor) {
         );
       const alias = aliases.find((row) => row.email === target);
       if (!alias) throw new RequestError(404, 'Linked address not found.');
-      if (alias.submissions || alias.notes || alias.membership)
-        throw new RequestError(
-          409,
-          'Saved submissions, notes or survey membership still use this address. Correct or remove those records first.',
-        );
-      // Keep admin activity together when its obsolete address record is removed.
       await tx.query(
-        'UPDATE club_forms.contact_activity SET email=$1 WHERE email=$2',
-        [source, target],
+        'UPDATE club_forms.contact_emails SET is_active=false WHERE email=$1',
+        [target],
       );
-      await tx.query('DELETE FROM club_forms.contact_emails WHERE email=$1', [
-        target,
-      ]);
-      await tx.query('DELETE FROM club_forms.contacts WHERE email=$1', [
-        target,
-      ]);
       await tx.query(
         'UPDATE club_forms.contacts SET revision=revision+1 WHERE email=$1',
         [source],
       );
       await tx.query(
-        "INSERT INTO club_forms.contact_activity(email,actor,action,details) VALUES($1,$2,'Unused address removed',$3)",
-        [source, actor, 'Removed unused linked address ' + target + '.'],
+        "INSERT INTO club_forms.contact_activity(email,actor,action,details) VALUES($1,$2,'Address removed',$3)",
+        [
+          source,
+          actor,
+          'Removed linked address ' +
+            target +
+            '. Saved records remain in this contact history.',
+        ],
       );
       return { email: source, aliasRemoved: true };
     }
     const linked = (
       await tx.query(
-        'SELECT contact_email FROM club_forms.contact_emails WHERE email=$1',
+        'SELECT contact_email,is_active FROM club_forms.contact_emails WHERE email=$1',
         [target],
       )
     ).rows[0];
@@ -106,6 +100,11 @@ export async function editContact(db, body, actor) {
       throw new RequestError(
         409,
         'That address belongs to another contact. Merge the contacts first, then choose the primary address.',
+      );
+    if (linked && !linked.is_active)
+      throw new RequestError(
+        409,
+        'That address was removed. Choose an active linked email or enter a new address.',
       );
     const name = body.name.trim();
     if (target !== source) {

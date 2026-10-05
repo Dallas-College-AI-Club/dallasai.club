@@ -96,9 +96,11 @@ export function responseSections(
     details.append(summary);
     const body = node('div', undefined, 'response-body');
     if (actions) body.append(actions(result));
+    const savedDefinition = result.response_definition || definition;
+    const savedRank = answerRank(savedDefinition);
     let lastGroup;
     for (const answer of [...result.responses].sort(
-      (a, b) => rank(a) - rank(b),
+      (a, b) => savedRank(a) - savedRank(b),
     )) {
       const chapter = chapters.find((c) => c.id === answer.group);
       if (chapter && lastGroup !== chapter.id) {

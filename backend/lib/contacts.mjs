@@ -57,13 +57,13 @@ export async function contactList(
   const rows = (
     await db.query(
       `SELECT c.*,
-    ARRAY(SELECT email FROM club_forms.contact_emails WHERE contact_email=c.email ORDER BY email) AS emails,
+    ARRAY(SELECT email FROM club_forms.contact_emails WHERE contact_email=c.email AND is_active ORDER BY email) AS emails,
     (SELECT count(*)::int FROM club_forms.entries e JOIN club_forms.contact_emails a ON a.email=e.email WHERE a.contact_email=c.email) AS submissions
     FROM club_forms.contacts c JOIN club_forms.contact_emails root ON root.email=c.email AND root.contact_email=c.email
     WHERE ($3='all' OR ($3='active' AND c.deleted_at IS NULL) OR ($3='deleted' AND c.deleted_at IS NOT NULL))
     AND ($1='' OR strpos(lower(c.email || ' ' || c.name),$1)>0 OR EXISTS(
       SELECT 1 FROM club_forms.contact_emails a JOIN club_forms.contacts original ON original.email=a.email
-      WHERE a.contact_email=c.email AND (strpos(lower(a.email || ' ' || original.name),$1)>0 OR EXISTS(
+      WHERE a.contact_email=c.email AND a.is_active AND (strpos(lower(a.email || ' ' || original.name),$1)>0 OR EXISTS(
         SELECT 1 FROM club_forms.entries e WHERE e.email=a.email AND strpos(lower(e.name),$1)>0))))
     ORDER BY c.last_seen DESC,c.email LIMIT 51 OFFSET $2`,
       [search.trim().toLowerCase(), offset, view],
@@ -96,7 +96,7 @@ export async function contactHistory(db, { email, offset = 0 }) {
   const contact = (
     await db.query(
       `SELECT c.*,
-      ARRAY(SELECT email FROM club_forms.contact_emails WHERE contact_email=c.email ORDER BY email) AS emails,
+      ARRAY(SELECT email FROM club_forms.contact_emails WHERE contact_email=c.email AND is_active ORDER BY email) AS emails,
       ARRAY(SELECT DISTINCT name FROM club_forms.entries e JOIN club_forms.contact_emails a ON a.email=e.email WHERE a.contact_email=c.email AND name<>'' ORDER BY name) AS names
       FROM club_forms.contacts c JOIN club_forms.contact_emails lookup ON lookup.contact_email=c.email WHERE lookup.email=$1`,
       [email],

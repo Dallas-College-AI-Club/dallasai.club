@@ -96,6 +96,8 @@ const kinds = {
   join: ['Signup', 'Signups'],
   subscribe: ['The AI Review subscription', 'The AI Review'],
   rsvp: ['RSVP', 'RSVPs'],
+  feedback: ['Event feedback', 'Event feedback'],
+  survey: ['Custom survey response', 'Custom survey responses'],
   'rsvp-past': ['RSVP', 'RSVPs for past events'],
   workshop: ['Workshop request', 'Workshops'],
   contribution: ['Article', 'Articles'],
@@ -199,6 +201,11 @@ const actions = {
   draft_saved: 'Saved draft',
   published: 'Published survey',
   closed: 'Closed survey',
+  editing: 'Editing survey',
+  archived: 'Archived survey',
+  restored: 'Restored survey',
+  response_deleted: 'Permanently deleted a survey response',
+  deleted: 'Permanently deleted a survey',
   respondent_added: 'Added',
   respondent_restored: 'Restored',
   respondent_removed: 'Archived',
@@ -217,6 +224,7 @@ for (const label of [
   'Unmarked as test',
   'Contact edited',
   'Unused address removed',
+  'Address removed',
 ])
   actions[label] = label;
 // Codes such as survey-export-csv:<event> carry details after the colon.

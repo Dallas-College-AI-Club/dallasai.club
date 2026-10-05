@@ -97,9 +97,7 @@ async function openContact(page) {
 }
 async function typeContactNote(page, text) {
   const dialog = await openContact(page);
-  await dialog
-    .getByLabel('Record a follow-up note', { exact: true })
-    .fill(text);
+  await dialog.getByLabel('Internal notes', { exact: true }).fill(text);
   return dialog;
 }
 try {
@@ -251,7 +249,7 @@ try {
       try {
         await page.locator('#refresh').click();
         await started;
-        await page.locator('[data-inbox-status="reviewed"]').click();
+        await page.locator('[data-inbox-status="past"]').click();
         await expect(page).toHaveTitle('Inbox · Club Office');
         await expect(page.locator('#entries')).toHaveAttribute(
           'aria-busy',
@@ -276,21 +274,21 @@ try {
             (title) => title === 'Inbox · Club Office',
           ),
         );
-        await page.locator('[data-inbox-status="new"]').click();
+        await page.locator('[data-inbox-status="current"]').click();
         await expect(page).toHaveTitle('(1) Inbox · Club Office');
         const card = page.locator(
           '#entry-' + fixture.entries.find((row) => row.kind === 'join').id,
         );
         await card.locator(':scope > summary').click();
         await card
-          .getByRole('button', { name: 'Mark reviewed', exact: true })
+          .getByRole('button', { name: 'Archive submission', exact: true })
           .click();
         await expect(page).toHaveTitle('Inbox · Club Office');
         await expect(page.locator('#nav-new-count')).toHaveText('5 new');
         await page.locator('[data-inbox-status="closed"]').click();
         await expect(page).toHaveTitle('Inbox · Club Office');
         await page.locator('#filters [name="kind"]').selectOption('rsvp');
-        await page.locator('[data-inbox-status="active"]').click();
+        await page.locator('[data-inbox-status="current"]').click();
         await page
           .locator('#event-chips')
           .getByRole('button', { name: 'Office audit event', exact: true })
@@ -491,7 +489,7 @@ try {
       await expect(dialog).toBeVisible();
       await dialog.getByRole('button', { name: /rsvp@example.edu/ }).click();
       await expect(
-        dialog.getByLabel('Record a follow-up note', { exact: true }),
+        dialog.getByLabel('Internal notes', { exact: true }),
       ).toHaveValue('Unsaved note kept through sign-in');
       // Back to the Inbox still returns focus to the button that opened
       // Contacts.
@@ -863,7 +861,7 @@ try {
       const dialog = page.locator('#contacts-pane');
       await dialog.getByRole('button', { name: /rsvp@example.edu/ }).click();
       await dialog
-        .getByLabel('Record a follow-up note', { exact: true })
+        .getByLabel('Internal notes', { exact: true })
         .fill('Unsaved follow-up that should not disappear');
       await page.locator('#inbox-tab').click();
       await page
@@ -872,7 +870,7 @@ try {
         .click();
       await dialog.getByRole('button', { name: /rsvp@example.edu/ }).click();
       await expect(
-        dialog.getByLabel('Record a follow-up note', { exact: true }),
+        dialog.getByLabel('Internal notes', { exact: true }),
       ).toHaveValue('Unsaved follow-up that should not disappear');
       await page.setViewportSize({ width: 390, height: 550 });
       // On a phone every tab, Contacts included, stays in view.
@@ -900,7 +898,7 @@ try {
       await expect(dialog).toContainText('Could not connect to Club Office');
       await save.click();
       await expect(
-        dialog.getByLabel('Record a follow-up note', { exact: true }),
+        dialog.getByLabel('Internal notes', { exact: true }),
       ).toHaveValue('');
       assert.equal(
         (
@@ -1320,7 +1318,9 @@ try {
     );
     await page.unroute('**/api/admin?**');
     await page.locator('#refresh').click();
-    await expect(page.locator('#entries .entry')).toHaveCount(6);
+    await expect(page.locator('#entries .entry:has(.entry-top)')).toHaveCount(
+      6,
+    );
   });
   await check(
     'Office layouts fit portrait landscape and dark mode',
@@ -1353,7 +1353,7 @@ try {
     },
   );
   await check(
-    'Contact profiles consolidate primary identity, retain drafts and clean unused aliases',
+    'Contact profiles consolidate primary identity, retain drafts and hide unused aliases',
     async (page) => {
       await page
         .locator('#inbox-pane')
@@ -1362,7 +1362,7 @@ try {
       const dialog = page.locator('#contacts-pane');
       await dialog.getByRole('button', { name: /join@example.edu/ }).click();
       await dialog
-        .getByLabel('Record a follow-up note', { exact: true })
+        .getByLabel('Internal notes', { exact: true })
         .fill('Keep this draft during contact corrections');
       await dialog
         .getByRole('button', { name: 'Edit contact', exact: true })
@@ -1383,7 +1383,7 @@ try {
         }),
       ).toBeVisible();
       await expect(
-        dialog.getByLabel('Record a follow-up note', { exact: true }),
+        dialog.getByLabel('Internal notes', { exact: true }),
       ).toHaveValue('Keep this draft during contact corrections');
       await dialog
         .getByRole('button', { name: 'Edit contact', exact: true })
@@ -1433,7 +1433,7 @@ try {
         .filter({ hasText: 'preferred-profile@example.edu' });
       await unused
         .getByRole('button', {
-          name: 'Remove unused address',
+          name: 'Remove address',
           exact: true,
         })
         .click();
@@ -1442,13 +1442,13 @@ try {
         .click();
       await expect(
         unused.getByRole('button', {
-          name: 'Remove unused address',
+          name: 'Remove address',
           exact: true,
         }),
       ).toBeEnabled();
       await unused
         .getByRole('button', {
-          name: 'Remove unused address',
+          name: 'Remove address',
           exact: true,
         })
         .click();
@@ -1471,10 +1471,10 @@ try {
           .locator('.contact-alias-row')
           .filter({ hasText: 'join@example.edu' })
           .getByRole('button', {
-            name: 'Remove unused address',
+            name: 'Remove address',
             exact: true,
           }),
-      ).toBeDisabled();
+      ).toBeEnabled();
       for (const width of [320, 768, 1440]) {
         await page.setViewportSize({ width, height: 900 });
         assert.ok(
@@ -1490,7 +1490,7 @@ try {
       assert.equal(
         (
           await fixture.db.query(
-            "SELECT email FROM club_forms.contacts WHERE email='preferred-profile@example.edu'",
+            "SELECT email FROM club_forms.contact_emails WHERE email='preferred-profile@example.edu' AND is_active",
           )
         ).rows.length,
         0,
@@ -1529,7 +1529,7 @@ try {
           .locator('.contact-alias-row')
           .filter({ hasText: 'join@example.edu' })
           .getByRole('button', {
-            name: 'Remove unused address',
+            name: 'Remove address',
             exact: true,
           }),
       ).toBeEnabled();
@@ -1542,9 +1542,12 @@ try {
       await page.reload();
       await page.locator('#office').waitFor();
       const comment = page.locator('#entries .entry textarea').first();
-      await page.locator('#entries .entry > summary').first().click();
       await page
-        .locator('#entries .entry')
+        .locator('#entries .entry:has(.entry-top) > summary')
+        .first()
+        .click();
+      await page
+        .locator('#entries .entry:has(.entry-top)')
         .first()
         .getByText('Activity & comments', { exact: true })
         .click();
@@ -1641,18 +1644,18 @@ try {
       await expect(page.locator('dialog[open]')).toHaveCount(0);
       await openContact(page);
       await expect(
-        dialog.getByLabel('Record a follow-up note', { exact: true }),
+        dialog.getByLabel('Internal notes', { exact: true }),
       ).toHaveValue('');
       assert.equal(dialogs.length, 1);
     },
   );
   await check(
-    'Save note & mark reviewed saves both and focuses the next card',
+    'Save note & archive saves both and focuses the next card',
     async (page) => {
-      await page.goto(fixture.origin + '/admin/#/inbox?status=new');
-      await page.locator('#entries .entry').first().waitFor();
+      await page.goto(fixture.origin + '/admin/#/inbox?status=current');
+      await page.locator('#entries .entry:has(.entry-top)').first().waitFor();
       const [first, second] = await page
-        .locator('#entries .entry')
+        .locator('#entries .entry:has(.entry-top)')
         .evaluateAll((cards) => cards.map((card) => card.id));
       const card = page.locator('#' + first),
         id = first.replace('entry-', '');
@@ -1661,7 +1664,7 @@ try {
       // Spaces alone are not a note.
       await card.getByLabel('Add a comment', { exact: true }).fill('   ');
       await expect(
-        card.getByRole('button', { name: 'Mark reviewed', exact: true }),
+        card.getByRole('button', { name: 'Archive submission', exact: true }),
       ).toBeVisible();
       await card
         .getByLabel('Add a comment', { exact: true })
@@ -1673,7 +1676,7 @@ try {
         await route.continue();
       });
       await card
-        .getByRole('button', { name: 'Save note & mark reviewed', exact: true })
+        .getByRole('button', { name: 'Save note & archive', exact: true })
         .click();
       // Every button on the card is busy and the note is locked until the
       // request finishes.
@@ -1701,7 +1704,7 @@ try {
           [id, 'Called them back.'],
         )
       ).rows[0];
-      assert.deepEqual(saved, { review_status: 'reviewed', comments: 1 });
+      assert.deepEqual(saved, { review_status: 'closed', comments: 1 });
       await fixture.db.query(
         "UPDATE club_forms.entries SET review_status='new' WHERE id=$1",
         [id],
@@ -1723,7 +1726,7 @@ try {
         [id],
       );
       await card
-        .getByRole('button', { name: 'Mark reviewed', exact: true })
+        .getByRole('button', { name: 'Archive submission', exact: true })
         .click();
       await expect(page.locator('#status')).toContainText(
         'other-officer@example.com already',
@@ -1861,14 +1864,14 @@ try {
       // navigation would keep the interval created before clock.install().
       await page.reload();
       await page.locator('#office').waitFor();
-      await page.locator('#inbox-pane [data-inbox-status="new"]').click();
+      await page.locator('#inbox-pane [data-inbox-status="current"]').click();
       await expect(page.locator('#entries')).toHaveAttribute(
         'aria-busy',
         'false',
       );
-      await page.locator('#entries .entry').first().waitFor();
+      await page.locator('#entries .entry:has(.entry-top)').first().waitFor();
       const [first, second, third] = await page
-        .locator('#entries .entry')
+        .locator('#entries .entry:has(.entry-top)')
         .evaluateAll((cards) => cards.map((card) => card.id));
       const settled = async () => {
         await page.waitForTimeout(300);
@@ -1890,7 +1893,7 @@ try {
       await signInAgain(page);
       await settled();
       await expect(comment).toBeFocused();
-      // "Save note & mark reviewed" meets a 401.
+      // "Save note & archive" meets a 401.
       const secondCard = page.locator('#' + second);
       await page.locator('#' + second + ' > summary').click();
       await secondCard
@@ -1901,7 +1904,7 @@ try {
         .fill('Saved after signing in again');
       await expireRoute(page, '**/api/admin', 'POST');
       await secondCard
-        .getByRole('button', { name: 'Save note & mark reviewed', exact: true })
+        .getByRole('button', { name: 'Save note & archive', exact: true })
         .click();
       await expectPaused(page);
       await page.unroute('**/api/admin');
@@ -2082,7 +2085,7 @@ try {
       assert.match(dialogs[0], /Follow-up note for rsvp@example.edu/);
       await openContact(page);
       await expect(
-        dialog.getByLabel('Record a follow-up note', { exact: true }),
+        dialog.getByLabel('Internal notes', { exact: true }),
       ).toHaveValue('');
     },
   );
@@ -2163,28 +2166,28 @@ try {
     async (page) => {
       await page.clock.install();
       await page.reload();
-      await page.locator('#entries .entry').first().waitFor();
-      const card = page.locator('#entries .entry').first(),
+      await page.locator('#entries .entry:has(.entry-top)').first().waitFor();
+      const card = page.locator('#entries .entry:has(.entry-top)').first(),
         id = (await card.getAttribute('id')).replace('entry-', '');
       await card.locator('summary').first().click();
       await card
-        .getByRole('button', { name: 'Mark reviewed', exact: true })
+        .getByRole('button', { name: 'Archive submission', exact: true })
         .click();
       // Hovering a toast pauses its timer; keep the pointer elsewhere.
       await page.mouse.move(1000, 20);
-      const done = page
-        .locator('#toasts .toast')
-        .filter({ hasText: 'Submission moved to Reviewed.' });
+      const done = page.locator('#toasts .toast').filter({
+        hasText: 'Submission moved to Archived. Comments and history are kept.',
+      });
       await expect(done).toBeVisible();
       await expect(page.locator('#status')).toHaveText(
-        'Submission moved to Reviewed.',
+        'Submission moved to Archived. Comments and history are kept.',
       );
       await page.clock.runFor(5500);
       await expect(done).toBeVisible();
       await page.clock.runFor(1000);
       await expect(done).toHaveCount(0);
       await expect(page.locator('#status')).toHaveText(
-        'Submission moved to Reviewed.',
+        'Submission moved to Archived. Comments and history are kept.',
       );
       await page.route('**/api/admin?**', (route) =>
         route.fulfill({
@@ -2226,7 +2229,7 @@ try {
   await check('The counts poll never touches the list', async (page) => {
     await page.clock.install();
     await page.reload();
-    await page.locator('#entries .entry').first().waitFor();
+    await page.locator('#entries .entry:has(.entry-top)').first().waitFor();
     await page.evaluate(() => {
       window.listChanges = 0;
       new MutationObserver((records) => {
@@ -2267,7 +2270,7 @@ try {
     }
   });
   await check(
-    'An officer’s own Mark new raises no alert; a new submission does',
+    'Restoring an archived submission raises no alert; a new submission does',
     async (page) => {
       await page.addInitScript(() => {
         window.testAlerts = [];
@@ -2286,12 +2289,12 @@ try {
       const { id } = fixture.entries.find((row) => row.kind === 'question'),
         arrival = randomUUID();
       await fixture.db.query(
-        "UPDATE club_forms.entries SET review_status='reviewed' WHERE id=$1",
+        "UPDATE club_forms.entries SET review_status='closed' WHERE id=$1",
         [id],
       );
       try {
         await page.goto(
-          fixture.origin + '/admin/?alerts#/inbox?status=reviewed',
+          fixture.origin + '/admin/?alerts#/inbox?status=archived',
         );
         const card = page.locator('#entry-' + id);
         await card.locator('summary').first().click();
@@ -2299,7 +2302,7 @@ try {
           response.url().includes('counts=1'),
         );
         await card
-          .getByRole('button', { name: 'Mark new', exact: true })
+          .getByRole('button', { name: 'Restore submission', exact: true })
           .click();
         await counted;
         const polled = page.waitForResponse((response) =>
@@ -2602,7 +2605,7 @@ try {
       fixture.session.expiresAt = '2026-10-03T13:40:00Z';
       try {
         await page.reload();
-        await page.locator('#entries .entry').first().waitFor();
+        await page.locator('#entries .entry:has(.entry-top)').first().waitFor();
         await page.locator('#account-button').click();
         await expect(page.locator('#account-until')).toHaveText(
           'Signed in until Sat, Oct 3, 8:40 AM CT',
@@ -3031,7 +3034,7 @@ try {
     `INSERT INTO club_forms.events(id,draft,revision,updated_by) VALUES('home-draft','{"title":"Home draft event","date":"2031-01-05","category":"Workshop","description":"Draft"}',1,'officer@example.com')`,
   );
   await check(
-    'Home is the landing page and its tiles show what needs review',
+    'Home is the landing page and its tiles show recent submissions',
     async (page) => {
       for (const [id, title] of [
         ['home-potential-one', 'Potential with RSVP'],
@@ -3108,20 +3111,16 @@ try {
       assert.equal(await logo.evaluate((img) => img.naturalWidth), 500);
       const needs = page.locator('#home-tiles > .tile').first();
       await expect(needs).toHaveClass(/has-new/);
-      await expect(needs.locator('.tile-label')).toHaveText('Needs review');
+      await expect(needs.locator('.tile-label')).toHaveText("What's new");
       const group = needs.locator('.rsvp-group', {
         hasText: 'Home check event',
       });
       await expect(group).toContainText('Past event · 2 new RSVPs');
       const row = needs.locator('.tile-row', { hasText: 'Home Check Person' });
       await expect(row).toContainText('Question · Home check subject');
-      await row
-        .getByRole('button', { name: 'Mark reviewed', exact: true })
-        .click();
-      await expect(row).toHaveCount(0);
-      await expect(page.locator('#status')).toHaveText(
-        'Submission moved to Reviewed.',
-      );
+      await expect(
+        needs.getByRole('button', { name: /Mark reviewed/ }),
+      ).toHaveCount(0);
       assert.equal(
         (
           await fixture.db.query(
@@ -3129,7 +3128,7 @@ try {
             [homeQuestion],
           )
         ).rows[0].review_status,
-        'reviewed',
+        'new',
       );
       // Drafts keep the event list's yellow badge and open in Events.
       const draft = page
@@ -3148,9 +3147,6 @@ try {
         await expect(
           page.locator('#home-tiles .tile-label', { hasText: label }),
         ).toHaveCount(1);
-      await expect(page.locator('#home-tiles')).toContainText(
-        'Marked reviewed · Question · You',
-      );
       await draft.click();
       await expect(page.locator('#events-pane')).toBeVisible();
       await expect(
@@ -3177,7 +3173,7 @@ try {
         .getByRole('link', { name: 'Show all' })
         .click();
       await expect(page).toHaveURL(
-        /#\/inbox\?type=rsvp-all&event=home-check-event&status=active$/,
+        /#\/inbox\?type=rsvp-all&event=home-check-event&status=recent$/,
       );
       await expect(page.locator('#filters [name="kind"]')).toHaveValue(
         'rsvp-all',
@@ -3205,6 +3201,7 @@ try {
       await page.locator('#counts-summary').click();
       await expect(page.locator('#counts .count').first()).toBeVisible();
       await page.locator('#filters [name="kind"]').selectOption('rsvp-all');
+      await page.locator('[data-inbox-status="past"]').click();
       const chips = page.locator('#event-chips');
       await expect(chips).toBeVisible();
       await expect(
@@ -3245,14 +3242,24 @@ try {
       await pane
         .getByRole('button', { name: /home-check@example.edu/ })
         .click();
-      await expect(page.locator('#contacts-heading')).toHaveText(
-        'Home Check Person',
-      );
+      await expect(page.locator('#contacts-heading')).toHaveText('Contacts');
+      await expect(
+        pane.getByRole('heading', {
+          level: 2,
+          name: 'Home Check Person',
+          exact: true,
+        }),
+      ).toBeVisible();
       await page.locator('#events-tab').click();
       await page.locator('#contacts-tab').click();
-      await expect(page.locator('#contacts-heading')).toHaveText(
-        'Home Check Person',
-      );
+      await expect(page.locator('#contacts-heading')).toHaveText('Contacts');
+      await expect(
+        pane.getByRole('heading', {
+          level: 2,
+          name: 'Home Check Person',
+          exact: true,
+        }),
+      ).toBeVisible();
       await expect(page.locator('#contacts-heading')).toBeFocused();
       // The Inbox button still opens the directory, now on the tab.
       await page.locator('#inbox-tab').click();

@@ -1774,7 +1774,7 @@ async function respondent(link, name) {
   return device.headers.getSetCookie()[0].split(';')[0];
 }
 async function answer(link, cookie, consent, answers, expectedRevision = 0) {
-  const { advisorId } = await (
+  const { advisorId, definition: formDefinition } = await (
     await request('bootstrap', undefined, { link, cookie })
   ).json();
   return request(
@@ -1784,12 +1784,111 @@ async function answer(link, cookie, consent, answers, expectedRevision = 0) {
       expectedRevision,
       contentVersion: FORM_VERSION,
       advisorId,
+      ...(formDefinition.respondents
+        .find((r) => r.id === advisorId)
+        ?.name.trim()
+        ? {}
+        : { name: 'Survey Reader' }),
       consent,
       answers,
     },
     { link, cookie },
   );
 }
+
+test('a nameless verified respondent must supply a name, saved atomically with answers and retry receipt', async () => {
+  const question = textQuestion('Comments');
+  const { id, link } = await publicSurvey('admins', [question]);
+  const cookie = await respondent(link, 'unnamed');
+  const { advisorId } = await (
+    await request('bootstrap', undefined, { link, cookie })
+  ).json();
+  const body = {
+    requestId: randomUUID(),
+    expectedRevision: 0,
+    contentVersion: FORM_VERSION,
+    advisorId,
+    consent: 'admins',
+    answers: [{ id: question.id, value: 'Helpful workshop' }],
+  };
+  for (const name of [
+    undefined,
+    '',
+    '  ',
+    null,
+    12,
+    {},
+    'x'.repeat(121),
+    'bad\u0001name',
+    'reader@example.com',
+  ]) {
+    const response = await request(
+      'submit',
+      { ...body, name },
+      { link, cookie },
+    );
+    assert.equal(response.status, 400);
+    assert.match((await response.json()).error, /full name/);
+  }
+  assert.equal(
+    (
+      await f.db.query(
+        'SELECT count(*)::int n FROM club_forms.custom_survey_responses WHERE survey_id=$1',
+        [id],
+      )
+    ).rows[0].n,
+    0,
+  );
+  const stale = await request(
+    'submit',
+    { ...body, name: 'Reader Student', expectedRevision: 1 },
+    { link, cookie },
+  );
+  assert.equal(stale.status, 409);
+  assert.equal(
+    (
+      await f.db.query(
+        'SELECT display_name FROM club_forms.custom_survey_members WHERE survey_id=$1',
+        [id],
+      )
+    ).rows[0].display_name,
+    '',
+  );
+  const named = { ...body, name: '  Reader Student  ' };
+  const first = await request('submit', named, { link, cookie });
+  assert.equal(first.status, 200);
+  const receipt = (await first.json()).receipt;
+  assert.deepEqual(
+    (await (await request('submit', named, { link, cookie })).json()).receipt,
+    receipt,
+  );
+  const saved = await (
+    await request('bootstrap', undefined, { link, cookie })
+  ).json();
+  assert.equal(saved.definition.respondents[0].name, 'Reader Student');
+  assert.equal(saved.results[0].responses[0].value, 'Helpful workshop');
+  const overwrite = await request(
+    'submit',
+    {
+      ...body,
+      requestId: randomUUID(),
+      expectedRevision: 1,
+      name: 'Different Person',
+    },
+    { link, cookie },
+  );
+  assert.equal(overwrite.status, 409);
+  assert.equal(
+    (
+      await request(
+        'submit',
+        { ...body, requestId: randomUUID(), expectedRevision: 1 },
+        { link, cookie },
+      )
+    ).status,
+    200,
+  );
+});
 test('respondents never see another respondent’s email address; officers still do', async () => {
   const question = textQuestion('Comments');
   const { id, link } = await publicSurvey('respondents', [question]);
@@ -1828,6 +1927,11 @@ test('respondents never see another respondent’s email address; officers still
         .status,
       200,
     );
+  // Preserve coverage for responses saved before names became required.
+  await f.db.query(
+    "UPDATE club_forms.custom_survey_members SET display_name='' WHERE survey_id=$1 AND email='newcomer@example.com'",
+    [id],
+  );
   const read = async (action, cookie) =>
     (await request(action, undefined, { link, cookie })).json();
   const bootstrap = await read('bootstrap', newcomer),

@@ -1,5 +1,10 @@
 # Private custom surveys
 
+Verified respondents without a saved name must enter their full name before
+submitting a custom survey. The name and answers are saved together. Existing
+invited names stay unchanged, and older responses remain readable without edits.
+This also applies to event feedback surveys built with the custom survey builder.
+
 Officers can select **Test sample** for Advisor Studio in Club
 Office to test the full survey with fictional Jordan Morgan and Alex Rivera
 responses. Choose either sample respondent, edit answers and comments, review

@@ -5,7 +5,7 @@ import { aboutMarkup, mountAbout } from './about.js';
 import { replayMarkup, mountReplay } from '../projects/chatbot.js';
 import { JOIN_URL, PROJECT_URL } from '../content/club.js';
 import { careerMarkup, mountCareer } from '../projects/career.js';
-import { formFooter, mountForm } from '../app/form-client.js';
+import { formFooter, identityFields, mountForm } from '../app/form-client.js';
 export const spaceHeader = (name, action = '') =>
   /* HTML */ `<header class="space-masthead">
     <div class="space-title-row">
@@ -88,19 +88,13 @@ export function renderSpace(root, id, { open }) {
         <section>
           <h2 data-form-intro>Stay in the loop with The AI Review.</h2>
           <p data-form-intro>
-            Leave your email for future updates from The AI Review. For now,
-            read new articles on the website or follow our RSS feed.
+            Leave your full name and email for future updates from The AI
+            Review. For now, read new articles on the website or follow our RSS
+            feed.
           </p>
           <form id="subscribe-form" class="club-form">
-            <label for="subscriber-email">Email address</label
-            ><input
-              id="subscriber-email"
-              name="email"
-              type="email"
-              autocomplete="email"
-              required
-              placeholder="you@example.com"
-            />${formFooter('Subscribe →', 'I would like to receive new articles from The AI Review. I can unsubscribe at any time.')}
+            ${identityFields()}
+            ${formFooter('Subscribe →', 'I would like to receive new articles from The AI Review. I can unsubscribe at any time.')}
           </form>
         </section>
         <aside class="subscribe-alternative">

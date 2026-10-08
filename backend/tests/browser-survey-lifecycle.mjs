@@ -57,6 +57,7 @@ try {
   const device = await rememberDevice(f.db, survey, {
     id: 'browser-lifecycle',
     email: 'lifecycle@example.edu',
+    name: 'Lifecycle Student',
     emailVerified: true,
   });
   await submitSurvey(
@@ -124,7 +125,7 @@ try {
   assert.match(csv, /Evening/);
   await page
     .getByRole('button', {
-      name: 'Download PDF for lifecycle@example.edu',
+      name: 'Download PDF for Lifecycle Student',
       exact: true,
     })
     .click();

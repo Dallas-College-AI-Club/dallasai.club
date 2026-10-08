@@ -183,14 +183,15 @@ export async function currentResponses(
 export async function submitSurvey(db, req, link, body) {
   return db.transaction(async (tx) => {
     const survey = await linkedSurvey(tx, link, true);
-    const member = await requireDevice(tx, req, survey);
+    let member = await requireDevice(tx, req, survey);
     // Serialize member revocation / identity updates with submission.
     const locked = await tx.query(
-      'SELECT advisor_id FROM club_forms.custom_survey_members WHERE survey_id=$1 AND advisor_id=$2 AND active FOR UPDATE',
+      'SELECT * FROM club_forms.custom_survey_members WHERE survey_id=$1 AND advisor_id=$2 AND active FOR UPDATE',
       [survey.id, member.advisor_id],
     );
     if (!locked.rows.length)
       throw new RequestError(403, 'Survey access has been revoked.');
+    member = locked.rows[0];
     const members = await surveyMembers(tx, survey.id);
     const responses = survey.definition
       ? validateFormResponse(body, survey, member)
@@ -200,12 +201,35 @@ export async function submitSurvey(db, req, link, body) {
           members.filter((m) => m.advisor_id !== member.advisor_id),
           survey.content_version,
         );
+    let submittedName;
+    if (
+      survey.definition &&
+      (body.name !== undefined || !member.display_name.trim())
+    ) {
+      if (
+        typeof body.name !== 'string' ||
+        !body.name.trim() ||
+        body.name.trim().length > 120 ||
+        /[\x00-\x1f@]/.test(body.name)
+      )
+        throw new RequestError(
+          400,
+          'Enter your full name (maximum 120 characters), not an email address.',
+        );
+      submittedName = body.name.trim();
+      if (member.display_name.trim() && member.display_name !== submittedName)
+        throw new RequestError(
+          409,
+          'Your saved name has changed. Reload the survey before submitting.',
+        );
+    }
     const requestDigest = digest(
       JSON.stringify({
         responses,
         expectedRevision: body.expectedRevision,
         consent: body.consent,
         contentVersion: body.contentVersion,
+        ...(submittedName === undefined ? {} : { name: submittedName }),
       }),
     );
     const existing = (
@@ -242,6 +266,11 @@ export async function submitSurvey(db, req, link, body) {
         'A newer summary was saved on another device. Keep a personal copy, then reload before submitting again.',
       );
     const revision = body.expectedRevision + 1;
+    if (submittedName !== undefined && !member.display_name.trim())
+      await tx.query(
+        'UPDATE club_forms.custom_survey_members SET display_name=$3 WHERE survey_id=$1 AND advisor_id=$2',
+        [survey.id, member.advisor_id, submittedName],
+      );
     await tx.query(
       `INSERT INTO club_forms.custom_survey_responses(survey_id,advisor_id,revision,responses,shared_with,response_definition) VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(survey_id,advisor_id) DO UPDATE SET revision=EXCLUDED.revision,responses=EXCLUDED.responses,shared_with=EXCLUDED.shared_with,response_definition=EXCLUDED.response_definition,submitted_at=now()`,
       [

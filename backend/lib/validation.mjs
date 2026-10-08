@@ -56,12 +56,10 @@ export function validate(body, events = [], now = new Date()) {
   const result = {
     kind: body.kind,
     email: email(body.email),
-    name: '',
+    name: text(body.name, 'your name', 100),
     data: {},
     files: [],
   };
-  if (body.kind !== 'subscribe')
-    result.name = text(body.name, 'your name', 100);
   if (body.kind === 'join') {
     if (!campuses.includes(body.campus))
       throw new RequestError(400, 'Choose your campus.');

@@ -44,6 +44,12 @@ CSV exports have separate Subject / title and Message / body fields, dedicated m
 
 ## How people submit
 
+All six public forms ask for a full name and email address and validate both before
+saving. The AI Review subscription uses the same identity fields as club signups.
+Older email-only subscription records retain their original details; a repeat
+request with a name adds an unverified-details note for officer review instead of
+overwriting the saved identity.
+
 - **The AI Review → Contribute an article** opens the submission page with a title, draft text and optional private attachments. Submit for review saves it under **Articles** and replaces the submitted form with a confirmation screen and Done button. It does not automatically publish an article.
 - **Ask about this event** opens a question dialog, carries the event context into the inbox and confirms receipt within the dialog. **Ask the club** in the footer opens the same dialog for a general question.
 - **Request a workshop** opens the workshop request dialog. Confirmation replaces the form, with a Close button. Dialog close controls stay visible while scrolling.

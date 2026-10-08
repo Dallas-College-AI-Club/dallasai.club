@@ -990,6 +990,15 @@ try {
         .getByRole('button', { name: 'Review answers →', exact: true })
         .click();
       await expect(page.locator('#main').getByRole('status')).toContainText(
+        'Enter your full name',
+      );
+      await page
+        .getByRole('textbox', { name: 'Your full name *', exact: true })
+        .fill('Recovery Student');
+      await page
+        .getByRole('button', { name: 'Review answers →', exact: true })
+        .click();
+      await expect(page.locator('#main').getByRole('status')).toContainText(
         'Answer the required question',
       );
       await page
@@ -1045,6 +1054,15 @@ try {
           [id],
         )
       ).rows[0].responses;
+      assert.equal(
+        (
+          await fixture.db.query(
+            'SELECT display_name FROM club_forms.custom_survey_members WHERE survey_id=$1',
+            [id],
+          )
+        ).rows[0].display_name,
+        'Recovery Student',
+      );
       assert.deepEqual(
         stored.map((answer) => answer.value),
         ['Not answered'],
@@ -1062,6 +1080,10 @@ try {
           exact: true,
         }),
       ).toHaveValue('Not answered');
+      await expect(
+        page.getByRole('textbox', { name: 'Your full name *', exact: true }),
+      ).toHaveCount(0);
+      await expect(page.locator('#who')).toHaveText('Recovery Student');
     },
   );
   await check(
@@ -1192,6 +1214,9 @@ try {
       await page
         .getByRole('button', { name: 'Verify and continue', exact: true })
         .click();
+      await page
+        .getByRole('textbox', { name: 'Your full name *', exact: true })
+        .fill('Exclusive Student');
       const friday = page.getByRole('checkbox', {
           name: 'Friday',
           exact: true,

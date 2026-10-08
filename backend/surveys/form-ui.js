@@ -227,6 +227,8 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
     values = {},
     dirty = false,
     revision = 0,
+    respondentName = '',
+    needsName = false,
     pending,
     busy = false;
   const status = node('p', undefined, 'auth-message');
@@ -382,6 +384,24 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
         'micro',
       ),
     );
+    if (!previewOnly && needsName) {
+      const card = node('section', undefined, 'question'),
+        label = node('label', 'Your full name *'),
+        input = node('input');
+      input.name = 'respondent-name';
+      input.autocomplete = 'name';
+      input.maxLength = 120;
+      input.required = true;
+      input.value = respondentName;
+      input.oninput = () => {
+        respondentName = input.value;
+        dirty = true;
+        pending = null;
+      };
+      label.append(input);
+      card.append(label);
+      main.append(card);
+    }
     main.append(
       questionFields(definition, {
         readOnly: previewOnly,
@@ -408,6 +428,12 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
         : (q.type === 'single' ? [v] : v).map((i) => q.options[i]).join('\n');
   }
   function review() {
+    if (needsName && !respondentName.trim()) {
+      status.textContent =
+        'Enter your full name before reviewing your answers.';
+      main.querySelector('[name="respondent-name"]')?.focus();
+      return;
+    }
     const missing = definition.questions.find(
       (q) => q.required && !hasAnswer(values[q.id]),
     );
@@ -437,6 +463,8 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
     status.textContent = '';
     intro();
     main.append(node('h2', 'Review your answers'));
+    if (needsName)
+      main.append(node('p', 'Your full name: ' + respondentName.trim()));
     for (const q of definition.questions) {
       const card = node('section', undefined, 'question');
       card.append(
@@ -473,6 +501,7 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
         expectedRevision: revision,
         contentVersion: bootstrap.definition.content_version || 'custom-form/1',
         advisorId: bootstrap.advisorId,
+        ...(needsName ? { name: respondentName.trim() } : {}),
         consent: welcome.permissions.results,
         answers: definition.questions
           .filter((q) => hasAnswer(values[q.id]))
@@ -489,6 +518,10 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
             'We could not confirm the save. Retry this submission; your answers remain here.',
           );
         revision = saved.receipt.revision;
+        if (needsName) {
+          needsName = false;
+          document.querySelector('#who').textContent = respondentName.trim();
+        }
         pending = null;
         dirty = false;
         intro();
@@ -600,10 +633,13 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
               : mine?.responses || []
             ).map((a) => [a.id, a.value]),
           );
-        document.querySelector('#who').textContent =
+        const savedName =
           bootstrap.definition.respondents.find(
             (r) => r.id === bootstrap.advisorId,
-          )?.name || 'Verified respondent';
+          )?.name || '';
+        needsName = !savedName.trim();
+        document.querySelector('#who').textContent =
+          savedName || 'Verified respondent';
       }
       renderQuestions();
       if (!previewOnly) {

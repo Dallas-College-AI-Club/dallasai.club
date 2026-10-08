@@ -488,6 +488,9 @@ try {
       await page
         .getByRole('button', { name: 'Verify and continue', exact: true })
         .click();
+      await page
+        .getByRole('textbox', { name: 'Your full name *', exact: true })
+        .fill('Typed Student');
       await fillAnswers(page);
       await page.getByRole('textbox', { name: /^Basic email/ }).fill('invalid');
       await page
@@ -500,6 +503,10 @@ try {
         .getByRole('textbox', { name: /^Basic email/ })
         .fill('advisor@example.edu');
       await page.setViewportSize({ width: 320, height: 820 });
+      await page.screenshot({
+        path: '../.preview/custom-survey-phone.png',
+        fullPage: true,
+      });
       assert.ok(
         await page.evaluate(
           () => document.documentElement.scrollWidth <= innerWidth,

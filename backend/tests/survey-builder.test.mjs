@@ -79,6 +79,7 @@ test('survey lifecycle archives and restores drafts without changing responses, 
     const device = await rememberDevice(f.db, survey, {
       id: 'lifecycle-user',
       email: 'lifecycle@example.edu',
+      name: 'Lifecycle Student',
       emailVerified: true,
     });
     await submitSurvey(
@@ -352,6 +353,7 @@ test('custom availability preserves optional answers, dates and suggested times 
       const device = await rememberDevice(f.db, survey, {
         id: 'availability-' + i,
         email: 'availability-' + i + '@example.edu',
+        name: 'Availability Student ' + i,
         emailVerified: true,
       });
       memberIds.push(device.member.advisor_id);
@@ -599,6 +601,7 @@ test('time and dated period choices validate, persist and export under concurren
       const device = await rememberDevice(f.db, survey, {
         id: 'period-' + i,
         email: `period-${i}@example.com`,
+        name: 'Period Student ' + i,
         emailVerified: true,
       });
       requests.push({

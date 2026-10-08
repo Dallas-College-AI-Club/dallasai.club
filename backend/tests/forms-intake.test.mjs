@@ -67,6 +67,7 @@ test('a question reaches the inbox as New, linked to its event and its contact',
   assert.equal((await response.json()).message, confirmations.question);
   const [saved] = await rows();
   assert.equal(saved.kind, 'question');
+  assert.equal(saved.name, 'Test Student');
   assert.equal(saved.email, 'student@example.edu');
   assert.equal(saved.review_status, 'new');
   assert.equal(saved.data.subject, 'Parking');
@@ -100,6 +101,83 @@ test('signups, RSVPs and requests are each saved once and confirmed', async () =
     'subscribe',
     'workshop',
   ]);
+  for (const saved of await rows())
+    assert.equal(saved.name, 'Test Student', saved.kind);
+});
+
+test('every public form rejects missing or invalid names without saving', async () => {
+  for (const kind of Object.keys(confirmations)) {
+    for (const name of [
+      undefined,
+      '',
+      '   ',
+      null,
+      123,
+      {},
+      'x'.repeat(101),
+      '\u0001',
+    ]) {
+      const response = await post(form(kind, { name }));
+      assert.equal(response.status, 400, kind);
+      assert.match((await response.json()).error, /name/, kind);
+    }
+  }
+  assert.deepEqual(await rows(), []);
+});
+
+test('a subscription saves its trimmed name and changed repeat details await officer review', async () => {
+  const subscription = form('subscribe', { name: '  Reader Student  ' });
+  const response = await post(subscription);
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).message, confirmations.subscribe);
+  assert.equal((await rows())[0].name, 'Reader Student');
+  assert.equal(
+    (await db.query('SELECT name FROM club_forms.contacts')).rows[0].name,
+    'Reader Student',
+  );
+  await db.query("UPDATE club_forms.entries SET review_status='closed'");
+  await post({ ...subscription, requestId: randomUUID() });
+  assert.equal((await rows())[0].review_status, 'closed');
+  assert.deepEqual(await resubmissions(), []);
+  const changed = {
+    ...subscription,
+    name: 'Reader Student Jr',
+    requestId: randomUUID(),
+  };
+  assert.equal(
+    (await (await post(changed)).json()).message,
+    confirmations.subscribe,
+  );
+  await post({ ...changed, requestId: randomUUID() });
+  const saved = await rows();
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].name, 'Reader Student');
+  assert.equal(saved[0].review_status, 'new');
+  assert.deepEqual(await resubmissions(), [
+    {
+      action: 'resubmitted',
+      actor: 'website',
+      body: 'Unverified details submitted through the public website:\nName: Reader Student Jr',
+    },
+  ]);
+});
+
+test('an existing nameless subscription keeps its original record and flags a newly supplied name', async () => {
+  await db.query(
+    "INSERT INTO club_forms.entries(id,kind,email,dedupe_key,review_status) VALUES($1,'subscribe','student@example.edu','subscribe:student@example.edu','closed')",
+    [randomUUID()],
+  );
+  const response = await post(form('subscribe'));
+  assert.equal(response.status, 200);
+  assert.equal((await response.json()).message, confirmations.subscribe);
+  const saved = await rows();
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].name, '');
+  assert.equal(saved[0].review_status, 'new');
+  assert.equal(
+    (await resubmissions())[0].body,
+    'Unverified details submitted through the public website:\nName: Test Student',
+  );
 });
 
 test('RSVP replies do not reveal registration history when a potential event becomes confirmed', async () => {
@@ -202,7 +280,7 @@ test('a repeated signup with new details reaches the officers; an identical one 
   assert.equal((await again.json()).message, confirmations.join);
   assert.equal((await rows())[0].review_status, 'reviewed');
   assert.equal((await resubmissions()).length, 1);
-  // A newsletter signup has no details beyond the address.
+  // An identical newsletter signup adds no new details for officers to review.
   const subscribe = form('subscribe');
   for (const requestId of [subscribe.requestId, randomUUID()])
     assert.equal(

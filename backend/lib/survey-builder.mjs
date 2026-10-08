@@ -514,6 +514,7 @@ export function validateFormResponse(body, survey, member) {
     'advisorId',
     'consent',
     'answers',
+    ...(Object.hasOwn(body || {}, 'name') ? ['name'] : []),
   ]);
   if (
     !uuid.test(body.requestId) ||

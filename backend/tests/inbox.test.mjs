@@ -1086,7 +1086,12 @@ test('an unverified resubmission preserves withdrawal and asks officers to revie
       eventId: 'next',
       consent: true,
     },
-    { kind: 'subscribe', email: 'reader@example.edu', consent: true },
+    {
+      kind: 'subscribe',
+      name: 'Reader Student',
+      email: 'reader@example.edu',
+      consent: true,
+    },
   ];
   const audited = async (id) =>
     (

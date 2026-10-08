@@ -203,12 +203,31 @@ try {
   );
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await calendarRefresh;
-  await page.goto(origin + '/club.html?mode=journal');
+  await page.goto(origin + '/club.html?mode=journal&motion=off');
   await page.getByRole('button', { name: 'Subscribe ↗', exact: true }).click();
   await page
     .getByLabel('Email address', { exact: true })
     .fill('reader@example.com');
   await page.getByRole('checkbox').check();
+  const beforeSubscription = received.length;
+  await page.getByRole('button', { name: 'Subscribe →', exact: true }).click();
+  assert.equal(received.length, beforeSubscription);
+  await expect(
+    page.getByLabel('Your full name', { exact: true }),
+  ).toBeFocused();
+  await page
+    .getByLabel('Your full name', { exact: true })
+    .fill('Reader Student');
+  await page.setViewportSize({ width: 390, height: 844 });
+  assert.ok(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  );
+  await page.screenshot({
+    path: path.join(screens, 'subscription-phone.png'),
+    fullPage: true,
+  });
   await page.getByRole('button', { name: 'Subscribe →', exact: true }).click();
   await page
     .getByRole('heading', {
@@ -217,8 +236,10 @@ try {
     })
     .waitFor();
   await page.getByRole('button', { name: 'Done', exact: true }).click();
-  await page.waitForURL('**mode=journal');
+  await page.waitForURL('**mode=journal&motion=off');
   assert.equal(received.at(-1).kind, 'subscribe');
+  assert.equal(received.at(-1).name, 'Reader Student');
+  await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(origin + '/club.html?mode=events&event=productivity');
   await page.locator('#open-rsvp').click();
   await page.locator('#event-rsvp [name="name"]').fill('Test Student');
@@ -456,7 +477,7 @@ try {
   // category, its contact link, the event question and the attachment name.
   const saved = (
     await office.db.query(
-      'SELECT id,kind,email FROM club_forms.entries WHERE email IN ($1,$2,$3) ORDER BY kind,email',
+      'SELECT id,kind,email,name FROM club_forms.entries WHERE email IN ($1,$2,$3) ORDER BY kind,email',
       ['student@example.com', 'reader@example.com', 'mobile@example.com'],
     )
   ).rows;
@@ -472,6 +493,10 @@ try {
       'workshop',
     ],
   );
+  assert.equal(
+    saved.find((row) => row.kind === 'subscribe').name,
+    'Reader Student',
+  );
   const officer = await browser.newPage({
     viewport: { width: 390, height: 844 },
   });
@@ -482,6 +507,8 @@ try {
     await officer.goto(office.origin + '/admin/#/inbox/' + entry.id);
     const card = officer.locator('#entry-' + entry.id);
     await expect(card).toBeVisible();
+    assert.ok(entry.name, entry.kind + ' must retain its submitted name');
+    await expect(card.locator(':scope > summary')).toContainText(entry.name);
     if ((await card.getAttribute('open')) === null)
       await card.locator(':scope > summary').click();
     await expect(card.locator('.badge')).toHaveText('Received');

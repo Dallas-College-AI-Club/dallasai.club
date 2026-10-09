@@ -61,6 +61,15 @@ export function validate(body, events = [], now = new Date()) {
     files: [],
   };
   if (body.kind === 'join') {
+    if (
+      !/^[^\s<>@]+@(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*(?:dcccd|dallascollege)\.edu$/.test(
+        result.email,
+      )
+    )
+      throw new RequestError(
+        400,
+        'Use a Dallas College email address ending in dallascollege.edu or dcccd.edu.',
+      );
     if (!campuses.includes(body.campus))
       throw new RequestError(400, 'Choose your campus.');
     result.data = {

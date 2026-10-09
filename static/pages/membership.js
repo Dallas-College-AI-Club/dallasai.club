@@ -12,6 +12,15 @@ export function renderMembership(root) {
     <label>What would you like to explore? <span>(optional)</span><textarea name="interests" rows="4" maxlength="1500" placeholder="Projects, workshops, questions, or ideas…"></textarea></label>
     ${formFooter('Join the club', 'I would like to join the Dallas College AI Club and receive messages about my membership.')}</form></section>
     <aside hidden><h2>Would you like to join an event?</h2><p>See what’s coming up, or help shape what we do next.</p><div class="membership-events"></div><p><a href="club.html?mode=events">Browse all events ↗</a></p><p>Want new articles by email? <a href="club.html?mode=subscribe">Subscribe to The AI Review</a>.</p></aside></div>`;
+  const email = root.querySelector('[name="email"]');
+  email.placeholder = 'you@student.dallascollege.edu';
+  email.setAttribute('aria-label', 'Email address');
+  email.pattern = String.raw`[^\s@]+@(?:[a-zA-Z0-9](?:[a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)*(?:[dD][cC][cC][cC][dD]|[dD][aA][lL][lL][aA][sS][cC][oO][lL][lL][eE][gG][eE])\.[eE][dD][uU]`;
+  email.title =
+    'Use a Dallas College email address ending in dallascollege.edu or dcccd.edu.';
+  const emailHint = document.createElement('span');
+  emailHint.textContent = email.title;
+  email.after(emailHint);
   const updateEvents = () => {
     const upcoming = eventsFresh ? splitEvents().upcoming : [];
     root.querySelector('.membership-events').innerHTML = [

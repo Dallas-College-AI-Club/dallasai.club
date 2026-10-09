@@ -45,7 +45,9 @@ CSV exports have separate Subject / title and Message / body fields, dedicated m
 ## How people submit
 
 All six public forms ask for a full name and email address and validate both before
-saving. The AI Review subscription uses the same identity fields as club signups.
+saving. Club signups accept student and staff addresses at `dallascollege.edu` or
+`dcccd.edu`, including subdomains such as `student.dallascollege.edu`. The AI
+Review subscription accepts any valid email address.
 Older email-only subscription records retain their original details; a repeat
 request with a name adds an unverified-details note for officer review instead of
 overwriting the saved identity.

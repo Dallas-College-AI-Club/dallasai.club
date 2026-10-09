@@ -106,13 +106,11 @@ try {
       });
     },
   );
-  const identity = async () => {
+  const identity = async (email = 'student@example.com') => {
     await page
       .getByLabel('Your full name', { exact: true })
       .fill('Test Student');
-    await page
-      .getByLabel('Email address', { exact: true })
-      .fill('student@example.com');
+    await page.getByLabel('Email address', { exact: true }).fill(email);
   };
   await page.goto(origin + '/club.html');
   await page.getByRole('button', { name: 'Start', exact: true }).click();
@@ -130,11 +128,57 @@ try {
   await expect(
     page.getByRole('link', { name: 'Open Teams ↗', exact: true }),
   ).toBeHidden();
-  await identity();
+  const membershipEmail = page.locator('#membership-form [name="email"]');
+  await expect(membershipEmail).toHaveAttribute(
+    'placeholder',
+    'you@student.dallascollege.edu',
+  );
+  await expect(
+    page.getByText(
+      'Use a Dallas College email address ending in dallascollege.edu or dcccd.edu.',
+      { exact: true },
+    ),
+  ).toBeVisible();
+  for (const address of [
+    'staff@dallascollege.edu',
+    'staff@dcccd.edu',
+    'student@student.dallascollege.edu',
+    'student@student.dcccd.edu',
+    'Staff@DALLASCOLLEGE.EDU',
+  ]) {
+    await membershipEmail.fill(address);
+    assert.equal(
+      await membershipEmail.evaluate((input) => input.checkValidity()),
+      true,
+      address,
+    );
+  }
+  for (const address of [
+    'person@gmail.com',
+    'person@utexas.edu',
+    'person@evildallascollege.edu',
+    'person@dcccd.edu.example.com',
+    'person@bad..dallascollege.edu',
+    'person@-bad.dcccd.edu',
+  ]) {
+    await membershipEmail.fill(address);
+    assert.equal(
+      await membershipEmail.evaluate((input) => input.checkValidity()),
+      false,
+      address,
+    );
+  }
+  await identity('student@student.dallascollege.edu');
   await page
     .locator('#membership-form [name="campus"]')
     .selectOption('Richland');
   await page.getByRole('checkbox').check();
+  await membershipEmail.fill('person@gmail.com');
+  await page
+    .getByRole('button', { name: 'Join the club', exact: true })
+    .click();
+  assert.equal(received.length, 0);
+  await membershipEmail.fill('student@student.dallascollege.edu');
   await page
     .getByRole('button', { name: 'Join the club', exact: true })
     .click();
@@ -398,7 +442,7 @@ try {
       body: JSON.stringify({ error: 'Please try again later.' }),
     }),
   );
-  await identity();
+  await identity('student@student.dallascollege.edu');
   await page
     .locator('#membership-form [name="campus"]')
     .selectOption('Richland');
@@ -477,8 +521,13 @@ try {
   // category, its contact link, the event question and the attachment name.
   const saved = (
     await office.db.query(
-      'SELECT id,kind,email,name FROM club_forms.entries WHERE email IN ($1,$2,$3) ORDER BY kind,email',
-      ['student@example.com', 'reader@example.com', 'mobile@example.com'],
+      'SELECT id,kind,email,name FROM club_forms.entries WHERE email IN ($1,$2,$3,$4) ORDER BY kind,email',
+      [
+        'student@example.com',
+        'reader@example.com',
+        'mobile@example.com',
+        'student@student.dallascollege.edu',
+      ],
     )
   ).rows;
   assert.deepEqual(

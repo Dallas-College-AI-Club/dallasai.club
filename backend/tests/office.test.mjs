@@ -444,7 +444,10 @@ test('image uploads reject unauthenticated clients and non-images; failed storag
 });
 const entry = (kind, extra = {}) => ({
   kind,
-  email: 'student@example.com',
+  email:
+    kind === 'join'
+      ? 'student@student.dallascollege.edu'
+      : 'student@example.com',
   name: 'Student',
   campus: 'Richland',
   consent: true,

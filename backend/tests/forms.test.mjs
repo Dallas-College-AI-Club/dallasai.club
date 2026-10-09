@@ -10,7 +10,10 @@ let db;
 process.env.FORM_TOKEN_SECRET = 'test-only-' + 's'.repeat(40);
 const entry = (kind = 'join', extra = {}) => ({
   kind,
-  email: 'Student@Example.com',
+  email:
+    kind === 'join'
+      ? 'Student@Student.DallasCollege.edu'
+      : 'Student@Example.com',
   name: 'Test Student',
   campus: 'Richland',
   consent: true,
@@ -63,7 +66,7 @@ test('duplicate signup saves one member; trusted database inserts appear as New 
   const first = await submit(db, entry(), []),
     second = await submit(db, entry(), []);
   assert.equal(first.id, second.id);
-  assert.equal(first.email, 'student@example.com');
+  assert.equal(first.email, 'student@student.dallascollege.edu');
   await db.query(
     "INSERT INTO club_forms.entries(id,kind,email,dedupe_key) VALUES($1,'join','a@example.com','direct')",
     [randomUUID()],
@@ -82,6 +85,47 @@ test('duplicate signup saves one member; trusted database inserts appear as New 
     0,
   );
 });
+test('membership accepts Dallas College students and staff and rejects other domains before saving', async () => {
+  for (const address of [
+    'student@student.dallascollege.edu',
+    'student@student.dcccd.edu',
+    'staff@dallascollege.edu',
+    'staff@dcccd.edu',
+    ' Person+club@Dept.Student.DallasCollege.EDU ',
+  ]) {
+    const row = await submit(db, entry('join', { email: address }), []);
+    assert.equal(row.email, address.trim().toLowerCase());
+  }
+  for (const address of [
+    'person@gmail.com',
+    'person@utexas.edu',
+    'person@evildallascollege.edu',
+    'person@evildcccd.edu',
+    'person@dallascollege.edu.example.com',
+    'person@dcccd.edu.example.com',
+    'person@bad..dallascollege.edu',
+    'person@-bad.dcccd.edu',
+    'person@bad-.dallascollege.edu',
+    'person@bad_label.dcccd.edu',
+    'person@dallascollege.edu.',
+    'person@' + 'a'.repeat(64) + '.dcccd.edu',
+  ]) {
+    await assert.rejects(
+      submit(db, entry('join', { email: address }), []),
+      /Dallas College email/,
+    );
+  }
+  assert.equal(
+    (await db.query('SELECT count(*)::int AS n FROM club_forms.entries'))
+      .rows[0].n,
+    5,
+  );
+  assert.equal(
+    validate(entry('subscribe', { email: 'person@gmail.com' })).email,
+    'person@gmail.com',
+  );
+});
+
 test('transaction failures leave no partial submission', async () => {
   await assert.rejects(
     db.transaction(async (tx) => {

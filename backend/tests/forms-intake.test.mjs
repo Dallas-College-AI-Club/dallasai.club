@@ -15,7 +15,10 @@ const events = [
 ];
 const form = (kind, extra = {}) => ({
   kind,
-  email: 'Student@Example.edu',
+  email:
+    kind === 'join'
+      ? 'Student@Student.DallasCollege.edu'
+      : 'Student@Example.edu',
   name: 'Test Student',
   campus: 'Richland',
   consent: true,
@@ -238,7 +241,7 @@ test('a repeated signup with new details reaches the officers; an identical one 
   await db.query("UPDATE club_forms.entries SET review_status='closed'");
   const same = await post({
     ...signup,
-    email: ' STUDENT@example.edu ',
+    email: ' STUDENT@STUDENT.DALLASCOLLEGE.EDU ',
     requestId: randomUUID(),
   });
   assert.equal((await same.json()).message, confirmations.join);

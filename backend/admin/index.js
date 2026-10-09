@@ -22,6 +22,7 @@ import { renderHome } from './home.js';
 import { mountHelpEntries } from './help-entries.js';
 import {
   KINDS,
+  FIELD_SCHEMA,
   clock,
   dateTime,
   day,
@@ -205,16 +206,50 @@ function renderEntry(entry) {
       );
   }
   const details = node('details');
+  details.open = true;
   details.append(node('summary', 'Submission details'));
-  for (const [key, value] of Object.entries(entry.data)) {
+  const questionLabels = {
+    interests: 'What would you like to explore? (optional)',
+    topic: 'Workshop topic',
+    details: 'Tell us more (optional)',
+    body: 'Your draft or a note to the editor',
+    message: 'Your question',
+  };
+  const answers = {
+    name: entry.name,
+    email: entry.email,
+    ...Object.fromEntries(
+      (FIELD_SCHEMA[entry.kind] || []).map(([key]) => [key, '']),
+    ),
+    ...entry.data,
+  };
+  for (const [key, value] of Object.entries(answers)) {
     if (
       ['hasSurvey', 'potential', 'eventId', 'rsvpSurveyArchived'].includes(key)
     )
       continue;
     details.append(
-      node('strong', fieldLabel(key)),
-      node('pre', key === 'eventDate' ? day(value) : String(value)),
+      node(
+        'strong',
+        key === 'name'
+          ? 'Your full name'
+          : key === 'email'
+            ? 'Email address'
+            : questionLabels[key] || fieldLabel(key),
+      ),
+      node(
+        'pre',
+        key === 'eventDate'
+          ? day(value)
+          : value === '' || value == null
+            ? 'No answer'
+            : String(value),
+      ),
     );
+  }
+  if (entry.kind === 'contribution') {
+    details.append(node('strong', 'Attachments (optional)'));
+    if (!entry.attachments.length) details.append(node('pre', 'No answer'));
   }
   for (const file of entry.attachments) {
     const p = node('p'),
@@ -704,7 +739,7 @@ async function fetchList(key) {
     for (const card of q('#entries').querySelectorAll('[id^="entry-"]')) {
       card.open = expanded.get(card.id)?.[0] || false;
       [...card.querySelectorAll('details')].forEach((panel, index) => {
-        panel.open = expanded.get(card.id)?.[index + 1] || false;
+        panel.open = expanded.get(card.id)?.[index + 1] ?? panel.open;
       });
     }
     q('#previous').disabled = offset === 0;

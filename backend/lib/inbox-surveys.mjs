@@ -20,7 +20,7 @@ export const inboxSource = `WITH inbox_rows AS (
   FROM club_forms.custom_surveys s
   JOIN club_forms.custom_survey_members m ON m.survey_id=s.id
   JOIN club_forms.custom_survey_responses r USING(survey_id,advisor_id)
-  WHERE jsonb_array_length(r.responses)>0
+  WHERE (jsonb_array_length(r.responses)>0 OR coalesce(r.response_definition,s.definition) IS NOT NULL)
 )`;
 
 export const currentInbox = (upcoming = '$5', recentEvents = '$6') => `CASE

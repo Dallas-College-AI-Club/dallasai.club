@@ -322,7 +322,10 @@ try {
     .click();
   await identity();
   await page.getByLabel('Title', { exact: true }).fill('Test contribution');
-  await page.locator('#draft-body').fill('A test draft.');
+  const fullDraft =
+    'A test draft.\n\n<script>unsafe</script>\n' +
+    'Long draft text '.repeat(500).trim();
+  await page.locator('#draft-body').fill(fullDraft);
   await page.locator('input[type="file"]').setInputFiles({
     name: 'draft.txt',
     mimeType: 'text/plain',
@@ -519,9 +522,14 @@ try {
   await page.locator('.form-confirmation').waitFor({ state: 'hidden' });
   // Read the actual saved records through the officer UI, including each
   // category, its contact link, the event question and the attachment name.
+  // Older entries can omit an optional key; the question still needs a blank answer.
+  await office.db.query(
+    "UPDATE club_forms.entries SET data = (data - 'interests') || '{\"legacyZero\":0,\"legacyFalse\":false}'::jsonb WHERE kind='join' AND email=$1",
+    ['student@student.dallascollege.edu'],
+  );
   const saved = (
     await office.db.query(
-      'SELECT id,kind,email,name FROM club_forms.entries WHERE email IN ($1,$2,$3,$4) ORDER BY kind,email',
+      'SELECT id,kind,email,name,data FROM club_forms.entries WHERE email IN ($1,$2,$3,$4) ORDER BY kind,email',
       [
         'student@example.com',
         'reader@example.com',
@@ -553,7 +561,15 @@ try {
   await officer.goto(office.origin + '/test-signin');
   await expect(officer.locator('#office')).toBeVisible();
   for (const entry of saved) {
-    await officer.goto(office.origin + '/admin/#/inbox/' + entry.id);
+    await officer.goto(
+      office.origin +
+        '/admin/#/inbox' +
+        (entry.kind === 'rsvp' ? '/' + entry.id : ''),
+    );
+    if (entry.kind !== 'rsvp')
+      await officer
+        .locator('#filters [name=kind]')
+        .selectOption(entry.kind === 'rsvp' ? 'rsvp-all' : entry.kind);
     const card = officer.locator('#entry-' + entry.id);
     await expect(card).toBeVisible();
     assert.ok(entry.name, entry.kind + ' must retain its submitted name');
@@ -564,9 +580,145 @@ try {
     await expect(
       card.getByRole('link', { name: entry.email, exact: true }),
     ).toBeVisible();
-    await card.getByText('Submission details', { exact: true }).click();
-    if (entry.kind === 'contribution')
+    const details = card.locator(':scope > details').first();
+    await expect(details).toHaveAttribute('open', '');
+    const labels = {
+      name: 'Your full name',
+      email: 'Email address',
+      campus: 'Campus',
+      interests: 'What would you like to explore? (optional)',
+      topic: 'Workshop topic',
+      details: 'Tell us more (optional)',
+      title: 'Title',
+      body: 'Your draft or a note to the editor',
+      subject: 'Subject',
+      message: 'Your question',
+    };
+    for (const [key, value] of Object.entries({
+      name: entry.name,
+      email: entry.email,
+      ...entry.data,
+    })) {
+      if (!labels[key]) continue;
+      const label = details.locator('strong').filter({ hasText: labels[key] });
+      await expect(label).toHaveText(labels[key]);
+      const answer = label.locator('xpath=following-sibling::pre[1]');
+      await expect(answer).toBeVisible();
+      assert.equal(
+        await answer.textContent(),
+        value === '' || value == null ? 'No answer' : String(value),
+      );
+    }
+    if (entry.kind === 'join') {
+      await expect(
+        details.getByText('What would you like to explore? (optional)', {
+          exact: true,
+        }),
+      ).toBeVisible();
+      await expect(
+        details
+          .locator('strong')
+          .filter({ hasText: 'What would you like to explore?' })
+          .locator('xpath=following-sibling::pre[1]'),
+      ).toHaveText('No answer');
+      await expect(
+        details
+          .locator('strong')
+          .filter({ hasText: 'Legacy zero' })
+          .locator('xpath=following-sibling::pre[1]'),
+      ).toHaveText('0');
+      await expect(
+        details
+          .locator('strong')
+          .filter({ hasText: 'Legacy false' })
+          .locator('xpath=following-sibling::pre[1]'),
+      ).toHaveText('false');
+    }
+    if (entry.kind === 'contribution') {
+      assert.equal(
+        await details
+          .locator('pre')
+          .filter({ hasText: 'A test draft.' })
+          .textContent(),
+        fullDraft,
+      );
+      assert.equal(await details.locator('script').count(), 0);
+      await expect(
+        details.getByText('Attachments (optional)', { exact: true }),
+      ).toBeVisible();
+    }
+    if (entry.kind !== 'rsvp') {
+      await card.getByText('Submission details', { exact: true }).click();
+      await expect(details).not.toHaveAttribute('open', '');
+      const refreshed = officer.waitForResponse((response) =>
+        response.url().includes('/api/admin?status='),
+      );
+      await officer.locator('#refresh').click();
+      await refreshed;
+      await expect(officer.locator('#refresh')).not.toHaveAttribute(
+        'aria-busy',
+        'true',
+      );
+      await expect(details).not.toHaveAttribute('open', '');
+      await card.getByText('Submission details', { exact: true }).click();
+      const reopened = officer.waitForResponse((response) =>
+        response.url().includes('/api/admin?status='),
+      );
+      await officer.locator('#refresh').click();
+      await reopened;
+      await expect(officer.locator('#refresh')).not.toHaveAttribute(
+        'aria-busy',
+        'true',
+      );
+      await expect(details).toHaveAttribute('open', '');
+    }
+    if (entry.kind === 'join') {
+      await office.db.query(
+        "UPDATE club_forms.entries SET data = data - 'legacyZero' - 'legacyFalse' WHERE id=$1",
+        [entry.id],
+      );
+      const cleanScreenshot = officer.waitForResponse((response) =>
+        response.url().includes('/api/admin?status='),
+      );
+      await officer.locator('#refresh').click();
+      await cleanScreenshot;
+      await expect(officer.locator('#refresh')).not.toHaveAttribute(
+        'aria-busy',
+        'true',
+      );
+      await officer.screenshot({
+        path: path.join(backend, '../.preview/response-details-phone.png'),
+        fullPage: true,
+      });
+      await officer.setViewportSize({ width: 1280, height: 900 });
+      await officer.screenshot({
+        path: path.join(backend, '../.preview/response-details-desktop.png'),
+        fullPage: true,
+      });
+      await officer.setViewportSize({ width: 390, height: 844 });
+    }
+    if (entry.kind === 'contribution') {
       await expect(card).toContainText('draft.txt');
+      await office.db.query(
+        'DELETE FROM club_forms.attachments WHERE entry_id=$1',
+        [entry.id],
+      );
+      const withoutAttachment = officer.waitForResponse((response) =>
+        response.url().includes('/api/admin?status='),
+      );
+      await officer.locator('#refresh').click();
+      await withoutAttachment;
+      await expect(officer.locator('#refresh')).not.toHaveAttribute(
+        'aria-busy',
+        'true',
+      );
+      await expect(
+        details
+          .locator('strong')
+          .filter({ hasText: 'Attachments (optional)' })
+          .locator('xpath=following-sibling::pre[1]'),
+      ).toHaveText('No answer');
+    }
     if (entry.kind === 'question' && entry.email === 'student@example.com')
       await expect(card).toContainText('Where can I find the materials?');
     assert.ok(
@@ -835,7 +987,9 @@ try {
   );
   await admin.locator('#filters [name="kind"]').selectOption('join');
   await admin.locator('#entries .entry > summary').click();
-  await admin.getByText('Submission details', { exact: true }).click();
+  await expect(
+    admin.locator('#entries .entry > details').first(),
+  ).toHaveAttribute('open', '');
   assert.equal(await admin.locator('.entry img').count(), 0);
   await admin.getByRole('button', { name: 'Archive submission' }).click();
   await expect(admin.locator('#entries .entry')).toHaveCount(0);
@@ -924,7 +1078,9 @@ try {
     .getByRole('button', { name: 'Archive submission', exact: true })
     .click();
   await admin
+    .locator('#toasts')
     .getByText('Submission moved to Archived.', { exact: false })
+    .last()
     .waitFor();
   releaseLoad();
   await expect(admin).toHaveTitle('(1) Inbox · Club Office');

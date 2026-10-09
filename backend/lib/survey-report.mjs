@@ -70,7 +70,7 @@ export async function reportRows(db, filter = {}) {
        LEFT JOIN LATERAL (SELECT event_title,event_date FROM club_forms.survey_responses sr
          WHERE sr.event_id=s.event_id ORDER BY sr.created_at DESC,sr.entry_id LIMIT 1) registered ON true
        ${participationJoins} ${feedbackWhere}
-       AND s.event_id IS NOT NULL AND (cs.status<>'draft' OR cs.published_at IS NOT NULL) AND jsonb_array_length(cr.responses)>0
+       AND s.event_id IS NOT NULL AND (cs.status<>'draft' OR cs.published_at IS NOT NULL) AND (jsonb_array_length(cr.responses)>0 OR coalesce(cr.response_definition,cs.definition) IS NOT NULL)
        AND ($8='' OR cs.id::text=$8)
        ORDER BY cr.submitted_at DESC,cs.id,cm.advisor_id LIMIT 10001`,
         [...values, surveyId],

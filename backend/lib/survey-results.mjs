@@ -28,14 +28,15 @@ export async function surveyResultPage(
     SELECT advisor_id,response_definition,CASE WHEN $3::text IS NOT NULL AND (btrim(display_name)='' OR strpos(display_name,'@')>0)
       THEN 'Respondent ' || ordinal ELSE display_name END AS display_name,email,active,revision,responses,submitted_at
     FROM (
-      SELECT m.advisor_id,m.display_name,m.email,m.active,r.revision,r.responses,r.submitted_at,r.response_definition,
+      SELECT m.advisor_id,m.display_name,m.email,m.active,r.revision,r.responses,r.submitted_at,coalesce(r.response_definition,s.definition) AS response_definition,
         row_number() OVER (ORDER BY (
           SELECT min(c.created_at) FROM club_forms.custom_survey_receipts c
           WHERE c.survey_id=m.survey_id AND c.advisor_id=m.advisor_id
         ),m.advisor_id) AS ordinal
       FROM club_forms.custom_survey_members m
       JOIN club_forms.custom_survey_responses r USING(survey_id,advisor_id)
-      WHERE m.survey_id=$1 AND jsonb_array_length(r.responses)>0
+      JOIN club_forms.custom_surveys s ON s.id=m.survey_id
+      WHERE m.survey_id=$1 AND (jsonb_array_length(r.responses)>0 OR coalesce(r.response_definition,s.definition) IS NOT NULL)
         AND (NOT $2::boolean OR m.active)
         AND ($3::text IS NULL OR r.response_definition IS NULL OR r.response_definition->'permissions'->>'results'='respondents')
         AND ($5='all' OR m.active=($5='active'))
@@ -61,10 +62,11 @@ export async function surveyExportRows(
   { view = 'active', search = '' } = {},
 ) {
   const { rows } = await db.query(
-    `SELECT m.display_name,m.email,m.active,r.responses,r.submitted_at,r.response_definition
+    `SELECT m.display_name,m.email,m.active,r.responses,r.submitted_at,coalesce(r.response_definition,s.definition) AS response_definition
     FROM club_forms.custom_survey_members m
     JOIN club_forms.custom_survey_responses r USING(survey_id,advisor_id)
-    WHERE m.survey_id=$1 AND ($2='all' OR m.active=($2='active')) AND jsonb_array_length(r.responses)>0
+    JOIN club_forms.custom_surveys s ON s.id=m.survey_id
+    WHERE m.survey_id=$1 AND ($2='all' OR m.active=($2='active')) AND (jsonb_array_length(r.responses)>0 OR coalesce(r.response_definition,s.definition) IS NOT NULL)
       AND strpos(lower(m.display_name || ' ' || m.email),lower($3))>0
     ORDER BY r.submitted_at DESC,m.advisor_id LIMIT 10001`,
     [surveyId, view, search.trim()],

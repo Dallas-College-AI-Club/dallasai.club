@@ -77,8 +77,8 @@ export async function homeSummary(db, published, upcoming) {
     (
       await db.query(
         `SELECT s.id,s.title,s.expires_at,
-          count(r.advisor_id) FILTER (WHERE m.active AND jsonb_array_length(r.responses)>0)::int AS responses,
-          max(r.submitted_at) FILTER (WHERE m.active AND jsonb_array_length(r.responses)>0) AS latest
+          count(r.advisor_id) FILTER (WHERE m.active AND (jsonb_array_length(r.responses)>0 OR coalesce(r.response_definition,s.definition) IS NOT NULL))::int AS responses,
+          max(r.submitted_at) FILTER (WHERE m.active AND (jsonb_array_length(r.responses)>0 OR coalesce(r.response_definition,s.definition) IS NOT NULL)) AS latest
         FROM club_forms.custom_surveys s
         LEFT JOIN club_forms.custom_survey_members m ON m.survey_id=s.id
         LEFT JOIN club_forms.custom_survey_responses r ON r.survey_id=m.survey_id AND r.advisor_id=m.advisor_id

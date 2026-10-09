@@ -309,7 +309,7 @@ LEFT JOIN LATERAL (
       SELECT 1 FROM club_forms.custom_survey_members cm
       JOIN club_forms.custom_survey_responses cr USING(survey_id,advisor_id)
       WHERE cm.survey_id=cs.id AND lower(trim(cm.email))=lower(trim(e.email))
-        AND jsonb_array_length(cr.responses)>0
+        AND (jsonb_array_length(cr.responses)>0 OR coalesce(cr.response_definition,cs.definition) IS NOT NULL)
     ) AS submitted
     FROM club_forms.custom_surveys cs WHERE cs.definition->>'eventId'=s.event_id AND cs.status<>'draft'
   ) linked

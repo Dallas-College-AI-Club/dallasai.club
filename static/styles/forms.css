@@ -223,14 +223,26 @@ body .membership-actions .teams-link:hover {
   border-color: #124a9d;
 }
 .membership-teams-qr {
-  width: 277px;
+  width: 213px;
   max-width: 100%;
   margin: 0;
 }
-.membership-teams-qr img {
+.membership-teams-code {
+  position: relative;
+  aspect-ratio: 1;
+  overflow: hidden;
+  border: 1px solid #000;
+  border-radius: 8px;
+  background: #fff;
+}
+.membership-teams-code img {
+  position: absolute;
+  top: -3px;
+  left: -16px;
   display: block;
-  width: 100%;
-  height: auto;
+  width: 277px;
+  max-width: none;
+  height: 222px;
 }
 .membership-event {
   margin-top: 20px;

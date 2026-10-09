@@ -44,7 +44,7 @@ export function renderMembership(root) {
       actions.innerHTML = `<a class="solid-link teams-link" href="${JOIN_URL}" target="_blank" rel="noreferrer">Use this code to join Teams: bpa89ns</a>`;
       done.before(actions);
       actions.append(done);
-      actions.insertAdjacentHTML('afterend', '<figure class="membership-teams-qr"><img src="/assets/teams-qr.png" width="277" height="222" alt="Scan to open the Dallas College AI Club in Teams"><figcaption>Scan to open Teams.</figcaption></figure>');
+      actions.insertAdjacentHTML('afterend', '<figure class="membership-teams-qr"><div class="membership-teams-code"><img src="/assets/teams-qr.png" width="277" height="222" alt="Scan to open the Dallas College AI Club in Teams"></div><figcaption>Scan to open Teams.</figcaption></figure>');
       updateEvents();
       root.querySelector('aside').hidden = false;
     },

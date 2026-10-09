@@ -93,6 +93,14 @@ Keep runtime connections restricted. The original leaderboard setup is retained 
 | 023 | Remove contact addresses from the active list while retaining saved-record relationships |
 | 024 | Survey lifecycle, original response definitions, and archived survey/response deletion |
 | 025 | Independent RSVP survey archive/deletion state and request receipts |
+| 026 | Public event feedback with independent answer snapshots and idempotent submissions |
+
+Apply `026_event_feedback.sql` before deploying public event feedback. It creates
+one response table and two event lookup indexes, and grants the existing runtime
+role SELECT and INSERT only. Existing event, RSVP, contact and custom-survey data
+are unchanged. Reapplying the migration preserves responses. Keep the additive
+table on rollback. Feedback settings and editable questions use existing event JSON;
+the API enforces the published start time and a 72-hour submission window.
 
 Apply migration 025 before deploying independent RSVP survey lifecycle controls.
 It adds a checked status column to events and request receipt indexing to the existing
@@ -140,7 +148,10 @@ credentials intentionally cannot alter the schema. Keep the additive column on
 rollback. Availability questions and reply-by dates use existing event/survey JSON
 and need no schema migration.
 
-Feedback completion is calculated from nonempty saved responses across every
+Public event feedback is stored independently of RSVPs and custom surveys. Its
+saved email answer, when present, also marks matching RSVPs as having feedback.
+Feedback exports include these question and answer snapshots alongside previous
+custom-survey responses. Legacy custom-survey completion is calculated from nonempty saved responses across every
 published same-event custom survey, including archived respondents and closed or
 expired rounds. Drafts are excluded; partial completion remains missing feedback.
 The RSVP list, count, summary, and CSV share the participation filters. Combined

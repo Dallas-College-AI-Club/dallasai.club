@@ -46,6 +46,8 @@ function cleanEvent(event) {
     rsvpDeadline: String(event.rsvpDeadline || ''),
     shortLink: String(event.shortLink || ''),
     feedbackUrl,
+    feedbackEnabled: event.feedbackEnabled === true,
+    feedbackShortLink: String(event.feedbackShortLink || ''),
     surveyVersion: String(event.surveyVersion || ''),
     surveyQuestions: Array.isArray(event.surveyQuestions)
       ? event.surveyQuestions

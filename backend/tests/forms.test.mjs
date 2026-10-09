@@ -142,6 +142,76 @@ test('transaction failures leave no partial submission', async () => {
     0,
   );
 });
+
+test('feedback-enabled RSVP closes at event start while ordinary events keep their existing end-time cutoff', () => {
+  const event = {
+    id: 'feedback-start',
+    title: 'Feedback meeting',
+    date: '2026-10-15T16:00:00-05:00',
+    end: '2026-10-20T16:00:00-05:00',
+    feedbackEnabled: true,
+  };
+  const start = Date.parse(event.date),
+    end = Date.parse(event.end);
+  const body = entry('rsvp', { eventId: event.id });
+  assert.equal(validate(body, [event], new Date(start - 1)).kind, 'rsvp');
+  for (const time of [start, start + 1, start + 72 * 60 * 60 * 1000])
+    assert.throws(() => validate(body, [event], new Date(time)), {
+      status: 400,
+      message: 'Registration for this event is unavailable.',
+    });
+  const ordinary = { ...event, feedbackEnabled: false };
+  for (const time of [start, start + 1, end - 1])
+    assert.equal(validate(body, [ordinary], new Date(time)).kind, 'rsvp');
+  assert.throws(() => validate(body, [ordinary], new Date(end)), {
+    status: 400,
+  });
+  assert.equal(
+    validate(
+      body,
+      [{ ...event, date: '2026-10-15', end: undefined }],
+      new Date(start),
+    ).kind,
+    'rsvp',
+  );
+  assert.equal(
+    validate(
+      body,
+      [{ ...event, date: '', end: undefined, potential: true }],
+      new Date(start),
+    ).kind,
+    'rsvp',
+  );
+});
+
+test('RSVP transaction rechecks the saved feedback start after a stale public event read', async () => {
+  const id = 'feedback-start-' + randomUUID();
+  const live = {
+    id,
+    title: 'Meeting already started',
+    feedbackEnabled: true,
+    date: new Date(Date.now() - 60000).toISOString(),
+    end: new Date(Date.now() + 3600000).toISOString(),
+  };
+  const stale = { ...live, feedbackEnabled: false };
+  await db.query(
+    'INSERT INTO club_forms.events(id,draft,published,updated_by) VALUES($1,$2,$2,$3)',
+    [id, JSON.stringify(live), 'officer@example.edu'],
+  );
+  try {
+    await assert.rejects(submit(db, entry('rsvp', { eventId: id }), [stale]), {
+      status: 400,
+      message: 'Registration for this event is unavailable.',
+    });
+    assert.equal(
+      (await db.query('SELECT count(*)::int AS n FROM club_forms.entries'))
+        .rows[0].n,
+      0,
+    );
+  } finally {
+    await db.query('DELETE FROM club_forms.events WHERE id=$1', [id]);
+  }
+});
 test('RSVP validates the server event registry and deduplicates per event and email', async () => {
   const events = [
     { id: 'future', date: '2099-09-24T17:00:00-05:00', title: 'Workshop' },

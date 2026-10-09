@@ -21,6 +21,9 @@ enableRobotsTXT = true
   source = "backend/lib/event-format.mjs"
   target = "static/app/event-format.js"
 [[module.mounts]]
+  source = "backend/lib/event-feedback-definition.mjs"
+  target = "static/app/event-feedback-definition.js"
+[[module.mounts]]
   source = "backend/surveys/availability-ui.js"
   target = "static/app/availability-ui.js"
 [[module.mounts]]
@@ -40,6 +43,9 @@ enableRobotsTXT = true
 [[module.mounts]]
   source = "backend/lib/event-format.mjs"
   target = "assets/app/event-format.js"
+[[module.mounts]]
+  source = "backend/lib/event-feedback-definition.mjs"
+  target = "assets/app/event-feedback-definition.js"
 [[module.mounts]]
   source = "backend/surveys/availability-ui.js"
   target = "assets/app/availability-ui.js"

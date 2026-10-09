@@ -6,9 +6,10 @@ import { fixture } from './custom-survey-fixture.mjs';
 import { adminHandler } from '../../api/admin.mjs';
 import { surveysHandler } from '../../api/surveys.mjs';
 import { eventHandler } from '../../api/events.mjs';
+import { eventFeedbackHandler } from '../../api/event-feedback.mjs';
 import { saveEvent, liveEvents } from '../../lib/events.mjs';
 import { rawBody } from '../../lib/http.mjs';
-export async function officeFixture() {
+export async function officeFixture({ feedbackNow } = {}) {
   const f = await fixture(),
     db = f.db;
   const backend = path.resolve(import.meta.dirname, '../..'),
@@ -115,6 +116,13 @@ export async function officeFixture() {
     originals: [],
     rateLimit: async () => {},
   });
+  const feedback = eventFeedbackHandler({
+    authorize,
+    getDatabase: () => db,
+    originals: [],
+    rateLimit: async () => {},
+    ...(feedbackNow ? { now: feedbackNow } : {}),
+  });
   const json = (res, body, status = 200) => {
     res.statusCode = status;
     res.setHeader('Content-Type', 'application/json');
@@ -171,6 +179,7 @@ export async function officeFixture() {
     if (url.pathname === '/api/admin') return admin(req, res);
     if (url.pathname === '/api/surveys') return surveys(req, res);
     if (url.pathname === '/api/events') return events(req, res);
+    if (url.pathname === '/api/event-feedback') return feedback(req, res);
     if (url.pathname === '/api/custom-surveys') return f.handler(req, res);
     const root =
       url.pathname.startsWith('/admin/') || url.pathname.startsWith('/surveys/')

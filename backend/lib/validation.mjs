@@ -1,5 +1,6 @@
 import { validateSurvey } from './surveys.mjs';
 import { RequestError } from './errors.mjs';
+import { eventFeedbackState } from './event-feedback-definition.mjs';
 export const kinds = [
   'subscribe',
   'join',
@@ -88,6 +89,9 @@ export function validate(body, events = [], now = new Date()) {
     if (
       !event ||
       event.registrationOpen === false ||
+      ['open', 'expired'].includes(
+        eventFeedbackState(event, Number(now)).status,
+      ) ||
       (!event.date && event.potential !== true) ||
       (event.date &&
         (/^\d{4}-\d{2}-\d{2}$/.test(event.date)

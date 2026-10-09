@@ -52,6 +52,25 @@ export async function reportRows(db, filter = {}) {
         ).rows;
   if (type !== 'rsvp') {
     const feedbackWhere = responseFilter(filter, { rsvpParent: false }).where;
+    if (!surveyId) {
+      const native = (
+        await db.query(
+          `SELECT s.id,s.event_id,s.event_title,s.event_date,s.questions,s.answers,s.created_at,
+          'feedback:'||s.survey_version AS survey_version,'feedback' AS response_type,
+          'Event feedback' AS survey_title,e.name,e.email,m.archived_at,m.starred,
+          coalesce(a.attendance,'not_recorded') AS attendance,
+          f.feedback_status,f.feedback_submitted_count,f.feedback_survey_count
+          FROM (SELECT er.*,NULL::uuid AS entry_id FROM club_forms.event_feedback_responses er) s
+          CROSS JOIN LATERAL (SELECT ''::text AS name,s.email) e
+          LEFT JOIN club_forms.events ev ON ev.id=s.event_id
+          CROSS JOIN LATERAL (SELECT false AS starred,ev.archived_at) m
+          ${participationJoins} ${feedbackWhere}
+          ORDER BY s.created_at DESC,s.id LIMIT 10001`,
+          values,
+        )
+      ).rows;
+      rows.push(...native);
+    }
     const feedback = (
       await db.query(
         `SELECT cs.id AS survey_id,cs.title AS survey_title,coalesce(cr.response_definition->>'content_version',cs.content_version) AS content_version,coalesce(cr.response_definition,cs.definition) AS definition,

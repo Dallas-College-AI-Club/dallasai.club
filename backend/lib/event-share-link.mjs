@@ -1,6 +1,7 @@
 import { RequestError } from './errors.mjs';
 import { eventIdPattern } from './event-content.mjs';
 import { createHash } from 'node:crypto';
+import { eventFeedbackURL } from './event-feedback-definition.mjs';
 
 export const legacyEventShortLink = (link) =>
   typeof link === 'string' && /^https:\/\/[^/]+\/dai-[a-f0-9]{24}$/.test(link);
@@ -28,6 +29,55 @@ export function eventShortAlias(event, id) {
     name = next;
   }
   return 'ai-' + (name || 'event') + ending;
+}
+
+// Feedback keeps the event's exact short address plus "-feedback". In particular,
+// an occupied alias must never silently select another name or provider.
+export async function createEventFeedbackShareLink(db, id, actor, createLink) {
+  if (!eventIdPattern.test(id || ''))
+    throw new RequestError(400, 'Check the event.');
+  return db.transaction(async (tx) => {
+    const row = (
+      await tx.query('SELECT * FROM club_forms.events WHERE id=$1 FOR UPDATE', [
+        id,
+      ])
+    ).rows[0];
+    if (!row?.published?.feedbackEnabled)
+      throw new RequestError(
+        409,
+        'Publish the event with feedback enabled first.',
+      );
+    if (!row.published.shortLink)
+      throw new RequestError(409, 'Create the event short link first.');
+    const eventLink = new URL(row.published.shortLink);
+    const alias = eventLink.pathname.slice(1) + '-feedback';
+    const expected = eventLink.origin + '/' + alias;
+    if (row.published.feedbackShortLink === expected) return row;
+    const link = await createLink(
+      eventFeedbackURL(id),
+      alias,
+      eventLink.hostname,
+    );
+    if (link !== expected)
+      throw new RequestError(
+        502,
+        'The feedback short link did not match the event address.',
+      );
+    const updated = (
+      await tx.query(
+        `UPDATE club_forms.events SET
+       draft=jsonb_set(draft,'{feedbackShortLink}',to_jsonb($2::text)),
+       published=jsonb_set(published,'{feedbackShortLink}',to_jsonb($2::text))
+       WHERE id=$1 RETURNING *`,
+        [id, link],
+      )
+    ).rows[0];
+    await tx.query('INSERT INTO club_forms.audit(actor,action) VALUES($1,$2)', [
+      actor,
+      'event-feedback-share-link:' + id,
+    ]);
+    return updated;
+  });
 }
 
 export const eventURL = (id) =>
@@ -97,8 +147,8 @@ export async function createEventShareLink(
     const updated = (
       await tx.query(
         `UPDATE club_forms.events SET
-         draft=jsonb_set(draft,'{shortLink}',to_jsonb($2::text)),
-         published=jsonb_set(published,'{shortLink}',to_jsonb($2::text))
+         draft=jsonb_set(CASE WHEN draft->>'shortLink' IS DISTINCT FROM $2::text THEN draft-'feedbackShortLink' ELSE draft END,'{shortLink}',to_jsonb($2::text)),
+         published=jsonb_set(CASE WHEN published->>'shortLink' IS DISTINCT FROM $2::text THEN published-'feedbackShortLink' ELSE published END,'{shortLink}',to_jsonb($2::text))
          WHERE id=$1 RETURNING *`,
         [id, link],
       )

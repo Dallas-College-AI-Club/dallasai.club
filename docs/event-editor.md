@@ -102,11 +102,27 @@ event page, RSVP form and officer overview. This is the requested reply date;
 has its public event QR, **Share event**, and **Download QR**. Phones use native
 sharing when supported; otherwise Share copies the event link. The existing QR
 library generates SVG through the event API without reading respondent data.
-Turning off **Accept RSVPs** hides that sharing section. Once the event ends,
-the response button becomes **Event feedback** only when an open, unexpired
-public feedback survey is linked to the event. It opens the most recently
-published eligible survey; closing that survey removes its button. Restricted
-and unrelated surveys are never listed on the public event page.
+Turning off **Accept RSVPs** hides that sharing section.
+
+Select **Collect event feedback** in the event editor to prepare a public feedback
+form. Its five editable defaults ask for school email, major, year, primary campus
+and how the attendee heard about the club. The first four require answers; the last
+is optional and includes Other. Any valid email address is accepted, with no login,
+email confirmation, approved-email list or custom-survey setup.
+
+Save and publish the event to apply feedback changes. At the confirmed start time,
+the public RSVP button becomes **Event feedback**. Feedback closes exactly 72 hours
+after that start, even across a daylight-saving change. An event without a confirmed
+date and time can have feedback prepared, but the form stays closed. Disabling
+feedback, unpublishing or archiving the event also closes new submissions.
+
+The same event's Office overview shows its feedback answers, direct link and separate
+QR download. The feedback short address is the event short address with `-feedback`
+appended; it opens the feedback form directly. Before opening or after expiry, that
+address explains when feedback is available. **Create feedback short link** retries
+provider failures. Saved answers retain the exact questions shown at submission,
+including after edits or RSVP deletion. Previously linked custom-survey feedback
+remains in the event's feedback history.
 
 First publication creates a stable short link using the same provider as custom
 surveys. The public address, Share action and QR all use that saved link. Editing,

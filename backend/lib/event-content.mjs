@@ -1,6 +1,7 @@
 import { RequestError } from './errors.mjs';
 import { uuid } from './validation.mjs';
 import { surveyQuestions, surveyVersion } from './surveys.mjs';
+import { defaultFeedbackQuestions } from './event-feedback-definition.mjs';
 export const eventIdPattern = /^[a-z0-9][a-z0-9-]{0,99}$/;
 function text(value, label, max, required = false) {
   if (value === undefined || value === null) value = '';
@@ -62,7 +63,12 @@ function lines(value, label) {
 export function draftContent(input, publish = false) {
   if (!input || typeof input !== 'object' || Array.isArray(input))
     throw new RequestError(400, 'Check the event details.');
-  for (const key of ['potential', 'requireEduEmail', 'checkSharing']) {
+  for (const key of [
+    'potential',
+    'requireEduEmail',
+    'checkSharing',
+    'feedbackEnabled',
+  ]) {
     if (input[key] !== undefined && typeof input[key] !== 'boolean')
       throw new RequestError(400, 'Check the event settings.');
   }
@@ -83,6 +89,10 @@ export function draftContent(input, publish = false) {
     surveyIntro: text(input.surveyIntro, 'the RSVP introduction', 2000),
     rsvpDeadline: day(text(input.rsvpDeadline, 'the RSVP reply-by date', 10)),
     surveyQuestions: surveyQuestions(input.surveyQuestions),
+    feedbackEnabled: input.feedbackEnabled === true,
+    feedbackQuestions: surveyQuestions(
+      input.feedbackQuestions ?? defaultFeedbackQuestions(),
+    ),
     startTime: text(input.startTime, 'the start time', 5),
     endDate: day(text(input.endDate, 'the end date', 10)),
     endTime: text(input.endTime, 'the end time', 5),
@@ -126,6 +136,8 @@ export function draftContent(input, publish = false) {
   }
   if (draft.startTime && !draft.date)
     throw new RequestError(400, 'Add a date before choosing a time.');
+  if (draft.feedbackEnabled && !draft.feedbackQuestions.length)
+    throw new RequestError(400, 'Add at least one event feedback question.');
   if ((draft.endTime || draft.endDate) && !draft.startTime)
     throw new RequestError(400, 'Add a start time before setting an end time.');
   if (draft.endDate && !draft.endTime)
@@ -155,6 +167,9 @@ export function publicContent(id, input, preview = false) {
     rsvpDeadline: draft.rsvpDeadline,
     surveyQuestions: draft.surveyQuestions,
     surveyVersion: surveyVersion(draft.surveyQuestions),
+    feedbackEnabled: draft.feedbackEnabled,
+    feedbackQuestions: draft.feedbackQuestions,
+    feedbackVersion: surveyVersion(draft.feedbackQuestions),
     date: draft.startTime
       ? centralTime(draft.date, draft.startTime)
       : draft.date,

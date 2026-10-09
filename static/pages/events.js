@@ -1,6 +1,7 @@
 import { eventText, eventList, eventAgenda } from '../app/event-format.js';
 import { rsvpDialog } from '../app/rsvp-dialog.js';
 import { eventSharing } from '../app/event-sharing.js';
+import { eventFeedbackState } from '../app/event-feedback-definition.js';
 import { eventImageViewer } from '../app/event-image-viewer.js';
 import {
   formFooter,
@@ -152,9 +153,13 @@ export function mountEvents(root) {
     kind: 'workshop',
   });
   const rsvp = rsvpDialog(root, { preview: privatePreview });
+  const feedback = rsvpDialog(root, { feedback: true });
   const imageViewer = eventImageViewer();
   const q = (s) => root.querySelector(s),
     requested = new URLSearchParams(location.search).get('event');
+  let feedbackRequested =
+    new URLSearchParams(location.search).get('feedback') === '1';
+  let preserveFeedbackAddress = feedbackRequested;
   let fallback =
     splitEvents().upcoming[0] || splitEvents().past[0] || EVENTS[0];
   let selected = privatePreview
@@ -175,14 +180,17 @@ export function mountEvents(root) {
       })
       .sort((a, b) => a.date.localeCompare(b.date));
   const syncUrl = () => {
-    if (privatePreview) return;
+    if (privatePreview || preserveFeedbackAddress) return;
     const url = new URL(location.href);
     if (selected) url.searchParams.set('event', selected.id);
     else url.searchParams.delete('event');
+    if (selected?.id !== requested) url.searchParams.delete('feedback');
     history.replaceState({}, '', url);
   };
   const choose = (e) => {
+    preserveFeedbackAddress = false;
     selected = e;
+    feedback.update(e);
     syncUrl();
     root
       .querySelectorAll('[data-event]')
@@ -198,7 +206,22 @@ export function mountEvents(root) {
   };
   function detail() {
     const panel = q('#event-detail');
-    rsvp.update(selected && !eventIsPast(selected) ? selected : null);
+    const responseState = selected
+      ? eventFeedbackState(selected)
+      : { status: 'unavailable' };
+    const feedbackStarted = ['open', 'expired'].includes(responseState.status);
+    rsvp.update(
+      selected && !eventIsPast(selected) && !feedbackStarted ? selected : null,
+    );
+    if (feedbackRequested && requested && !privatePreview && eventsFresh) {
+      feedbackRequested = false;
+      feedback.open(
+        EVENTS.find((event) => event.id === requested) || {
+          id: requested,
+          title: 'Event feedback',
+        },
+      );
+    }
     q('#calendar-read').hidden = !selected;
     if (!selected) {
       panel.innerHTML =
@@ -207,8 +230,17 @@ export function mountEvents(root) {
     }
     const past = selected.date ? eventIsPast(selected) : false;
     const canRSVP =
-      !past && !privatePreview && selected.registrationOpen !== false;
-    const feedbackUrl = past && !privatePreview ? selected.feedbackUrl : '';
+      !past &&
+      !feedbackStarted &&
+      !privatePreview &&
+      selected.registrationOpen !== false;
+    const feedbackUrl =
+      responseState.status === 'open' && !privatePreview
+        ? selected.feedbackUrl ||
+          'club.html?mode=events&event=' +
+            encodeURIComponent(selected.id) +
+            '&feedback=1'
+        : '';
     panel.innerHTML = /* HTML */ `<button class="event-calendar-back">
         ← Back to calendar
       </button>
@@ -256,8 +288,10 @@ export function mountEvents(root) {
         ${feedbackUrl ? '<a id="event-feedback-action" class="solid-link" href="' + escapeHTML(feedbackUrl) + '">Event feedback</a>' : ''}
         ${past || privatePreview ? '' : /* HTML */ `${canRSVP ? '<button id="event-rsvp-action" class="solid-link">RSVP for this event</button>' : ''}${selected.date ? '<button id="save-event" class="outline-link">Add to calendar ↓</button>' : ''}`}${privatePreview ? '' : '<button id="ask-event-question" class="outline-link">Ask about this event</button>'}
       </div>`;
-    if (selected.registrationOpen !== false) {
-      const sharing = eventSharing(selected);
+    if (selected.registrationOpen !== false || feedbackUrl) {
+      const sharing = eventSharing(selected, {
+        feedback: Boolean(feedbackUrl),
+      });
       const registration = q('.event-registration');
       registration.before(sharing);
       sharing.querySelector('.event-share-actions').after(registration);
@@ -270,7 +304,7 @@ export function mountEvents(root) {
         escapeHTML(feedbackUrl) +
         '">Event feedback</a>';
     } else if (
-      (privatePreview || !past) &&
+      (privatePreview || (!past && !feedbackStarted)) &&
       selected.registrationOpen !== false
     ) {
       q('.event-registration').insertAdjacentHTML(
@@ -286,11 +320,22 @@ export function mountEvents(root) {
     } else if (!privatePreview) {
       panel.insertAdjacentHTML(
         'beforeend',
-        past
-          ? '<p>Registration has closed.</p>'
-          : '<p>RSVPs are closed for this event.</p>',
+        feedbackStarted && responseState.status === 'expired'
+          ? '<p>Event feedback has closed.</p>'
+          : past || feedbackStarted
+            ? '<p>Registration has closed.</p>'
+            : '<p>RSVPs are closed for this event.</p>',
       );
     }
+    if (feedbackUrl)
+      panel
+        .querySelectorAll('.event-registration a, #event-feedback-action')
+        .forEach((link) => {
+          link.onclick = (event) => {
+            event.preventDefault();
+            feedback.open(selected);
+          };
+        });
     if (selected.images?.length) {
       const gallery = document.createElement('div');
       gallery.className = 'event-gallery';
@@ -520,7 +565,10 @@ export function mountEvents(root) {
     draw();
     freshness();
   };
-  const timeState = () => EVENTS.map((event) => eventIsPast(event)).join(',');
+  const timeState = () =>
+    EVENTS.map(
+      (event) => eventIsPast(event) + ':' + eventFeedbackState(event).status,
+    ).join(',');
   let previousTimeState = timeState();
   const checkTime = () => {
     const next = timeState();
@@ -599,6 +647,7 @@ export function mountEvents(root) {
     clearInterval(clock);
     stopWorkshop();
     rsvp.destroy();
+    feedback.destroy();
     imageViewer.destroy();
     questions.destroy();
     window.removeEventListener('message', previewMessage);

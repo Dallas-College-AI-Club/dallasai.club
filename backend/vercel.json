@@ -20,6 +20,10 @@
       "maxDuration": 30,
       "includeFiles": "generated/events.json"
     },
+    "api/event-feedback.mjs": {
+      "maxDuration": 30,
+      "includeFiles": "generated/events.json"
+    },
     "api/auth.mjs": {
       "maxDuration": 30
     },

@@ -236,17 +236,32 @@ async function createTinyUrl(target, alias, fetchImpl, signal) {
   }
 }
 
-export async function createShortLink(targetUrl, alias, fetchImpl = fetch) {
+export async function createShortLink(
+  targetUrl,
+  alias,
+  fetchImpl = fetch,
+  domain = '',
+) {
   const target = shortLink(targetUrl);
   if (
     !target ||
     typeof alias !== 'string' ||
-    !/^[a-z0-9_-]{5,30}$/i.test(alias)
+    !/^(?:[a-z0-9_-]{5,30}|[a-z0-9_-]{5,30}-feedback)$/i.test(alias)
   )
     throw new RequestError(400, 'Check the short-link destination and path.');
   const deadline = AbortSignal.timeout(8000),
     providerSignal = () =>
       AbortSignal.any([deadline, AbortSignal.timeout(4000)]);
+  if (domain) {
+    if (domain === process.env.SHORT_IO_DOMAIN)
+      return createShortIo(target, alias, fetchImpl, providerSignal());
+    if (domain === 'tinyurl.com')
+      return createTinyUrl(target, alias, fetchImpl, providerSignal());
+    throw new RequestError(
+      409,
+      'The event short-link provider is not configured.',
+    );
+  }
   try {
     return await createShortIo(target, alias, fetchImpl, providerSignal());
   } catch (primaryError) {

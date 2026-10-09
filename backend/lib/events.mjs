@@ -183,10 +183,12 @@ export async function saveEvent(db, body, actor, originals) {
     }
     // Ignore a client-supplied URL and preserve the server-created link through
     // edits, unpublishing and restoration. Duplicates receive their own link.
-    const shortLink = current.draft.shortLink || current.published?.shortLink;
-    if (shortLink) {
-      nextDraft.shortLink = shortLink;
-      if (nextLive) nextLive.shortLink = shortLink;
+    for (const key of ['shortLink', 'feedbackShortLink']) {
+      const link = current.draft[key] || current.published?.[key];
+      if (link) {
+        nextDraft[key] = link;
+        if (nextLive) nextLive[key] = link;
+      }
     }
     const revision = current.revision + 1;
     const row = (

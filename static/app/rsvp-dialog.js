@@ -2,16 +2,19 @@ import { eventText, exclusiveSurveyChoice } from './event-format.js';
 import { availabilityFields } from './availability-ui.js';
 import { availabilityValues } from './availability-values.js';
 import { eventSharing } from './event-sharing.js';
+import { EVENTS_API_URL } from '../content/events.js';
 import {
   identityFields,
   formFooter,
   mountForm,
   escapeHTML as h,
 } from './form-client.js';
-export function rsvpDialog(root, { preview = false } = {}) {
+export function rsvpDialog(root, { preview = false, feedback = false } = {}) {
   const dialog = document.createElement('dialog');
-  dialog.className = 'workshop-dialog rsvp-dialog';
-  dialog.setAttribute('aria-labelledby', 'rsvp-heading');
+  dialog.className =
+    'workshop-dialog rsvp-dialog' + (feedback ? ' feedback-dialog' : '');
+  const headingId = feedback ? 'feedback-heading' : 'rsvp-heading';
+  dialog.setAttribute('aria-labelledby', headingId);
   root.append(dialog);
   const mock = document.createElement('dialog');
   mock.className = 'workshop-dialog rsvp-answer-preview';
@@ -64,14 +67,60 @@ export function rsvpDialog(root, { preview = false } = {}) {
   }
   mock.addEventListener('close', () => mock.replaceChildren());
   let stop = () => {},
-    eventId = '';
+    eventId = '',
+    generation = 0;
   function close() {
+    generation++;
     if (mock.open) mock.close();
     if (dialog.open) dialog.close();
   }
-  function open(event) {
+  async function open(event) {
     stop();
     eventId = event.id;
+    if (feedback) {
+      const ticket = ++generation;
+      dialog.innerHTML =
+        '<div class="dialog-toolbar"><button type="button" class="dialog-close" aria-label="Close event feedback">×</button></div><h2 id="feedback-heading">Event feedback</h2><p role="status">Loading event feedback…</p>';
+      dialog.querySelector('.dialog-close').onclick = close;
+      if (!dialog.open) dialog.showModal();
+      try {
+        const url = new URL(EVENTS_API_URL);
+        url.pathname = url.pathname.replace(/\/events\/?$/, '/event-feedback');
+        url.search = new URLSearchParams({ eventId: event.id });
+        const response = await fetch(url, {
+          credentials: 'omit',
+          cache: 'no-store',
+          signal: AbortSignal.timeout(10000),
+        });
+        const result = await response.json();
+        if (ticket !== generation || !dialog.open) return;
+        if (!response.ok)
+          throw new Error(
+            result.error || 'Event feedback could not load. Please try again.',
+          );
+        if (result.status !== 'open') {
+          const status = dialog.querySelector('[role="status"]');
+          status.textContent =
+            result.status === 'upcoming'
+              ? 'Event feedback opens when the event starts.'
+              : result.status === 'expired'
+                ? 'Event feedback closed 72 hours after the event started.'
+                : 'Event feedback is not available for this event.';
+          return;
+        }
+        event = {
+          ...event,
+          ...result.event,
+          surveyQuestions: result.questions,
+          surveyVersion: result.version,
+          feedbackClosesAt: result.closesAt,
+        };
+      } catch (error) {
+        if (ticket === generation && dialog.open)
+          dialog.querySelector('[role="status"]').textContent = error.message;
+        return;
+      }
+    }
     const questions = event.surveyQuestions || [];
     const fields = questions
       .map((question, index) => {
@@ -190,39 +239,62 @@ export function rsvpDialog(root, { preview = false } = {}) {
       })
       .join('');
     dialog.innerHTML =
-      '<div class="dialog-toolbar"><button type="button" class="dialog-close" aria-label="Close RSVP">×</button></div>' +
+      '<div class="dialog-toolbar"><button type="button" class="dialog-close" aria-label="' +
+      (feedback ? 'Close event feedback' : 'Close RSVP') +
+      '">×</button></div>' +
       '<span class="tag">' +
-      (event.potential
-        ? 'POTENTIAL EVENT · DATE ' +
-          (event.date ? h(event.date.slice(0, 10)) : 'TBD')
-        : 'EVENT RSVP') +
+      (feedback
+        ? 'EVENT FEEDBACK'
+        : event.potential
+          ? 'POTENTIAL EVENT · DATE ' +
+            (event.date ? h(event.date.slice(0, 10)) : 'TBD')
+          : 'EVENT RSVP') +
       '</span>' +
-      '<h2 id="rsvp-heading">' +
+      '<h2 id="' +
+      headingId +
+      '">' +
       h(event.title) +
       '</h2>' +
       (preview
         ? '<p class="potential-notice">PREVIEW ONLY · Try the form below. Nothing will be submitted or saved.</p>'
         : '') +
-      (event.potential
+      (!feedback && event.potential
         ? '<p>This records your interest. Final details and seats are not yet confirmed.</p>'
         : '') +
-      (event.surveyIntro
+      (!feedback && event.surveyIntro
         ? '<div class="survey-intro event-richtext">' +
           eventText(event.surveyIntro) +
           '</div>'
         : '') +
-      '<form id="event-rsvp" class="club-form">' +
-      identityFields(event.requireEduEmail === true) +
+      (feedback && event.feedbackClosesAt
+        ? '<p>Feedback closes ' +
+          h(
+            new Intl.DateTimeFormat('en-US', {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+              timeZone: 'America/Chicago',
+            }).format(new Date(event.feedbackClosesAt)),
+          ) +
+          ' CT.</p>'
+        : '') +
+      '<form id="' +
+      (feedback ? 'event-feedback' : 'event-rsvp') +
+      '" class="club-form">' +
+      (feedback ? '' : identityFields(event.requireEduEmail === true)) +
       fields +
       (preview
         ? '<button type="submit" class="solid-link">Preview admin result</button>'
-        : formFooter(
-            'Submit RSVP',
-            'I agree that club officers may use my RSVP and answers to plan this event and contact me about it.',
-          )) +
+        : feedback
+          ? '<div class="form-honeypot" aria-hidden="true"><label>Website<input name="website" tabindex="-1" autocomplete="off"></label></div><p class="form-note">Your answers are shared with club officers. <a href="privacy.html">How we use your information</a></p><button type="submit" class="solid-link">Submit feedback</button><p class="form-status" role="status" aria-live="polite"></p>'
+          : formFooter(
+              'Submit RSVP',
+              'I agree that club officers may use my RSVP and answers to plan this event and contact me about it.',
+            )) +
       '</form>';
     dialog.querySelector('.dialog-close').onclick = close;
-    dialog.querySelector('#rsvp-heading').after(eventSharing(event));
+    dialog
+      .querySelector('#' + headingId)
+      .after(eventSharing(event, { feedback }));
     const form = dialog.querySelector('form');
     for (const question of questions)
       form
@@ -322,7 +394,7 @@ export function rsvpDialog(root, { preview = false } = {}) {
       };
     } else
       stop = mountForm(form, {
-        kind: 'rsvp',
+        kind: feedback ? 'feedback' : 'rsvp',
         extra: { eventId, surveyVersion: event.surveyVersion || '' },
         serialize,
       });
@@ -336,7 +408,11 @@ export function rsvpDialog(root, { preview = false } = {}) {
     open,
     update(event) {
       if (!dialog.open) return;
-      if (!event || event.id !== eventId || event.registrationOpen === false)
+      if (
+        !event ||
+        event.id !== eventId ||
+        (!feedback && event.registrationOpen === false)
+      )
         close();
       // Keep entered answers during feed refresh; the server rejects stale versions.
     },

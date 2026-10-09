@@ -520,6 +520,29 @@
                     Add question
                   </button>
                 </fieldset>
+                <fieldset class="editor-section">
+                  <legend><span>06</span> Event feedback</legend>
+                  <label class="checkbox"
+                    ><input name="feedbackEnabled" type="checkbox" />Collect
+                    event feedback</label
+                  >
+                  <p class="hint">
+                    RSVP changes to Event feedback at the event's start time.
+                    Anyone can answer without signing in. Feedback closes
+                    exactly 72 hours after the start.
+                  </p>
+                  <fieldset id="feedback-editor" hidden disabled>
+                    <legend>Feedback questions</legend>
+                    <p class="hint">
+                      Edit these default questions for this event. Saved
+                      responses keep the questions people answered.
+                    </p>
+                    <div id="feedback-questions"></div>
+                    <button id="add-feedback-question" type="button">
+                      Add feedback question
+                    </button>
+                  </fieldset>
+                </fieldset>
                 <div class="event-actions primary-actions">
                   <button type="submit" name="action" value="draft">
                     Save draft

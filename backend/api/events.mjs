@@ -10,9 +10,16 @@ import {
   serveEventImage,
 } from '../lib/event-assets.mjs';
 import { RequestError } from '../lib/errors.mjs';
-import { createEventShareLink, eventURL } from '../lib/event-share-link.mjs';
+import {
+  createEventShareLink,
+  createEventFeedbackShareLink,
+  eventURL,
+} from '../lib/event-share-link.mjs';
 import { createShortLink as shortenLink } from '../lib/survey-share-link.mjs';
-import { eventFeedbackLinks } from '../lib/survey-catalog.mjs';
+import {
+  eventFeedbackState,
+  eventFeedbackURL,
+} from '../lib/event-feedback-definition.mjs';
 import {
   liveEvents,
   editorEvents,
@@ -31,6 +38,8 @@ export function eventHandler({
   originals,
   storage,
   createShortLink = shortenLink,
+  createFeedbackShortLink = (target, alias, domain) =>
+    shortenLink(target, alias, fetch, domain),
   rateLimit = (db, req) => limit(db, req, 'event-images', 30, 3600),
 } = {}) {
   return async (req, res) => {
@@ -47,7 +56,12 @@ export function eventHandler({
             [id],
           )
         ).rows[0];
-        qr.addData(saved?.published?.shortLink || eventURL(id));
+        const feedback = url.searchParams.get('feedback') === '1';
+        qr.addData(
+          feedback
+            ? saved?.published?.feedbackShortLink || eventFeedbackURL(id)
+            : saved?.published?.shortLink || eventURL(id),
+        );
         qr.make();
         res.statusCode = 200;
         res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -59,7 +73,7 @@ export function eventHandler({
           (url.searchParams.has('download') ? 'attachment' : 'inline') +
             '; filename="' +
             id +
-            '-qr.svg"',
+            (feedback ? '-feedback-qr.svg"' : '-qr.svg"'),
         );
         return res.end(qr.createSvgTag(6, 24));
       }
@@ -80,15 +94,15 @@ export function eventHandler({
       ) {
         res.setHeader('Access-Control-Allow-Origin', '*');
         const events = await liveEvents(getDatabase(), originals);
-        const feedback = await eventFeedbackLinks(
-          getDatabase(),
-          events.map((event) => event.id),
-        );
         return send(res, 200, {
           events: events.map((event) => ({
             ...event,
-            ...(feedback.has(event.id)
-              ? { feedbackUrl: feedback.get(event.id) }
+            ...(event.feedbackEnabled
+              ? {
+                  feedbackUrl:
+                    event.feedbackShortLink || eventFeedbackURL(event.id),
+                  feedbackState: eventFeedbackState(event),
+                }
               : {}),
           })),
         });
@@ -132,15 +146,41 @@ export function eventHandler({
           200,
           await addEventType(getDatabase(), body.name, user.email, originals),
         );
-      if (body.action === 'share-link')
+      if (body.action === 'share-link') {
+        let event = await createEventShareLink(
+          getDatabase(),
+          body.id,
+          user.email,
+          createShortLink,
+          body.replaceLegacy === true,
+          body.alias,
+        );
+        let sharingError;
+        if (event.published.feedbackEnabled) {
+          try {
+            event = await createEventFeedbackShareLink(
+              getDatabase(),
+              body.id,
+              user.email,
+              createFeedbackShortLink,
+            );
+          } catch {
+            sharingError =
+              'Feedback short link could not be created. Use Create feedback short link to try again.';
+          }
+        }
         return send(res, 200, {
-          event: await createEventShareLink(
+          event,
+          ...(sharingError ? { sharingError } : {}),
+        });
+      }
+      if (body.action === 'feedback-share-link')
+        return send(res, 200, {
+          event: await createEventFeedbackShareLink(
             getDatabase(),
             body.id,
             user.email,
-            createShortLink,
-            body.replaceLegacy === true,
-            body.alias,
+            createFeedbackShortLink,
           ),
         });
       if (!['unpublish', 'archive', 'restore'].includes(body.action))
@@ -178,6 +218,23 @@ export function eventHandler({
           // event was lost or cause an officer to publish it a second time.
           sharingError =
             'Short link could not be created. Use Create short link to try again.';
+        }
+      }
+      if (
+        body.action === 'publish' &&
+        event.published.feedbackEnabled &&
+        event.published.shortLink
+      ) {
+        try {
+          event = await createEventFeedbackShareLink(
+            getDatabase(),
+            body.id,
+            user.email,
+            createFeedbackShortLink,
+          );
+        } catch {
+          sharingError =
+            'Feedback short link could not be created. Use Create feedback short link to try again.';
         }
       }
       return send(res, 200, {

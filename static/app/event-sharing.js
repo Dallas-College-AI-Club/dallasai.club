@@ -1,28 +1,38 @@
 import { EVENTS_API_URL } from '../content/events.js';
 
-export function eventSharing(event) {
+export function eventSharing(event, { feedback = false } = {}) {
   const root = document.createElement('section');
   root.className = 'event-sharing';
-  root.setAttribute('aria-label', 'Share this event');
+  root.setAttribute(
+    'aria-label',
+    feedback ? 'Share event feedback' : 'Share this event',
+  );
   const url =
-    event.shortLink ||
+    (feedback ? event.feedbackShortLink : event.shortLink) ||
     'https://dallasai.club/club.html?mode=events&event=' +
-      encodeURIComponent(event.id);
-  const qrURL = EVENTS_API_URL + '?qr=' + encodeURIComponent(event.id);
+      encodeURIComponent(event.id) +
+      (feedback ? '&feedback=1' : '');
+  const qrURL =
+    EVENTS_API_URL +
+    '?qr=' +
+    encodeURIComponent(event.id) +
+    (feedback ? '&feedback=1' : '');
   const image = document.createElement('img');
   image.src = qrURL;
-  image.alt = 'QR code for ' + event.title;
+  image.alt = 'QR code for ' + event.title + (feedback ? ' feedback' : '');
   image.width = image.height = 128;
   const controls = document.createElement('div');
   controls.className = 'event-share-controls';
   const title = document.createElement('strong');
-  title.textContent = 'Scan or share this event';
+  title.textContent = feedback
+    ? 'Scan or share event feedback'
+    : 'Scan or share this event';
   const actions = document.createElement('div');
   actions.className = 'event-share-actions';
   const share = document.createElement('button');
   share.type = 'button';
   share.className = 'outline-link';
-  share.textContent = 'Share event';
+  share.textContent = feedback ? 'Share feedback' : 'Share event';
   const status = document.createElement('p');
   status.setAttribute('role', 'status');
   share.onclick = async () => {
@@ -30,7 +40,9 @@ export function eventSharing(event) {
       if (navigator.share) await navigator.share({ title: event.title, url });
       else {
         await navigator.clipboard.writeText(url);
-        status.textContent = 'Event link copied.';
+        status.textContent = feedback
+          ? 'Feedback link copied.'
+          : 'Event link copied.';
       }
     } catch (error) {
       if (error.name !== 'AbortError')
@@ -41,11 +53,11 @@ export function eventSharing(event) {
   download.className = 'outline-link';
   download.textContent = 'Download QR';
   download.href = qrURL + '&download=1';
-  download.download = event.id + '-qr.svg';
+  download.download = event.id + (feedback ? '-feedback' : '') + '-qr.svg';
   actions.append(share, download);
   controls.append(title, actions, status);
   root.append(image, controls);
-  if (event.rsvpDeadline) {
+  if (event.rsvpDeadline && !feedback) {
     const deadline = document.createElement('p');
     deadline.className = 'event-deadline';
     const date = document.createElement('time');

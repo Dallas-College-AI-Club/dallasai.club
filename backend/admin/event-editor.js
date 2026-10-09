@@ -1,6 +1,7 @@
 import { coreEventTypes } from '../lib/event-types.mjs';
 import { confirmDialog, lock, node } from './ui.js';
-import { eventOverview } from './event-overview.js';
+import { eventOverview, eventFeedbackOverview } from './event-overview.js';
+import { defaultFeedbackQuestions } from '../lib/event-feedback-definition.mjs';
 import { mountTextFormatting } from './text-formatting.js';
 import { surveyEditor } from './survey-editor.js';
 import { mountEventActivity } from './event-activity.js';
@@ -13,6 +14,8 @@ const blank = () => ({
   surveyIntro: '',
   rsvpDeadline: '',
   surveyQuestions: [],
+  feedbackEnabled: false,
+  feedbackQuestions: defaultFeedbackQuestions(),
   title: '',
   category: 'Workshop',
   date: '',
@@ -67,6 +70,15 @@ export function mountEventEditor(api) {
     q('#survey-questions'),
     q('#add-survey-question'),
   );
+  const feedback = surveyEditor(
+    q('#feedback-questions'),
+    q('#add-feedback-question'),
+  );
+  const showFeedbackEditor = () => {
+    q('#feedback-editor').hidden = !form.elements.feedbackEnabled.checked;
+    q('#feedback-editor').disabled = !form.elements.feedbackEnabled.checked;
+  };
+  form.elements.feedbackEnabled.onchange = showFeedbackEditor;
   const activity = mountEventActivity(api);
   const overview = node('article', undefined, 'event-overview');
   overview.id = 'event-overview';
@@ -91,6 +103,7 @@ export function mountEventEditor(api) {
       editing = false;
       form.reset();
       survey.set();
+      feedback.set();
       images = [];
       renderImages();
       form.hidden = true;
@@ -207,6 +220,8 @@ export function mountEventEditor(api) {
     content.potential = form.elements.potential.checked;
     content.checkSharing = form.elements.checkSharing.checked;
     content.surveyQuestions = survey.value();
+    content.feedbackEnabled = form.elements.feedbackEnabled.checked;
+    content.feedbackQuestions = feedback.value();
     content.registrationOpen = form.elements.registrationOpen.checked;
     content.images = images.map((image) => ({ ...image }));
     return content;
@@ -362,46 +377,23 @@ export function mountEventEditor(api) {
         );
       }
       overview.append(updatedNote, activityPanel);
-      const surveys = node('section', undefined, 'event-overview-section');
-      const create = node('a', 'Create event feedback survey', 'button-link');
-      create.href = '#/surveys/new?event=' + encodeURIComponent(row.id);
-      surveys.append(
-        node('h4', 'Event feedback surveys'),
-        node(
-          'p',
-          'Separate from registration. Each survey has its own answering link and QR code.',
-          'hint',
+      overview.append(
+        eventFeedbackOverview(
+          row,
+          api,
+          () => current === row && !editing,
+          () => {
+            edit(current, true);
+            form.elements.feedbackEnabled.focus();
+          },
         ),
-        create,
       );
-      overview.append(surveys);
-      api('/api/custom-surveys?action=catalog')
-        .then(({ surveys: catalog }) => {
-          if (current !== row || editing) return;
-          for (const survey of catalog.filter(
-            (item) => item.definition?.eventId === row.id,
-          )) {
-            const link = node(
-              'a',
-              survey.title +
-                ' · ' +
-                (survey.expired ? 'expired' : survey.status),
-            );
-            link.href = '#/surveys/custom/' + survey.id;
-            const p = node('p');
-            p.append(link);
-            surveys.append(p);
-          }
-        })
-        .catch((error) => {
-          if (current === row && !editing)
-            surveys.append(node('p', error.message));
-        });
     }
     q('#event-empty').hidden = true;
     images = (row.draft.images || []).map((image) => ({ ...image }));
     renderImages();
     survey.set(row.draft.surveyQuestions);
+    feedback.set(row.draft.feedbackQuestions ?? defaultFeedbackQuestions());
     typeOptions(row.draft.category);
     for (const [key, value] of Object.entries({
       ...blank(),
@@ -415,6 +407,7 @@ export function mountEventEditor(api) {
     if (row.draft.requireEduEmail === undefined)
       form.elements.requireEduEmail.checked =
         row.draft.category?.toLowerCase() === 'social';
+    showFeedbackEditor();
     for (const button of storyButtons) {
       const key = button.dataset.storySection;
       storySection(
@@ -571,6 +564,7 @@ export function mountEventEditor(api) {
     if (busy || !current || !editing) return;
     if (['draft', 'preview', 'publish'].includes(action) && !survey.validate())
       return;
+    if (form.elements.feedbackEnabled.checked && !feedback.validate()) return;
     busy = true;
     loadGeneration++;
     const version = generation;
@@ -847,6 +841,7 @@ export function mountEventEditor(api) {
       saved = '';
       form.reset();
       survey.set();
+      feedback.set();
       form.hidden = true;
       q('#event-empty').hidden = false;
       q('#event-list').replaceChildren();

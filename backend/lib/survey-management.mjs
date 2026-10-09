@@ -312,6 +312,13 @@ LEFT JOIN LATERAL (
         AND (jsonb_array_length(cr.responses)>0 OR coalesce(cr.response_definition,cs.definition) IS NOT NULL)
     ) AS submitted
     FROM club_forms.custom_surveys cs WHERE cs.definition->>'eventId'=s.event_id AND cs.status<>'draft'
+    UNION ALL
+    SELECT EXISTS (
+      SELECT 1 FROM club_forms.event_feedback_responses er
+      WHERE er.event_id=s.event_id AND er.email<>'' AND er.email=lower(trim(e.email))
+    ) AS submitted
+    WHERE EXISTS (SELECT 1 FROM club_forms.events ef WHERE ef.id=s.event_id AND ef.published->>'feedbackEnabled'='true')
+      OR EXISTS (SELECT 1 FROM club_forms.event_feedback_responses er WHERE er.event_id=s.event_id)
   ) linked
 ) f ON true`;
 export const responseFrom = `FROM club_forms.survey_responses s JOIN club_forms.entries e ON e.id=s.entry_id

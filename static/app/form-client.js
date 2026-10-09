@@ -86,6 +86,7 @@ const confirmationTitles = {
   join: 'Welcome to the club!',
   subscribe: 'Subscription request received',
   rsvp: 'RSVP received',
+  feedback: 'Event feedback received',
   contribution: 'Contribution received',
   workshop: 'Workshop request received',
   question: 'Question received',
@@ -203,7 +204,19 @@ export function mountForm(
       body.requestId = draft.requestId;
       remember();
       if (controller.signal.aborted || currentAttempt.signal.aborted) return;
-      const result = await request('forms', body, currentAttempt.signal);
+      const result = await request(
+        kind === 'feedback' ? 'event-feedback' : 'forms',
+        kind === 'feedback'
+          ? {
+              eventId: body.eventId,
+              requestId: body.requestId,
+              surveyVersion: body.surveyVersion,
+              answers: body.answers,
+              website: body.website,
+            }
+          : body,
+        currentAttempt.signal,
+      );
       if (controller.signal.aborted || currentAttempt.signal.aborted) return;
       completed = true;
       drafts.delete(draftKey);

@@ -9,7 +9,11 @@ import { eventHandler } from '../api/events.mjs';
 import { RequestError } from '../lib/errors.mjs';
 import { submit } from '../lib/submissions.mjs';
 import { liveEvents } from '../lib/events.mjs';
-import { privateSurveyToken, digest } from '../lib/custom-surveys.mjs';
+import { eventFeedbackHandler } from '../api/event-feedback.mjs';
+import {
+  defaultFeedbackQuestions,
+  eventFeedbackURL,
+} from '../lib/event-feedback-definition.mjs';
 import sharp from 'sharp';
 const backend = fileURLToPath(new URL('../', import.meta.url));
 const site = path.resolve(backend, '../public');
@@ -55,10 +59,17 @@ const events = eventHandler({
   rateLimit: async () => {},
 });
 const imageFiles = new Map();
+const feedback = eventFeedbackHandler({
+  getDatabase: () => db,
+  authorize: authorized,
+  originals: [],
+  rateLimit: async () => {},
+});
 process.env.BLOB_READ_WRITE_TOKEN = 'test-only';
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/api/events') return events(req, res);
+  if (url.pathname === '/api/event-feedback') return feedback(req, res);
   if (url.pathname.startsWith('/api/auth/')) {
     res.setHeader('Content-Type', 'application/json');
     if (url.pathname.endsWith('email-otp/send-verification-otp'))
@@ -738,27 +749,8 @@ try {
       .count(),
     0,
   );
-  // A linked, open public feedback survey replaces RSVP only after the event.
-  process.env.FORM_TOKEN_SECRET = 'event-feedback-browser-' + 'x'.repeat(40);
-  const feedbackId = crypto.randomUUID();
-  const feedbackUrl = 'https://tinyurl.com/test-event-feedback';
-  await db.query(
-    `INSERT INTO club_forms.custom_surveys
-      (id,slug,title,content_version,status,link_digest,expires_at,published_at,definition,short_link)
-      VALUES($1,$2,'Event feedback','custom-form/1','open',$3,now()+interval '1 day',now(),$4,$5)`,
-    [
-      feedbackId,
-      'feedback-' + feedbackId,
-      digest(privateSurveyToken(feedbackId)),
-      JSON.stringify({
-        eventId: id,
-        template: 'feedback',
-        audience: 'public',
-        permissions: { preview: 'link', answer: 'verified', results: 'admins' },
-      }),
-      feedbackUrl,
-    ],
-  );
+  // Native feedback replaces RSVP from the event start, while it is still running.
+  const feedbackUrl = eventFeedbackURL(id);
   const refreshPublicEvents = () =>
     publicPage.evaluate(async () => {
       await (await import('/content/events.js')).refreshEvents();
@@ -801,8 +793,10 @@ try {
     id,
     JSON.stringify({
       ...upcoming,
-      date: '2000-10-02T16:00:00-05:00',
-      end: '2000-10-02T20:00:00-05:00',
+      date: new Date(Date.now() - 3600000).toISOString(),
+      end: new Date(Date.now() + 3600000).toISOString(),
+      feedbackEnabled: true,
+      feedbackQuestions: defaultFeedbackQuestions(),
     }),
   ]);
   await refreshPublicEvents();
@@ -814,22 +808,33 @@ try {
     await publicPage.locator('#open-rsvp, #event-rsvp-action').count(),
     0,
   );
-  await publicPage.route(feedbackUrl, (route) =>
-    route.fulfill({
-      contentType: 'text/html',
-      body: '<h1>Linked event feedback</h1>',
-    }),
+  await publicPage.route(
+    'https://dallasai-leaderboard.vercel.app/api/event-feedback?*',
+    async (route) => {
+      const response = await route.fetch({
+        url:
+          origin +
+          '/api/event-feedback?' +
+          new URL(route.request().url()).searchParams,
+      });
+      await route.fulfill({ response });
+    },
   );
   await feedbackAction.click();
+  await expect(publicPage.locator('#event-feedback')).toBeVisible();
   await expect(
-    publicPage.getByRole('heading', { name: 'Linked event feedback' }),
-  ).toBeVisible();
+    publicPage.locator('#event-feedback fieldset.survey-question'),
+  ).toHaveCount(5);
   await publicPage.goto(origin + '/club.html?mode=events&event=' + id);
   await publicPage.locator('#event-feedback-action').waitFor();
-  await db.query(
-    "UPDATE club_forms.custom_surveys SET status='closed' WHERE id=$1",
-    [feedbackId],
-  );
+  await db.query('UPDATE club_forms.events SET published=$2 WHERE id=$1', [
+    id,
+    JSON.stringify({
+      ...upcoming,
+      feedbackEnabled: true,
+      date: new Date(Date.now() - 73 * 3600000).toISOString(),
+    }),
+  ]);
   await refreshPublicEvents();
   assert.equal(
     await publicPage
@@ -845,6 +850,7 @@ try {
   if (!(await page.locator('#event-form').isVisible()))
     await page.locator('#edit-selected-event').click();
   await page.locator('[name="title"]').fill(workshop.title);
+  await page.locator('[name="registrationOpen"]').check();
   if (!(await page.locator('#event-form').isVisible()))
     await page.locator('#edit-selected-event').click();
   await page

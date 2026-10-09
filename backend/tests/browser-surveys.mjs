@@ -185,10 +185,10 @@ try {
     ['availability', 'Availability', true, ['Afternoon', 'Evening'], false],
   ]) {
     await admin.locator('#add-survey-question').click();
-    let box = admin.locator('.survey-editor-question').last();
+    let box = admin.locator('#survey-questions .survey-editor-question').last();
     await box.getByLabel('Question', { exact: true }).fill(label);
     await box.getByLabel('Answer type').selectOption(type);
-    box = admin.locator('.survey-editor-question').last();
+    box = admin.locator('#survey-questions .survey-editor-question').last();
     await box.getByLabel('Required answer').setChecked(required);
     if (['single', 'multiple'].includes(type)) {
       await box.getByLabel('Answer options').fill(options.join('\n'));
@@ -207,7 +207,9 @@ try {
     }
   }
   // Choice order supports keyboard buttons and pointer dragging without losing text.
-  const choiceBox = admin.locator('.survey-editor-question').nth(2);
+  const choiceBox = admin
+    .locator('#survey-questions .survey-editor-question')
+    .nth(2);
   await choiceBox
     .getByLabel('Date for these choices (optional)', { exact: true })
     .fill('2026-10-16');
@@ -258,18 +260,18 @@ try {
     .click();
   await preview.locator('.rsvp-answer-preview[open]').waitFor();
   assert.match(
-    await preview.locator('.rsvp-answer-preview').textContent(),
+    await preview.locator('.rsvp-answer-preview[open]').textContent(),
     /Preview answer only/,
   );
   assert.equal(
     await preview
-      .locator('.rsvp-answer-preview dt')
+      .locator('.rsvp-answer-preview[open] dt')
       .filter({ hasText: 'Guests' })
       .evaluate((el) => el.nextElementSibling.textContent),
     '0',
   );
   assert.match(
-    await preview.locator('.rsvp-answer-preview').textContent(),
+    await preview.locator('.rsvp-answer-preview[open]').textContent(),
     /not been submitted or saved/,
   );
   assert.equal(previewSubmits, 0);
@@ -286,7 +288,7 @@ try {
     .getByRole('button', { name: 'Preview admin result', exact: true })
     .click();
   assert.match(
-    await preview.locator('.rsvp-answer-preview').textContent(),
+    await preview.locator('.rsvp-answer-preview[open]').textContent(),
     /Saturday/,
   );
   await admin
@@ -320,7 +322,10 @@ try {
   await admin.reload();
   await admin.locator('.event-choice').click();
   await admin.locator('#edit-selected-event').click();
-  assert.equal(await admin.locator('.survey-editor-question').count(), 9);
+  assert.equal(
+    await admin.locator('#survey-questions .survey-editor-question').count(),
+    9,
+  );
   assert.equal(await admin.locator('[name=checkSharing]').isChecked(), false);
   const tabsBeforePublish = context.pages().length;
   await admin
@@ -396,7 +401,7 @@ try {
   );
   assert.equal(await page.locator('#save-event').count(), 0);
   await page.locator('#open-rsvp').click();
-  const shareBox = page.locator('.rsvp-dialog .event-sharing');
+  const shareBox = page.locator('.rsvp-dialog[open] .event-sharing');
   assert.equal(
     await shareBox.locator('time').getAttribute('datetime'),
     '2026-10-11',
@@ -422,7 +427,7 @@ try {
     await page.setViewportSize({ width, height: 844 });
     assert.equal(
       await page
-        .locator('.rsvp-dialog')
+        .locator('.rsvp-dialog[open]')
         .evaluate((el) => el.scrollWidth <= el.clientWidth),
       true,
     );
@@ -508,7 +513,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   assert.equal(
     await page
-      .locator('.rsvp-dialog')
+      .locator('.rsvp-dialog[open]')
       .evaluate((el) => el.scrollWidth <= el.clientWidth),
     true,
   );

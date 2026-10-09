@@ -131,6 +131,11 @@ try {
       exact: true,
     }),
   ).toBeHidden();
+  const teamsQR = page.getByRole('img', {
+    name: 'Scan to open the Dallas College AI Club in Teams',
+    exact: true,
+  });
+  await expect(teamsQR).toBeHidden();
   const membershipEmail = page.locator('#membership-form [name="email"]');
   await expect(membershipEmail).toHaveAttribute(
     'placeholder',
@@ -206,6 +211,9 @@ try {
       exact: true,
     }),
   ).toHaveAttribute('target', '_blank');
+  await expect(teamsQR).toBeVisible();
+  await expect(teamsQR).toHaveJSProperty('naturalWidth', 277);
+  await expect(teamsQR).toHaveJSProperty('naturalHeight', 222);
   assert.equal(await page.locator('#membership-form input').count(), 0);
   assert.ok(
     await page
@@ -234,6 +242,7 @@ try {
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('#club-navigation')).not.toBeInViewport();
   await expect(teamsLink).toBeVisible();
+  await expect(teamsQR).toBeVisible();
   await expect(
     page.getByRole('button', { name: 'Done', exact: true }),
   ).toBeVisible();

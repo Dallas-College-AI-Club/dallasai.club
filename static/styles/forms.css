@@ -222,6 +222,16 @@ body .membership-actions .teams-link:hover {
   background: #124a9d;
   border-color: #124a9d;
 }
+.membership-teams-qr {
+  width: 277px;
+  max-width: 100%;
+  margin: 0;
+}
+.membership-teams-qr img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
 .membership-event {
   margin-top: 20px;
   padding-top: 16px;

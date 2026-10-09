@@ -41,9 +41,10 @@ export function renderMembership(root) {
       const done = root.querySelector('.form-confirmation button');
       const actions = document.createElement('div');
       actions.className = 'membership-actions';
-      actions.innerHTML = `<a class="solid-link teams-link" href="${JOIN_URL}" target="_blank" rel="noreferrer">Open Teams ↗</a>`;
+      actions.innerHTML = `<a class="solid-link teams-link" href="${JOIN_URL}" target="_blank" rel="noreferrer">Use this code to join Teams: bpa89ns</a>`;
       done.before(actions);
       actions.append(done);
+      actions.insertAdjacentHTML('afterend', '<figure class="membership-teams-qr"><img src="/assets/teams-qr.png" width="277" height="222" alt="Scan to open the Dallas College AI Club in Teams"><figcaption>Scan to open Teams.</figcaption></figure>');
       updateEvents();
       root.querySelector('aside').hidden = false;
     },

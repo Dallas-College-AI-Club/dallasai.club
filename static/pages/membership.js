@@ -41,7 +41,7 @@ export function renderMembership(root) {
       const done = root.querySelector('.form-confirmation button');
       const actions = document.createElement('div');
       actions.className = 'membership-actions';
-      actions.innerHTML = `<a class="solid-link teams-link" href="${JOIN_URL}" target="_blank" rel="noreferrer">Open Teams ↗</a>`;
+      actions.innerHTML = `<a class="solid-link teams-link" href="${JOIN_URL}" target="_blank" rel="noreferrer">Use this code to join Teams: bpa89ns</a>`;
       done.before(actions);
       actions.append(done);
       updateEvents();

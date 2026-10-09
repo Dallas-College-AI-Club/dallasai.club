@@ -126,7 +126,10 @@ try {
   await page.getByRole('link', { name: 'Join the club', exact: true }).click();
   await page.waitForURL('**mode=join');
   await expect(
-    page.getByRole('link', { name: 'Open Teams ↗', exact: true }),
+    page.getByRole('link', {
+      name: 'Use this code to join Teams: bpa89ns',
+      exact: true,
+    }),
   ).toBeHidden();
   const membershipEmail = page.locator('#membership-form [name="email"]');
   await expect(membershipEmail).toHaveAttribute(
@@ -192,10 +195,16 @@ try {
     .waitFor();
   assert.equal(received.at(-1).kind, 'join');
   await expect(
-    page.getByRole('link', { name: 'Open Teams ↗', exact: true }),
+    page.getByRole('link', {
+      name: 'Use this code to join Teams: bpa89ns',
+      exact: true,
+    }),
   ).toBeVisible();
   await expect(
-    page.getByRole('link', { name: 'Open Teams ↗', exact: true }),
+    page.getByRole('link', {
+      name: 'Use this code to join Teams: bpa89ns',
+      exact: true,
+    }),
   ).toHaveAttribute('target', '_blank');
   assert.equal(await page.locator('#membership-form input').count(), 0);
   assert.ok(
@@ -208,6 +217,36 @@ try {
     path: path.join(screens, 'membership-desktop.png'),
     fullPage: true,
   });
+  const teamsLink = page.getByRole('link', {
+    name: 'Use this code to join Teams: bpa89ns',
+    exact: true,
+  });
+  const club = JSON.parse(
+    await readFile(path.resolve(backend, '../data/club.json'), 'utf8'),
+  );
+  const expectedTeamsURL = 'https://teams.microsoft.com/l/channel/19%3AAeb1LfEOy4KBW0URKvOHS3kP_OMebVszQum-mc5xtrc1%40thread.tacv2/%F0%9F%91%8B%F0%9F%8F%BB%20Welcome%20and%20Introduce%20Yourself?groupId=75d91295-0556-4fef-aa41-42299dd3cdef&tenantId=d67e5453-732f-4adc-94a4-4888f2d97d5d';
+  assert.equal(club.JOIN_URL, expectedTeamsURL);
+  await expect(teamsLink).toHaveAttribute('href', expectedTeamsURL);
+  await expect(teamsLink).toHaveCSS('background-color', 'rgb(24, 90, 189)');
+  await page.locator('.club-form-layout > section').screenshot({
+    path: path.join(backend, '../.preview/teams-success-desktop.png'),
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.locator('#club-navigation')).not.toBeInViewport();
+  await expect(teamsLink).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: 'Done', exact: true }),
+  ).toBeVisible();
+  assert.ok(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  );
+  await page.screenshot({
+    path: path.join(backend, '../.preview/teams-success-phone.png'),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 1280, height: 900 });
   const eventCards = page.locator('.membership-event');
   await expect(eventCards).toHaveCount(2);
   await expect(eventCards.nth(0)).toContainText('Next event');
@@ -231,7 +270,10 @@ try {
   await page.evaluate(() => window.dispatchEvent(new Event('focus')));
   await expect(eventCards).toHaveCount(0);
   await expect(
-    page.getByRole('link', { name: 'Open Teams ↗', exact: true }),
+    page.getByRole('link', {
+      name: 'Use this code to join Teams: bpa89ns',
+      exact: true,
+    }),
   ).toBeVisible();
   eventsAvailable = true;
   eventsForPage = publicEvents;
@@ -455,7 +497,10 @@ try {
     .click();
   await page.locator('.form-error').waitFor();
   await expect(
-    page.getByRole('link', { name: 'Open Teams ↗', exact: true }),
+    page.getByRole('link', {
+      name: 'Use this code to join Teams: bpa89ns',
+      exact: true,
+    }),
   ).toBeHidden();
   assert.equal(
     await page.getByLabel('Your full name', { exact: true }).inputValue(),

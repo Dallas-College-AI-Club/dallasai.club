@@ -1809,6 +1809,14 @@ input::file-selector-button {
 .inbox-group > .entry > .entry-top {
   margin-top: 20px;
 }
+.inbox-group[data-kind='join'] {
+  border-color: var(--notice-text);
+  background: var(--notice);
+}
+.inbox-group[data-kind='join'] > summary {
+  color: var(--notice-text);
+  font-weight: 700;
+}
 .survey-tools,
 .survey-response-actions {
   display: flex;

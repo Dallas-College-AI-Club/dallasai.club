@@ -485,8 +485,14 @@ function groupedEntries(entries, eventCounts = {}) {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(entry);
   }
-  return [...groups].map(([key, rows]) => {
+  const orderedGroups = [...groups];
+  orderedGroups.sort(
+    ([, a], [, b]) =>
+      Number(b[0].kind === 'join') - Number(a[0].kind === 'join'),
+  );
+  return orderedGroups.map(([key, rows]) => {
     const group = node('details', undefined, 'survey-event-group inbox-group');
+    group.dataset.kind = rows[0].kind;
     group.dataset.group = key;
     group.dataset.label =
       rows[0].data.eventTitle ||

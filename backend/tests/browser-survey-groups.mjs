@@ -3,6 +3,7 @@ import { chromium, expect } from '@playwright/test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import { officeFixture } from './helpers/office-fixture.mjs';
 import { builderSample } from './helpers/survey-response-samples.mjs';
 import { changeDraft } from '../lib/survey-builder.mjs';
@@ -954,6 +955,46 @@ try {
   await check(
     'Home totals match Upcoming & New while other saved feedback stays in Past',
     async (page, fixture) => {
+      for (const name of ['Jordan Signup', 'Taylor Signup'])
+        await fixture.db.query(
+          `INSERT INTO club_forms.entries(id,kind,email,name,dedupe_key,data,created_at)
+           VALUES($1::uuid,'join',$2,$3,$1::text,'{"campus":"Richland","interests":"Learning together"}',now()-interval '1 day')`,
+          [
+            randomUUID(),
+            name.split(' ')[0].toLowerCase() + '@student.dallascollege.edu',
+            name,
+          ],
+        );
+      await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+      const signups = page.locator('#entries > .inbox-group').first();
+      await expect(signups.locator(':scope > summary')).toHaveText(
+        'Signups · 3 on this page',
+      );
+      await expect(signups).toContainText('Jordan Signup');
+      await expect(signups).toContainText('Taylor Signup');
+      for (const theme of ['light', 'dark']) {
+        await page.locator(`[data-appearance="${theme}"]`).click();
+        await signups.screenshot({
+          path: fileURLToPath(
+            new URL(
+              `../../.preview/signups-priority-${theme}.png`,
+              import.meta.url,
+            ),
+          ),
+        });
+      }
+      await page.setViewportSize({ width: 390, height: 844 });
+      await signups.screenshot({
+        path: fileURLToPath(
+          new URL('../../.preview/signups-priority-phone.png', import.meta.url),
+        ),
+      });
+      assert.ok(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= innerWidth,
+        ),
+      );
+      await page.setViewportSize({ width: 1440, height: 1000 });
       await expect(
         page.locator('[data-inbox-status="current"]'),
       ).toHaveAttribute('aria-pressed', 'true');

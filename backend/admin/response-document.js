@@ -14,7 +14,10 @@ export function responseDocument(result, { title, definition }) {
   if (!chapters.length)
     for (const q of definition?.questions || [])
       if (!answers.some((a) => a.id === q.id))
-        answers.push({ id: q.id, title: q.title });
+        answers.push({
+          id: q.id,
+          title: (q.choiceDate ? q.choiceDate + ' · ' : '') + q.title,
+        });
   const blocks = [];
   let lastGroup;
   for (const answer of answers.sort((a, b) => rank(a) - rank(b))) {

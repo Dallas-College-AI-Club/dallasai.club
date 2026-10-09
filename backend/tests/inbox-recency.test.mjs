@@ -176,15 +176,16 @@ test('custom and feedback responses share counts, Home recency, search, archive 
   await response({ days: 15 });
   await response({ active: false });
   await response({ status: 'archived' });
-  await response({ answered: false });
+  const blankSurvey = await response({ answered: false });
   const current = await get('status=current');
-  assert.equal(current.total, 3);
+  assert.equal(current.total, 4);
+  assert.ok(current.entries.some((entry) => entry.data.surveyId === blankSurvey));
   assert.equal((await get('status=past')).total, 2);
   assert.equal((await get('status=closed')).total, 2);
-  assert.equal((await get('status=recent')).total, 2);
+  assert.equal((await get('status=recent')).total, 3);
   assert.ok(current.entries.every((e) => uuid.test(e.id)));
-  assert.equal(new Set(current.entries.map((e) => e.id)).size, 3);
-  assert.equal((await get('status=current&q=Respondent')).total, 3);
+  assert.equal(new Set(current.entries.map((e) => e.id)).size, 4);
+  assert.equal((await get('status=current&q=Respondent')).total, 4);
   const csv = await (
     await fetch(origin + '/api/admin?status=current&export=csv')
   ).text();
@@ -201,16 +202,16 @@ test('custom and feedback responses share counts, Home recency, search, archive 
   const home = await get('home=1');
   assert.equal(
     home.counts.reduce((n, row) => n + row.new, 0),
-    2,
+    3,
   );
   assert.equal(
     home.counts.reduce((n, row) => n + row.current, 0),
-    3,
+    4,
   );
   assert.equal(home.eventFeedback, 1);
-  assert.equal(home.newest.length, 2);
+  assert.equal(home.newest.length, 3);
   const poll = await get('counts=1&status=current');
-  assert.equal(poll.newInView, 1);
+  assert.equal(poll.newInView, 2);
   for (let n = 0; n < 51; n++) await response({ name: 'Paged ' + n });
   const first = await get('status=current&q=Paged');
   assert.equal(first.total, 51);

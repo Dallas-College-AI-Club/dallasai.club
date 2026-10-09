@@ -30,6 +30,8 @@ The Inbox count cards are folded by default. The fold's summary still says what 
 
 RSVPs in the list are grouped by event. Each event group shows how many RSVPs match the current filters in total, not only those on the page, and has **Show all** for that event. The Type filter also offers **RSVPs for all events** (upcoming and past). For any RSVP type, event chips with **All events** appear above the list on wider screens; on phones, and when there are more than eight events, the Event dropdown is used instead. The chosen event stays in the address, and Export filtered CSV follows it.
 
+Opening an Inbox submission shows **Submission details** immediately: the full name, email address, every form question with its saved answer, and any private attachments. Empty answers show **No answer**. Officers can fold the details; Refresh keeps their choice. RSVP **View survey answers** and custom-survey **View survey and response** open the existing complete question-and-answer views. Custom-survey unanswered questions show **No answer**, and optional-only surveys stay listed after a successful blank submission. Advisor Studio continues to show only the answers the respondent shared.
+
 ## Submission activity and comments
 
 **Upcoming & New** includes RSVPs for upcoming or potential events, feedback for events that ended within the last 14 days, and custom survey responses whose survey has not expired or whose response arrived within 14 days. Other submission types use their received date. RSVPs move to **Past** immediately when their event ends; the other records move there when their applicable period passes. **Archived** contains manually archived submissions and responses belonging to archived surveys.

@@ -198,3 +198,81 @@ test('library combines title search with collection and keeps draft, event, cust
   assert.ok(titles(root).includes('AI workshop custom'));
   controller.clear();
 });
+
+test('custom response viewer shows skipped original builder questions and preserves zero and shared-only Advisor answers', async () => {
+  const { responseSections } = await import('../surveys/results-ui.js');
+  document.createElement = (tag) => ({
+    tag,
+    children: [],
+    append(...children) {
+      this.children.push(...children);
+    },
+  });
+  const text = (el) =>
+    [el.textContent, ...el.children.map(text)]
+      .filter((value) => value !== undefined)
+      .join('\n');
+  const saved = {
+    ...result('builder'),
+    response_definition: {
+      questions: [
+        { id: 'zero', title: 'Original zero question' },
+        {
+          id: 'skipped',
+          title: 'Original optional question',
+          choiceDate: '2099-10-02',
+        },
+      ],
+    },
+    responses: [{ id: 'zero', title: 'Original zero question', text: 0 }],
+  };
+  const shown = text(
+    responseSections([saved], {
+      definition: { questions: [{ id: 'skipped', title: 'Changed wording' }] },
+    }),
+  );
+  assert.match(shown, /Original zero question\n0/);
+  assert.match(shown, /2099-10-02 · Original optional question\nNo answer/);
+  assert.doesNotMatch(shown, /Changed wording/);
+  const blank = text(responseSections([{ ...saved, responses: [] }]));
+  assert.match(blank, /Original zero question\nNo answer/);
+  assert.match(blank, /Original optional question\nNo answer/);
+  const { responseDocument } = await import('../admin/response-document.js');
+  assert.equal(
+    responseDocument(saved, { title: 'Survey', definition: {} }).blocks[1]
+      .question,
+    '2099-10-02 · Original optional question',
+  );
+  const advisor = text(
+    responseSections(
+      [
+        {
+          ...result('advisor'),
+          response_definition: {
+            chapters: [
+              {
+                id: 'first',
+                title: 'Original chapter',
+                core: ['shared', 'private'],
+              },
+            ],
+            questions: [{ id: 'q-private', title: 'Private question' }],
+          },
+          responses: [
+            {
+              id: 'q-shared',
+              group: 'first',
+              title: 'Shared question',
+              text: 'Shared answer',
+              mode: 'narrative',
+            },
+          ],
+        },
+      ],
+      { definition: { chapters: [{ id: 'first', title: 'Changed chapter' }] } },
+    ),
+  );
+  assert.match(advisor, /Original chapter/);
+  assert.match(advisor, /Shared question\nShared answer/);
+  assert.doesNotMatch(advisor, /Private question|Changed chapter/);
+});

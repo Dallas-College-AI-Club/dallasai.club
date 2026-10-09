@@ -92,10 +92,10 @@ export function customSurveysHandler({
           throw new RequestError(400, 'Choose a valid archive page.');
         const rows = (
           await getDatabase().query(
-            `SELECT s.id AS survey_id,s.title AS survey_title,s.definition,m.advisor_id,m.display_name,m.email,m.active,r.revision,r.responses,r.submitted_at,r.response_definition,
+            `SELECT s.id AS survey_id,s.title AS survey_title,s.definition,m.advisor_id,m.display_name,m.email,m.active,r.revision,r.responses,r.submitted_at,coalesce(r.response_definition,s.definition) AS response_definition,
           (SELECT max(a.created_at) FROM club_forms.custom_survey_activity a WHERE a.survey_id=m.survey_id AND a.advisor_id=m.advisor_id AND a.action='respondent_removed') AS archived_at
           FROM club_forms.custom_survey_members m JOIN club_forms.custom_survey_responses r USING(survey_id,advisor_id) JOIN club_forms.custom_surveys s ON s.id=m.survey_id
-          WHERE (NOT m.active OR s.status='archived') AND jsonb_array_length(r.responses)>0 ORDER BY archived_at DESC NULLS LAST,r.submitted_at DESC,s.id,m.advisor_id LIMIT 11 OFFSET $1`,
+          WHERE (NOT m.active OR s.status='archived') AND (jsonb_array_length(r.responses)>0 OR coalesce(r.response_definition,s.definition) IS NOT NULL) ORDER BY archived_at DESC NULLS LAST,r.submitted_at DESC,s.id,m.advisor_id LIMIT 11 OFFSET $1`,
             [offset],
           )
         ).rows;

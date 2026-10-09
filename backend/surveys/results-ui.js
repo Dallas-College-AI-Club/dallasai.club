@@ -5,7 +5,14 @@ const node = (tag, text, cls) => {
   return e;
 };
 export function partitionResponses(results) {
-  const submitted = results.filter((r) => r.revision && r.responses?.length);
+  const submitted = results.filter(
+    (r) =>
+      r.revision &&
+      Array.isArray(r.responses) &&
+      (r.responses.length ||
+        (r.response_definition?.questions?.length &&
+          !r.response_definition?.chapters?.length)),
+  );
   return {
     active: submitted.filter((r) => r.active !== false),
     archived: submitted.filter((r) => r.active === false),
@@ -79,8 +86,6 @@ export function responseSections(
       : view === 'archived'
         ? groups.archived
         : groups.active;
-  const chapters = definition?.chapters || [],
-    rank = answerRank(definition);
   function person(result, open) {
     const details = node('details', undefined, 'response-person');
     details.open = open;
@@ -97,18 +102,33 @@ export function responseSections(
     const body = node('div', undefined, 'response-body');
     if (actions) body.append(actions(result));
     const savedDefinition = result.response_definition || definition;
-    const savedRank = answerRank(savedDefinition);
+    const savedRank = answerRank(savedDefinition),
+      chapters = savedDefinition?.chapters || [],
+      answers = [...result.responses];
+    if (!chapters.length)
+      for (const question of savedDefinition?.questions || [])
+        if (!answers.some((answer) => answer.id === question.id))
+          answers.push({
+            id: question.id,
+            title:
+              (question.choiceDate ? question.choiceDate + ' · ' : '') +
+              question.title,
+          });
     let lastGroup;
-    for (const answer of [...result.responses].sort(
-      (a, b) => savedRank(a) - savedRank(b),
-    )) {
+    for (const answer of answers.sort((a, b) => savedRank(a) - savedRank(b))) {
       const chapter = chapters.find((c) => c.id === answer.group);
       if (chapter && lastGroup !== chapter.id) {
         body.append(node('h3', chapter.title, 'response-chapter'));
         lastGroup = chapter.id;
       }
       const card = node('section', undefined, 'response-answer');
-      card.append(node('h4', answer.title), node('p', answer.text));
+      card.append(
+        node('h4', answer.title),
+        node(
+          'p',
+          answer.text === '' || answer.text == null ? 'No answer' : answer.text,
+        ),
+      );
       if (answer.mode === 'narrative')
         card.append(node('small', 'Shared wording only', 'response-meta'));
       if (answer.mode === 'structured' && answer.answer?.mode === 'value')

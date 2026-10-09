@@ -14,7 +14,13 @@ import {
 } from '../lib/survey-builder.mjs';
 import { changeRespondent } from '../lib/survey-respondents.mjs';
 import { surveyCatalog } from '../lib/survey-catalog.mjs';
-import { surveyResultsCSV, surveyExportRows } from '../lib/survey-results.mjs';
+import {
+  surveyResultsCSV,
+  surveyExportRows,
+  surveyResultPage,
+} from '../lib/survey-results.mjs';
+import { inboxSource } from '../lib/inbox-surveys.mjs';
+import { homeSummary } from '../lib/home.mjs';
 import { responseDocument } from '../admin/response-document.js';
 import {
   privateSurveyToken,
@@ -681,6 +687,134 @@ async function add(
     requestId: randomUUID(),
   });
 }
+test('all-blank optional builder submissions remain visible in results, Inbox, counts and archives without exposing empty Advisor rows', async () => {
+  const f = await fixture();
+  process.env.AUTH_BASE_URL = 'https://club.example';
+  try {
+    const d = draft();
+    d.questions.forEach((q) => {
+      q.required = false;
+    });
+    const { id } = await create(f, d);
+    await add(f, id);
+    await add(f, id, 'unsaved@example.com', 1);
+    await changeDraft(f.db, actor, action(id, d, 1, 'publish'));
+    const link = privateSurveyToken(id),
+      survey = await linkedSurvey(f.db, link);
+    const device = await rememberDevice(f.db, survey, {
+      id: 'blank-member',
+      name: 'Blank member',
+      email: 'pearlman@example.com',
+      emailVerified: true,
+    });
+    await submitSurvey(
+      f.db,
+      { headers: { cookie: deviceCookie(survey) + '=' + device.token } },
+      link,
+      {
+        requestId: randomUUID(),
+        expectedRevision: 0,
+        contentVersion: FORM_VERSION,
+        advisorId: device.member.advisor_id,
+        consent: 'admins',
+        answers: [],
+      },
+    );
+    await f.db.query(
+      "INSERT INTO club_forms.custom_survey_responses(survey_id,advisor_id,revision,responses) VALUES($1,'pearlman',1,'[]')",
+      [f.id],
+    );
+    const catalog = await surveyCatalog(f.db);
+    assert.equal(catalog.find((s) => s.id === id).response_count, 1);
+    assert.equal(catalog.find((s) => s.id === f.id).response_count, 0);
+    const home = await homeSummary(f.db, [], []);
+    assert.equal(home.survey.id, id);
+    assert.equal(home.survey.responses, 1);
+    assert.ok(home.survey.latest);
+    assert.deepEqual(
+      home.newest.map((row) => row.surveyId),
+      [id],
+    );
+    const inbox = await f.db.query(
+      `${inboxSource} SELECT data->>'surveyId' AS id FROM inbox_rows`,
+    );
+    assert.deepEqual(
+      inbox.rows.map((row) => row.id),
+      [id],
+    );
+    const result = (await surveyResultPage(f.db, id)).results;
+    assert.equal(result.length, 1);
+    assert.equal(result[0].revision, 1);
+    assert.deepEqual(result[0].responses, []);
+    assert.equal(
+      result[0].response_definition.questions[0].title,
+      d.questions[0].title,
+    );
+    assert.deepEqual((await surveyResultPage(f.db, f.id)).results, []);
+    const exported = await surveyExportRows(f.db, id);
+    assert.equal(exported.length, 1);
+    assert.match(
+      surveyResultsCSV(exported, survey.definition),
+      /pearlman@example.com/,
+    );
+    assert.deepEqual(await surveyExportRows(f.db, f.id), []);
+    // Older builder rows can lack their snapshot; keep their saved submission visible.
+    await f.db.query(
+      'UPDATE club_forms.custom_survey_responses SET response_definition=NULL WHERE survey_id=$1',
+      [id],
+    );
+    assert.equal(
+      (await surveyResultPage(f.db, id)).results[0].response_definition
+        .questions[0].title,
+      d.questions[0].title,
+    );
+    assert.equal(
+      (await surveyExportRows(f.db, id))[0].response_definition.questions[0]
+        .title,
+      d.questions[0].title,
+    );
+    await f.db.query(
+      'UPDATE club_forms.custom_survey_members SET active=false WHERE (survey_id=$1 AND advisor_id=$2) OR survey_id=$3',
+      [id, device.member.advisor_id, f.id],
+    );
+    const archived = (await surveyCatalog(f.db)).find((s) => s.id === id);
+    assert.equal(archived.response_count, 0);
+    assert.equal(archived.archived_response_count, 1);
+    let payload;
+    const res = {
+      setHeader() {},
+      end(body) {
+        payload = JSON.parse(body);
+      },
+    };
+    await f.handler(
+      {
+        url: '/api/custom-surveys?action=archived-responses',
+        method: 'GET',
+        headers: { cookie: 'test-officer=yes', host: 'club.example' },
+      },
+      res,
+    );
+    assert.equal(res.statusCode, 200);
+    assert.equal(payload.responses.length, 1);
+    assert.equal(payload.responses[0].survey_id, id);
+    assert.equal(
+      payload.responses[0].response_definition.questions[0].title,
+      d.questions[0].title,
+    );
+    assert.equal(
+      (await surveyResultPage(f.db, id, '0', { view: 'archived' })).results
+        .length,
+      1,
+    );
+    assert.equal(
+      (await surveyExportRows(f.db, id, { view: 'archived' })).length,
+      1,
+    );
+  } finally {
+    await f.db.close();
+  }
+});
 test('drafts save idempotently; publishing starts expiry, freezes definitions, and closing retains answers', async () => {
   const f = await fixture();
   process.env.AUTH_BASE_URL = 'https://club.example';

@@ -167,12 +167,17 @@ test('completion requires every published same-event survey; archived evidence c
     "UPDATE club_forms.custom_survey_responses SET responses='[]' WHERE survey_id=$1",
     [second],
   );
-  assert.equal((await read()).feedback_status, 'missing');
+  assert.equal((await read()).feedback_status, 'submitted');
+  const exported = (await reportRows(db, { type: 'feedback' })).filter(
+    (row) => row.survey_id === second,
+  );
+  assert.equal(exported.length, 1);
+  assert.deepEqual(exported[0].answers, []);
   await db.query(
     'DELETE FROM club_forms.custom_survey_responses WHERE survey_id=$1',
     [first],
   );
-  assert.equal((await read()).feedback_submitted_count, 0);
+  assert.equal((await read()).feedback_submitted_count, 1);
 });
 
 test('list, count, summary and CSV combine participation filters across pages with archive, search and bookmarks', async () => {

@@ -100,7 +100,12 @@ export async function uploadEventImage(
     throw new RequestError(413, 'Choose an image under 2 MB.');
   let output;
   try {
-    const input = sharp(bytes, { limitInputPixels: 25000000, failOn: 'error' });
+    // Print-resolution flyers often exceed 25 megapixels. The output is
+    // resized to 1800 px, and JPEG decoding shrinks on load.
+    const input = sharp(bytes, {
+      limitInputPixels: 100000000,
+      failOn: 'error',
+    });
     const metadata = await input.metadata();
     if (
       !['jpeg', 'png', 'webp'].includes(metadata.format) ||
@@ -117,10 +122,15 @@ export async function uploadEventImage(
       })
       .webp({ quality: 82 })
       .toBuffer({ resolveWithObject: true });
-  } catch {
+  } catch (error) {
+    if (/pixel limit/i.test(error?.message))
+      throw new RequestError(
+        400,
+        'This image is over 100 megapixels. Export it about 2000 pixels tall and try again.',
+      );
     throw new RequestError(
       400,
-      'Use a valid, still JPG, PNG, or WebP image (up to 25 megapixels).',
+      'Use a valid, still JPG, PNG, or WebP image (up to 100 megapixels).',
     );
   }
   const id = randomUUID();

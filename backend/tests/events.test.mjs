@@ -667,8 +667,18 @@ test('dates, Central daylight saving changes, end times, and meeting URLs are va
     { startTime: '25:00' },
     { meetingUrl: 'javascript:alert(1)' },
     { meetingUrl: 'https://name:password@example.com' },
+    { signupUrl: 'javascript:alert(1)' },
+    { signupUrl: 'http://tinyurl.com/ai-programmin-for-all' },
+    { signupUrl: 'https://name:password@example.com' },
   ])
     assert.throws(() => draftContent({ ...draft, ...change }));
+  assert.equal(
+    publicContent('signup', {
+      ...draft,
+      signupUrl: ' https://tinyurl.com/ai-programmin-for-all ',
+    }).signupUrl,
+    'https://tinyurl.com/ai-programmin-for-all',
+  );
   assert.equal(draftContent({ title: 'Date not decided' }).date, '');
   assert.throws(
     () => publicContent('draft', { title: 'Date not decided' }),

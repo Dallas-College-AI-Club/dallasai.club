@@ -294,13 +294,17 @@ export function eventOverview(row, status, startEditing) {
     }
     fragment.append(list);
   }
-  if (event.meetingUrl) {
-    const link = node('a', 'Open meeting link ↗');
-    link.href = event.meetingUrl;
-    link.target = '_blank';
-    link.rel = 'noopener';
-    fragment.append(link);
-  }
+  for (const [url, label] of [
+    [event.signupUrl, 'Open sign-up link ↗'],
+    [event.meetingUrl, 'Open meeting link ↗'],
+  ])
+    if (url) {
+      const link = node('a', label);
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      fragment.append(link);
+    }
   if (event.images?.length) {
     const gallery = node('div', undefined, 'event-overview-gallery');
     for (const image of event.images) {

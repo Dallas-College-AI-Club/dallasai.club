@@ -103,6 +103,7 @@ export function draftContent(input, publish = false) {
     agenda: lines(input.agenda, 'the agenda'),
     preparation: lines(input.preparation, 'what to bring'),
     meetingUrl: text(input.meetingUrl, 'the meeting link', 2000),
+    signupUrl: text(input.signupUrl, 'the sign-up link', 2000),
     registrationOpen: input.registrationOpen !== false,
     images: [],
   };
@@ -123,16 +124,20 @@ export function draftContent(input, publish = false) {
     new Set(draft.images.map((image) => image.id)).size !== draft.images.length
   )
     throw new RequestError(400, 'Each image can appear only once.');
-  if (draft.meetingUrl) {
+  for (const [key, label] of [
+    ['meetingUrl', 'meeting link'],
+    ['signupUrl', 'sign-up link'],
+  ]) {
+    if (!draft[key]) continue;
     let url;
     try {
-      url = new URL(draft.meetingUrl);
+      url = new URL(draft[key]);
     } catch {
       /* checked below */
     }
     if (!url || url.protocol !== 'https:' || url.username || url.password)
-      throw new RequestError(400, 'Use a full https:// meeting link.');
-    draft.meetingUrl = url.href;
+      throw new RequestError(400, `Use a full https:// ${label}.`);
+    draft[key] = url.href;
   }
   if (draft.startTime && !draft.date)
     throw new RequestError(400, 'Add a date before choosing a time.');
@@ -183,6 +188,7 @@ export function publicContent(id, input, preview = false) {
     learningOutcomes: draft.learningOutcomes,
     preparation: draft.preparation,
     meetingUrl: draft.meetingUrl,
+    signupUrl: draft.signupUrl,
     registrationOpen: draft.registrationOpen,
     images: draft.images,
     url: 'club.html?mode=events&event=' + encodeURIComponent(id),
@@ -202,6 +208,7 @@ export function editableContent(event) {
     endDate: end.slice(0, 10),
     endTime: end.slice(11, 16),
     meetingUrl: event.meetingUrl || '',
+    signupUrl: event.signupUrl || '',
     registrationOpen: event.registrationOpen !== false,
   };
 }

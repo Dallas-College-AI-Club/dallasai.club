@@ -10,6 +10,13 @@ let started = false,
 export let eventsFresh = !EVENTS_API_URL;
 export let eventsStatus = EVENTS_API_URL ? 'loading' : 'ready';
 
+function httpsLink(value) {
+  if (!value) return '';
+  const link = new URL(value);
+  if (link.protocol !== 'https:' || link.username || link.password)
+    throw new Error('Invalid link');
+  return link.href;
+}
 function cleanEvent(event) {
   if (
     !event ||
@@ -21,20 +28,9 @@ function cleanEvent(event) {
       : event.potential !== true)
   )
     throw new Error('Invalid event');
-  let meetingUrl = '';
-  if (event.meetingUrl) {
-    const link = new URL(event.meetingUrl);
-    if (link.protocol !== 'https:' || link.username || link.password)
-      throw new Error('Invalid link');
-    meetingUrl = link.href;
-  }
-  let feedbackUrl = '';
-  if (event.feedbackUrl) {
-    const link = new URL(event.feedbackUrl);
-    if (link.protocol !== 'https:' || link.username || link.password)
-      throw new Error('Invalid feedback link');
-    feedbackUrl = link.href;
-  }
+  const meetingUrl = httpsLink(event.meetingUrl),
+    signupUrl = httpsLink(event.signupUrl),
+    feedbackUrl = httpsLink(event.feedbackUrl);
   return {
     id: event.id,
     title: event.title,
@@ -65,6 +61,7 @@ function cleanEvent(event) {
       ? event.preparation.map(String)
       : [],
     meetingUrl,
+    signupUrl,
     registrationOpen: event.registrationOpen !== false,
     images: Array.isArray(event.images)
       ? event.images

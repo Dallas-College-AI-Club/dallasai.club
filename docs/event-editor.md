@@ -43,6 +43,9 @@ again on unpublish or archive. Stored files remain available for edit history.
 - **Publish event** updates the public calendar, event search, Latest, and RSVP
   eligibility. Scheduled events require a date; potential events may show TBD. Times are optional.
 - Clear **Accept RSVPs** and publish to close new registrations.
+- **Sign-up link (optional)** takes an https:// address for registration
+  outside this website, such as a college form. The event page shows a
+  **Sign up ↗** button in place of “RSVPs are closed” until the event starts.
 - **Unpublish** removes the event from the public calendar and prevents new
   registrations. Draft content, previous RSVPs, and edit history are retained.
 - **Duplicate event** starts a separate draft with the current details.

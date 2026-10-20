@@ -234,6 +234,8 @@ export function mountEvents(root) {
       !feedbackStarted &&
       !privatePreview &&
       selected.registrationOpen !== false;
+    // An outside sign-up form, such as a college registration, until the event starts.
+    const signupUrl = !past && !feedbackStarted ? selected.signupUrl : '';
     const feedbackUrl =
       responseState.status === 'open' && !privatePreview
         ? selected.feedbackUrl ||
@@ -284,6 +286,7 @@ export function mountEvents(root) {
           : ''
       }
       <div class="event-detail-actions">
+        ${signupUrl ? '<a id="event-signup-action" class="solid-link" target="_blank" rel="noopener" href="' + escapeHTML(signupUrl) + '">Sign up ↗</a>' : ''}
         ${selected.meetingUrl ? '<a class="outline-link" target="_blank" rel="noopener" href="' + escapeHTML(selected.meetingUrl) + '">Open meeting link ↗</a>' : ''}
         ${feedbackUrl ? '<a id="event-feedback-action" class="solid-link" href="' + escapeHTML(feedbackUrl) + '">Event feedback</a>' : ''}
         ${past || privatePreview ? '' : /* HTML */ `${canRSVP ? '<button id="event-rsvp-action" class="solid-link">RSVP for this event</button>' : ''}${selected.date ? '<button id="save-event" class="outline-link">Add to calendar ↓</button>' : ''}`}${privatePreview ? '' : '<button id="ask-event-question" class="outline-link">Ask about this event</button>'}
@@ -317,7 +320,7 @@ export function mountEvents(root) {
           '</button>',
       );
       q('#open-rsvp').onclick = () => rsvp.open(selected);
-    } else if (!privatePreview) {
+    } else if (!privatePreview && !signupUrl) {
       panel.insertAdjacentHTML(
         'beforeend',
         feedbackStarted && responseState.status === 'expired'

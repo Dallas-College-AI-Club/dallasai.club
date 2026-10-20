@@ -34,6 +34,10 @@ the detail column on desktop, full width on phones, and open larger when clicked
 Images remain private until referenced by a published event, and become private
 again on unpublish or archive. Stored files remain available for edit history.
 
+A PDF flyer (up to 20 MB) can be chosen as well: Club Office draws page 1 in the
+browser and uploads only that image. If a file is refused, the message names the
+file and the reason.
+
 - **Save draft** keeps changes private. A date is optional until publication.
 - **Preview** opens the actual public website in a private desktop/mobile preview,
   including unsaved text and images. **Try RSVP preview** lets you fill in answers

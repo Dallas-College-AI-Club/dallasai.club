@@ -15,6 +15,7 @@ import {
   eventFeedbackURL,
 } from '../lib/event-feedback-definition.mjs';
 import sharp from 'sharp';
+import { jsPDF } from 'jspdf';
 const backend = fileURLToPath(new URL('../', import.meta.url));
 const site = path.resolve(backend, '../public');
 const screens = path.resolve(backend, '../.preview/event-checks');
@@ -66,6 +67,12 @@ const feedback = eventFeedbackHandler({
   rateLimit: async () => {},
 });
 process.env.BLOB_READ_WRITE_TOKEN = 'test-only';
+// Club Office runs under vercel.json's CSP in production; serve it the same way.
+const adminPolicy = JSON.parse(
+  await readFile(path.join(backend, 'vercel.json'), 'utf8'),
+)
+  .headers.find((rule) => rule.source === '/admin/(.*)')
+  .headers.find((header) => header.key === 'Content-Security-Policy').value;
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/api/events') return events(req, res);
@@ -127,6 +134,14 @@ const server = http.createServer(async (req, res) => {
   );
   try {
     if (!file.startsWith(root + path.sep)) throw Error();
+    if (root !== site)
+      res.setHeader(
+        'Content-Security-Policy',
+        adminPolicy.replace(
+          'https://dallasai.club',
+          'http://127.0.0.1:' + server.address().port,
+        ),
+      );
     res.setHeader(
       'Content-Type',
       file.endsWith('.js')
@@ -325,6 +340,55 @@ try {
       { exact: true },
     )
     .waitFor();
+  // Each refusal names the file and the reason before anything uploads.
+  const imageStatus = page.locator('#image-status');
+  await page.locator('#event-image-upload').setInputFiles({
+    name: 'notes.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('notes'),
+  });
+  await expect(imageStatus).toHaveText(
+    'notes.txt is not a JPG, PNG, WebP, or PDF file.',
+  );
+  await page.locator('#event-image-upload').setInputFiles({
+    name: 'big.png',
+    mimeType: 'image/png',
+    buffer: Buffer.alloc(3 * 1048576),
+  });
+  await expect(imageStatus).toHaveText(
+    'big.png is 3.0 MB. Images must be under 2 MB; export a smaller copy.',
+  );
+  // A PDF flyer becomes a portrait image from its first page, under the CSP.
+  const flyer = new jsPDF({ unit: 'pt', format: [612, 792] });
+  flyer.setFillColor('#123456').rect(40, 40, 532, 300, 'F');
+  flyer.text('AI + Programming for All', 60, 400);
+  flyer.addPage().text('Second page', 60, 60);
+  await page.locator('#event-image-upload').setInputFiles({
+    name: 'flyer.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from(flyer.output('arraybuffer')),
+  });
+  await expect(imageStatus).toHaveText(
+    'Page 1 of flyer.pdf (2 pages) was added as an image. Uploaded. Save your draft to keep these images. Descriptions are optional.',
+    { timeout: 20000 },
+  );
+  const converted = (
+    await db.query(
+      'SELECT pathname, width, height FROM club_forms.event_images ORDER BY created_at DESC LIMIT 1',
+    )
+  ).rows[0];
+  assert.deepEqual(
+    { width: converted.width, height: converted.height },
+    { width: 1391, height: 1800 },
+  );
+  // The page was drawn, not left blank: the dark panel is where page 1 has it.
+  const panel = await sharp(
+    await sharp(imageFiles.get(converted.pathname))
+      .extract({ left: 200, top: 200, width: 100, height: 100 })
+      .toBuffer(),
+  ).stats();
+  assert.ok(panel.channels[0].mean < 40 && panel.channels[2].mean > 70);
+  await page.getByRole('button', { name: 'Remove image' }).nth(1).click();
   await page
     .getByLabel('Image 1 description (optional)', { exact: true })
     .fill('Workshop illustration');

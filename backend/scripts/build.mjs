@@ -73,6 +73,11 @@ await build({
   // optional libraries external.
   external: ['canvg', 'dompurify', 'html2canvas'],
 });
+// PDF.js runs its parser in a worker that admin/pdf-flyer.js loads by URL.
+await cp(
+  path.join(root, 'node_modules/pdfjs-dist/build/pdf.worker.min.mjs'),
+  path.join(root, 'public/admin/pdf.worker.js'),
+);
 await mkdir(path.join(root, 'public/surveys'), { recursive: true });
 for (const file of ['index.html', 'style.css', 'availability.css'])
   await cp(

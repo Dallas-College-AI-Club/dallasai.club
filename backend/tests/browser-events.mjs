@@ -804,7 +804,9 @@ try {
     0,
   );
   const upcoming = (await liveEvents(db, []))[0];
-  // Once a timed event has started, even without feedback, Sign up goes away.
+  // When a timed event starts, even without feedback, Sign up goes away on an
+  // open page without a reload or a change in the event data.
+  const startsAt = new Date(Date.now() + 4000).toISOString();
   const underway = (route) =>
     route.fulfill({
       json: {
@@ -812,7 +814,7 @@ try {
           {
             ...upcoming,
             feedbackEnabled: false,
-            date: new Date(Date.now() - 3600000).toISOString(),
+            date: startsAt,
             end: new Date(Date.now() + 3600000).toISOString(),
           },
         ],
@@ -823,7 +825,8 @@ try {
     underway,
   );
   await refreshPublicEvents();
-  await expect(signup).toHaveCount(0);
+  await expect(signup).toHaveCount(1);
+  await expect(signup).toHaveCount(0, { timeout: 10000 });
   await publicPage.unroute(
     'https://dallasai-leaderboard.vercel.app/api/events',
     underway,

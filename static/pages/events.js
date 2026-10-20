@@ -41,6 +41,9 @@ export function monthCells(year, month) {
 }
 const parts = (e) =>
   (e.date || new Date().toISOString()).slice(0, 10).split('-').map(Number);
+// A timed event has started once its start time passes; date-only never does.
+const eventStarted = (e) =>
+  Boolean(e.date?.includes('T') && new Date(e.date) <= new Date());
 export function eventsMarkup() {
   return /* HTML */ `<header class="space-masthead">
       <div class="space-title-row">
@@ -236,10 +239,10 @@ export function mountEvents(root) {
       selected.registrationOpen !== false;
     // An outside sign-up form, such as a college registration, until the event
     // starts (until its day ends when no time is set).
-    const started =
-      feedbackStarted ||
-      (selected.date?.includes('T') && new Date(selected.date) <= new Date());
-    const signupUrl = !past && !started ? selected.signupUrl : '';
+    const signupUrl =
+      !past && !feedbackStarted && !eventStarted(selected)
+        ? selected.signupUrl
+        : '';
     const feedbackUrl =
       responseState.status === 'open' && !privatePreview
         ? selected.feedbackUrl ||
@@ -572,9 +575,16 @@ export function mountEvents(root) {
     draw();
     freshness();
   };
+  // Redraw when an event starts (the Sign up button goes), ends, or its
+  // feedback opens or closes.
   const timeState = () =>
     EVENTS.map(
-      (event) => eventIsPast(event) + ':' + eventFeedbackState(event).status,
+      (event) =>
+        eventStarted(event) +
+        ':' +
+        eventIsPast(event) +
+        ':' +
+        eventFeedbackState(event).status,
     ).join(',');
   let previousTimeState = timeState();
   const checkTime = () => {

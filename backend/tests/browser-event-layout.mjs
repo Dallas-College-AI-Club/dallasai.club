@@ -143,6 +143,21 @@ const browser = await chromium.launch({
   executablePath: process.env.CHROME_PATH,
   headless: true,
 });
+// Italic must look different from upright text inside the given container.
+async function italicShows(page, container) {
+  const shots = [];
+  for (const tag of ['em', 'span']) {
+    await page.locator(container).evaluate((el, tag) => {
+      el.querySelector('#italic-probe')?.remove();
+      const probe = el.appendChild(document.createElement(tag));
+      probe.id = 'italic-probe';
+      probe.textContent = 'Italic probe text';
+    }, tag);
+    shots.push(await page.locator('#italic-probe').screenshot());
+  }
+  await page.locator('#italic-probe').evaluate((el) => el.remove());
+  return !shots[0].equals(shots[1]);
+}
 
 try {
   await saveEvent(
@@ -238,9 +253,10 @@ try {
   assert.equal(await admin.locator('#event-form').isVisible(), false);
   await admin.locator('#event-overview').waitFor();
   assert.equal(writes, 0);
+  // Only the short-link name is editable outside the event form.
   assert.equal(
     await admin
-      .locator('#event-overview input,#event-overview textarea')
+      .locator('#event-overview :is(input, textarea):not(#event-short-alias)')
       .count(),
     0,
   );
@@ -369,6 +385,9 @@ try {
       .count(),
     1,
   );
+  assert.ok(
+    await italicShows(admin, '#event-overview .event-richtext >> nth=0'),
+  );
   const page = await context.newPage();
   page.on('pageerror', (e) => errors.push(e.message));
   await page.route(
@@ -399,6 +418,10 @@ try {
   assert.equal(
     await page.locator('.event-description strong').first().textContent(),
     'plan carefully',
+  );
+  assert.ok(await italicShows(page, '#event-detail .event-description'));
+  assert.ok(
+    await italicShows(page, '#event-detail .event-agenda-list li p >> nth=0'),
   );
   assert.equal(
     await page

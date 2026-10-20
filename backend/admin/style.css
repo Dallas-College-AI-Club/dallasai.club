@@ -1431,6 +1431,10 @@ input::file-selector-button {
 .event-overview .event-richtext p {
   white-space: normal;
 }
+/* Synthesis is off and DM Sans has no italic face; *italic* needs the slant. */
+.event-overview em {
+  font-synthesis-style: auto;
+}
 .event-overview .event-agenda-list {
   list-style: none;
   padding: 0;

@@ -73,11 +73,24 @@ await build({
   // optional libraries external.
   external: ['canvg', 'dompurify', 'html2canvas'],
 });
-// PDF.js runs its parser in a worker that admin/pdf-flyer.js loads by URL.
+// PDF.js runs its parser in a worker that admin/pdf-flyer.js loads by URL,
+// and imports its JavaScript JPEG 2000 and JBIG2 decoders, with their
+// license notices, from pdfjs/.
 await cp(
   path.join(root, 'node_modules/pdfjs-dist/build/pdf.worker.min.mjs'),
   path.join(root, 'public/admin/pdf.worker.js'),
 );
+await mkdir(path.join(root, 'public/admin/pdfjs'));
+for (const decoder of ['openjpeg', 'jbig2'])
+  for (const file of [
+    decoder + '_nowasm_fallback.js',
+    'LICENSE_' + decoder.toUpperCase(),
+    'LICENSE_PDFJS_' + decoder.toUpperCase(),
+  ])
+    await cp(
+      path.join(root, 'node_modules/pdfjs-dist/wasm', file),
+      path.join(root, 'public/admin/pdfjs', file),
+    );
 await mkdir(path.join(root, 'public/surveys'), { recursive: true });
 for (const file of ['index.html', 'style.css', 'availability.css'])
   await cp(

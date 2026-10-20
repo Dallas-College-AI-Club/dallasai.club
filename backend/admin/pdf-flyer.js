@@ -2,8 +2,10 @@
 // Loaded on demand, so officers who never pick a PDF never download PDF.js.
 import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
 
-// The build copies the worker next to this file; the Club Office CSP allows
-// scripts and workers from 'self' only, and no eval or WebAssembly.
+// The build copies the worker and PDF.js's plain-JavaScript image decoders
+// next to this file. The Club Office CSP allows scripts and workers from
+// 'self' only and no WebAssembly, so without those decoders JPEG 2000 and
+// JBIG2 images (common in scanned flyers) would silently render blank.
 GlobalWorkerOptions.workerSrc = new URL(
   './pdf.worker.js',
   import.meta.url,
@@ -12,8 +14,8 @@ GlobalWorkerOptions.workerSrc = new URL(
 export async function pdfFlyerImage(file, longSide = 2400, maxBytes = 2097152) {
   const task = getDocument({
     data: new Uint8Array(await file.arrayBuffer()),
-    isEvalSupported: false,
     useWasm: false,
+    wasmUrl: new URL('./pdfjs/', import.meta.url).href,
   });
   try {
     const pdf = await task.promise;

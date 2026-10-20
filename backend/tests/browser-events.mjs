@@ -363,32 +363,47 @@ try {
   flyer.setFillColor('#123456').rect(40, 40, 532, 300, 'F');
   flyer.text('AI + Programming for All', 60, 400);
   flyer.addPage().text('Second page', 60, 60);
-  await page.locator('#event-image-upload').setInputFiles({
-    name: 'flyer.pdf',
-    mimeType: 'application/pdf',
-    buffer: Buffer.from(flyer.output('arraybuffer')),
-  });
-  await expect(imageStatus).toHaveText(
-    'Page 1 of flyer.pdf (2 pages) was added as an image. Uploaded. Save your draft to keep these images. Descriptions are optional.',
-    { timeout: 20000 },
-  );
-  const converted = (
-    await db.query(
-      'SELECT pathname, width, height FROM club_forms.event_images ORDER BY created_at DESC LIMIT 1',
-    )
-  ).rows[0];
-  assert.deepEqual(
-    { width: converted.width, height: converted.height },
-    { width: 1391, height: 1800 },
-  );
-  // The page was drawn, not left blank: the dark panel is where page 1 has it.
-  const panel = await sharp(
-    await sharp(imageFiles.get(converted.pathname))
-      .extract({ left: 200, top: 200, width: 100, height: 100 })
-      .toBuffer(),
-  ).stats();
-  assert.ok(panel.channels[0].mean < 40 && panel.channels[2].mean > 70);
-  await page.getByRole('button', { name: 'Remove image' }).nth(1).click();
+  // The second PDF's panel is a JPEG 2000 image, as in scanned flyers; it
+  // needs PDF.js's JavaScript decoder, since the CSP rules out WebAssembly.
+  for (const [name, buffer, note] of [
+    ['flyer.pdf', Buffer.from(flyer.output('arraybuffer')), ' (2 pages)'],
+    [
+      'jpx-flyer.pdf',
+      await readFile(new URL('./fixtures/jpx-flyer.pdf', import.meta.url)),
+      '',
+    ],
+  ]) {
+    await page
+      .locator('#event-image-upload')
+      .setInputFiles({ name, mimeType: 'application/pdf', buffer });
+    await expect(imageStatus).toHaveText(
+      'Page 1 of ' +
+        name +
+        note +
+        ' was added as an image. Uploaded. Save your draft to keep these images. Descriptions are optional.',
+      { timeout: 20000 },
+    );
+    const converted = (
+      await db.query(
+        'SELECT pathname, width, height FROM club_forms.event_images ORDER BY created_at DESC LIMIT 1',
+      )
+    ).rows[0];
+    assert.deepEqual(
+      { width: converted.width, height: converted.height },
+      { width: 1391, height: 1800 },
+    );
+    // The page was drawn, not left blank: the dark panel is where page 1 has it.
+    const panel = await sharp(
+      await sharp(imageFiles.get(converted.pathname))
+        .extract({ left: 200, top: 200, width: 100, height: 100 })
+        .toBuffer(),
+    ).stats();
+    assert.ok(
+      panel.channels[0].mean < 40 && panel.channels[2].mean > 70,
+      name + ' was drawn',
+    );
+    await page.getByRole('button', { name: 'Remove image' }).nth(1).click();
+  }
   await page
     .getByLabel('Image 1 description (optional)', { exact: true })
     .fill('Workshop illustration');

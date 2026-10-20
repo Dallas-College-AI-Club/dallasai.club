@@ -2,16 +2,15 @@ export function careerMarkup() {
   return /* HTML */ `<section class="career-project" aria-labelledby="career-title">
     <div class="career-copy">
       <span class="tag">02 / WORK IN PROGRESS</span>
-      <h2 id="career-title" tabindex="-1">Career Resume Builder</h2>
-      <p>Your experience. The right words.</p>
+      <h2 id="career-title" tabindex="-1">Career & Venture Builder</h2>
+      <p><em>Connecting campus resources to real-world success.</em></p>
       <p>
-        A tool in development to help students tailor their resumes to a job description and prepare
-        for an interview.
+        A secure, private platform that unifies Dallas College resources to bridge the gaps of traditional third-party platforms, focusing entirely on genuine, value-add support.
       </p>
       <ul>
-        <li>Connect real experience to job requirements.</li>
-        <li>Refine a resume without inventing qualifications.</li>
-        <li>Practice questions relevant to the role.</li>
+        <li>Receive customized guidance based on your individual unique strengths and drive.</li>
+        <li>Match your goals to the latest, rapidly changing industry needs and trends.</li>
+        <li>Translate academic learning directly into career readiness or venture creation.</li>
       </ul>
       <span class="career-note">Preview the idea with a fictional student example.</span>
     </div>
@@ -40,12 +39,12 @@ export function careerMarkup() {
         ><button data-career="interview" aria-pressed="false">Interview prep</button>
       </div>
       <div class="career-role">
-        <span>TARGET ROLE</span><strong>Student IT support assistant</strong>
-        <p>Explain technical steps clearly · Troubleshoot problems · Keep accurate records</p>
+        <span>TARGET ROLE</span><strong>Project Coordinator</strong>
+        <p>Manage project timelines · Coordinate team communication · Track deliverables</p>
       </div>
       <div id="career-example" class="career-example"></div>
       <p class="career-disclaimer">
-        Illustrative examples. The resume-building tool is still in development.
+        Illustrative examples. The tool is currently in early development.
       </p>
     </div>
   </section>`;
@@ -60,34 +59,32 @@ export function mountCareer(root) {
     panel.innerHTML =
       mode === 'resume'
         ? /* HTML */ `<span class="career-label"
-              >${tailored ? 'REFINED FOR THIS ROLE' : 'A STUDENT’S EXPERIENCE'}</span
-            >
-            <blockquote>
-              ${tailored ? 'Helped classmates set up laptops and documented common setup problems in a checklist.' : 'I helped classmates set up their laptops and made a checklist of common problems.'}
-            </blockquote>
-            <div class="career-matches">
-              <span>✓ Communication</span><span>✓ Troubleshooting</span><span>✓ Documentation</span>
-            </div>
-            <button id="career-tailor">
-              ${tailored ? 'See original wording ↶' : 'See a tailored example ↗'}
-            </button>
-            <p class="career-evidence">
-              ${tailored ? 'Same experience, clearer connection. No new skills or outcomes added.' : 'Start with what you actually did. Make the connection easy to see.'}
-            </p>`
+            >${tailored ? 'REFINED FOR THIS ROLE' : 'A STUDENT’S EXPERIENCE'}</span
+          >
+          <blockquote>
+            ${tailored ? 'Coordinated a 5-person academic project team, developing a shared tracking system to manage deliverables and deadlines.' : 'I organized our final group project and made a shared spreadsheet so everyone knew what to do.'}
+          </blockquote>
+          <div class="career-matches">
+            <span>✓ Team Coordination</span><span>✓ Task Management</span><span>✓ Communication</span>
+          </div>
+          <button id="career-tailor">
+            ${tailored ? 'See original wording ↶' : 'See a tailored example ↗'}
+          </button>
+          <p class="career-evidence">
+            ${tailored ? 'Same experience, clearer professional connection. No invented outcomes.' : 'Start with what you actually did. Make the connection easy to see.'}
+          </p>`
         : /* HTML */ `<span class="career-label">PRACTICE WITH YOUR OWN EVIDENCE</span>
-            <h3>“How would you help someone who is frustrated with a technical problem?”</h3>
-            <ol>
-              <li><strong>Situation:</strong> Describe a classmate’s setup problem.</li>
-              <li>
-                <strong>Action:</strong> Explain how you listened and worked through it step by
-                step.
-              </li>
-              <li><strong>Result:</strong> Say what happened and what you learned.</li>
-            </ol>
-            <p class="career-evidence">
-              Use a real example. If you could not resolve the problem, explain how you asked for
-              help.
-            </p>`;
+          <h3>“Tell me about a time you had to manage multiple priorities to meet a deadline.”</h3>
+          <ol>
+            <li><strong>Situation:</strong> Describe an academic or club project with a tight deadline.</li>
+            <li>
+              <strong>Action:</strong> Explain how you prioritized tasks and communicated with your team.
+            </li>
+            <li><strong>Result:</strong> Share the final outcome and what you learned about project management.</li>
+          </ol>
+          <p class="career-evidence">
+            Use a real example. If you missed a deadline or faced a roadblock, explain how you adjusted and communicated the delay.
+          </p>`;
     const button = panel.querySelector('#career-tailor');
     if (button)
       button.onclick = () => {

@@ -804,6 +804,30 @@ try {
     0,
   );
   const upcoming = (await liveEvents(db, []))[0];
+  // Once a timed event has started, even without feedback, Sign up goes away.
+  const underway = (route) =>
+    route.fulfill({
+      json: {
+        events: [
+          {
+            ...upcoming,
+            feedbackEnabled: false,
+            date: new Date(Date.now() - 3600000).toISOString(),
+            end: new Date(Date.now() + 3600000).toISOString(),
+          },
+        ],
+      },
+    });
+  await publicPage.route(
+    'https://dallasai-leaderboard.vercel.app/api/events',
+    underway,
+  );
+  await refreshPublicEvents();
+  await expect(signup).toHaveCount(0);
+  await publicPage.unroute(
+    'https://dallasai-leaderboard.vercel.app/api/events',
+    underway,
+  );
   for (const unsafeUrl of [
     'http://example.test/feedback',
     'https://owner@example.test/feedback',

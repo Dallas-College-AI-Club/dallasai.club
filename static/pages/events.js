@@ -234,8 +234,12 @@ export function mountEvents(root) {
       !feedbackStarted &&
       !privatePreview &&
       selected.registrationOpen !== false;
-    // An outside sign-up form, such as a college registration, until the event starts.
-    const signupUrl = !past && !feedbackStarted ? selected.signupUrl : '';
+    // An outside sign-up form, such as a college registration, until the event
+    // starts (until its day ends when no time is set).
+    const started =
+      feedbackStarted ||
+      (selected.date?.includes('T') && new Date(selected.date) <= new Date());
+    const signupUrl = !past && !started ? selected.signupUrl : '';
     const feedbackUrl =
       responseState.status === 'open' && !privatePreview
         ? selected.feedbackUrl ||

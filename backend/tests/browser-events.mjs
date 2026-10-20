@@ -450,9 +450,12 @@ try {
     .evaluate((el) => (el.scrollTop = el.scrollHeight));
   const calendarAfter = await preview.locator('.event-calendar').boundingBox();
   assert.deepEqual(calendarAfter, calendarBefore);
+  // Flyers sit with the description, above the location and agenda.
   const gallery = preview.locator('.event-gallery');
   assert.equal(
-    await gallery.evaluate((el) => el === el.parentElement.lastElementChild),
+    await gallery.evaluate((el) =>
+      el.nextElementSibling.classList.contains('event-venue'),
+    ),
     true,
   );
   const previewImage = await gallery.locator('img').boundingBox();
@@ -617,7 +620,9 @@ try {
   assert.equal(
     await publicPage
       .locator('.event-gallery')
-      .evaluate((el) => el === el.parentElement.lastElementChild),
+      .evaluate((el) =>
+        el.nextElementSibling.classList.contains('event-venue'),
+      ),
     true,
   );
   await publicPage.locator('.event-gallery img').scrollIntoViewIfNeeded();

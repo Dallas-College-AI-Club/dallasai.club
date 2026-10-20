@@ -7,11 +7,12 @@ import {
   GlobalWorkerOptions,
 } from 'pdfjs-dist/legacy/build/pdf.mjs';
 
-// The build copies the worker, PDF.js's plain-JavaScript image decoders and
-// its character maps next to this file. The Club Office CSP allows scripts and
-// workers from 'self' only and no WebAssembly, so without the decoders JPEG
-// 2000 and JBIG2 images (common in scanned flyers) would silently render
-// blank, and without the maps Chinese, Japanese or Korean text would vanish.
+// The build copies the worker, PDF.js's plain-JavaScript image decoders, its
+// character maps and its standard fonts next to this file. The Club Office CSP
+// allows scripts and workers from 'self' only and no WebAssembly, so without
+// the decoders JPEG 2000 and JBIG2 images (common in scanned flyers) would
+// silently render blank, and without the maps Chinese, Japanese or Korean text
+// would vanish.
 GlobalWorkerOptions.workerSrc = new URL(
   './pdf.worker.js',
   import.meta.url,
@@ -25,6 +26,14 @@ export async function pdfFlyerImage(file, longSide = 2400, maxBytes = 2097152) {
     wasmUrl: assets,
     cMapUrl: assets + 'cmaps/',
     cMapPacked: true,
+    standardFontDataUrl: assets + 'standard_fonts/',
+    // As in the PDF.js viewer: Android's substitutes for the standard PDF
+    // fonts have different widths, so use the packaged fonts there.
+    useSystemFonts: !/Android/.test(navigator.userAgent),
+    // A 600 dpi letter or A4 scan is about 35 MP. Larger embedded images are
+    // left out rather than decoded at full size, which could end a phone tab;
+    // the officer sees the result in the editor before saving.
+    maxImageSize: 50000000,
   });
   try {
     const pdf = await task.promise;

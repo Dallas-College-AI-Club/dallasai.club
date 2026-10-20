@@ -2,7 +2,7 @@ import { testDatabase } from './helpers/db.mjs';
 import { chromium, expect } from '@playwright/test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { readFile, mkdir } from 'node:fs/promises';
+import { readFile, readdir, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { eventHandler } from '../api/events.mjs';
@@ -423,7 +423,8 @@ try {
         response.status() + ' ' + response.url().split('/cmaps/')[1],
       );
   };
-  page.on('response', watchMaps);
+  // The PDF.js worker fetches these, so watch the whole context.
+  context.on('response', watchMaps);
   await page.locator('#event-image-upload').setInputFiles({
     name: 'cjk-flyer.pdf',
     mimeType: 'application/pdf',
@@ -434,7 +435,7 @@ try {
   await expect(imageStatus).toHaveText(/^Page 1 of cjk-flyer\.pdf was added/, {
     timeout: 20000,
   });
-  page.off('response', watchMaps);
+  context.off('response', watchMaps);
   assert.ok(characterMaps.includes('200 UniJIS-UCS2-H.bcmap'));
   await page.getByRole('button', { name: 'Remove image' }).nth(1).click();
   // A page too detailed to fit 2 MB at full size is retried smaller: here every
@@ -463,6 +464,83 @@ try {
     1800,
   );
   await page.getByRole('button', { name: 'Remove image' }).nth(1).click();
+  // An embedded image over 50 megapixels is left out instead of being decoded
+  // at full size; the rest of the page still converts.
+  const huge = new jsPDF({ unit: 'pt', format: [612, 792] });
+  huge.addImage(
+    new Uint8Array(
+      await sharp({
+        create: {
+          width: 7100,
+          height: 7100,
+          channels: 3,
+          background: '#123456',
+        },
+      })
+        .jpeg()
+        .toBuffer(),
+    ),
+    'JPEG',
+    40,
+    40,
+    532,
+    300,
+  );
+  await page.locator('#event-image-upload').setInputFiles({
+    name: 'huge-image.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from(huge.output('arraybuffer')),
+  });
+  await expect(imageStatus).toHaveText(/^Page 1 of huge-image\.pdf was added/, {
+    timeout: 20000,
+  });
+  const hugePanel = await sharp(
+    await sharp(
+      imageFiles.get(
+        (
+          await db.query(
+            'SELECT pathname FROM club_forms.event_images ORDER BY created_at DESC LIMIT 1',
+          )
+        ).rows[0].pathname,
+      ),
+    )
+      .extract({ left: 200, top: 200, width: 100, height: 100 })
+      .toBuffer(),
+  ).stats();
+  assert.ok(hugePanel.channels[0].mean > 240, 'oversized image left out');
+  await page.getByRole('button', { name: 'Remove image' }).nth(1).click();
+  // On Android, PDF.js's packaged standard fonts replace system substitutes.
+  const android = await browser.newContext({
+    userAgent:
+      'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Mobile Safari/537.36',
+  });
+  const androidFonts = [];
+  android.on('response', (response) => {
+    if (response.url().includes('/admin/pdfjs/standard_fonts/'))
+      androidFonts.push(response.status());
+  });
+  const androidPage = await android.newPage();
+  await androidPage.goto(origin + '/admin/');
+  const chunk = (await readdir(path.join(backend, 'public/admin'))).find(
+    (name) => name.startsWith('pdf-flyer-'),
+  );
+  const helvetica = new jsPDF({ unit: 'pt', format: [612, 792] });
+  helvetica.setFontSize(48).text('Helvetica flyer', 60, 200);
+  assert.equal(
+    await androidPage.evaluate(
+      async ({ chunk, bytes }) => {
+        const { pdfFlyerImage } = await import('/admin/' + chunk);
+        const { pages } = await pdfFlyerImage(
+          new File([new Uint8Array(bytes)], 'helvetica.pdf'),
+        );
+        return pages;
+      },
+      { chunk, bytes: [...new Uint8Array(helvetica.output('arraybuffer'))] },
+    ),
+    1,
+  );
+  assert.deepEqual(androidFonts, [200]);
+  await android.close();
   await page
     .getByLabel('Image 1 description (optional)', { exact: true })
     .fill('Workshop illustration');

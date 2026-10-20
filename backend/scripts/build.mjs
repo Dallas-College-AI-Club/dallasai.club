@@ -74,20 +74,22 @@ await build({
   external: ['canvg', 'dompurify', 'html2canvas'],
 });
 // PDF.js (legacy build) runs its parser in a worker that admin/pdf-flyer.js
-// loads by URL, and reads its JavaScript JPEG 2000 and JBIG2 decoders and its
-// character maps from pdfjs/, alongside the license notices.
+// loads by URL, and reads its JavaScript JPEG 2000 and JBIG2 decoders, its
+// character maps and its standard fonts (with their Foxit and Liberation
+// licenses) from pdfjs/, alongside the license notices.
 const pdfjs = path.join(root, 'node_modules/pdfjs-dist');
 await cp(
   path.join(pdfjs, 'legacy/build/pdf.worker.min.mjs'),
   path.join(root, 'public/admin/pdf.worker.js'),
 );
-await cp(
-  path.join(pdfjs, 'cmaps'),
-  path.join(root, 'public/admin/pdfjs/cmaps'),
-  {
-    recursive: true,
-  },
-);
+for (const folder of ['cmaps', 'standard_fonts'])
+  await cp(
+    path.join(pdfjs, folder),
+    path.join(root, 'public/admin/pdfjs', folder),
+    {
+      recursive: true,
+    },
+  );
 await cp(
   path.join(pdfjs, 'LICENSE'),
   path.join(root, 'public/admin/pdfjs/LICENSE_PDFJS'),

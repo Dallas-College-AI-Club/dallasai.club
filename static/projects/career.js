@@ -5,14 +5,14 @@ export function careerMarkup() {
       <h2 id="career-title" tabindex="-1">Career & Venture Builder</h2>
       <p><em>Connecting campus resources to real-world success.</em></p>
       <p>
-        A secure, private platform that unifies Dallas College resources to bridge the gaps of traditional third-party platforms, focusing entirely on genuine, value-add support.
+        A secure, private platform that unifies existing resources to bridge the gaps of traditional third-party platforms, focusing entirely on genuine, value-add support.
       </p>
       <ul>
-        <li>Receive customized guidance based on your individual unique strengths and drive.</li>
-        <li>Match your goals to the latest, rapidly changing industry needs and trends.</li>
+        <li>Receive customized support based on your individual unique strengths and drive.</li>
+        <li>Align your goals to the latest, rapidly changing industry needs and trends.</li>
         <li>Translate academic learning directly into career readiness or venture creation.</li>
       </ul>
-      <span class="career-note">Preview the idea with a fictional student example.</span>
+      <span class="career-note">The preview features are subject to change as we iterate based on student needs and advisor feedback.</span>
     </div>
     <div class="career-workspace">
       <div class="career-vision" aria-hidden="true">
@@ -44,7 +44,7 @@ export function careerMarkup() {
       </div>
       <div id="career-example" class="career-example"></div>
       <p class="career-disclaimer">
-        Illustrative examples. The tool is currently in early development.
+         
       </p>
     </div>
   </section>`;

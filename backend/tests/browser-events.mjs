@@ -184,6 +184,16 @@ try {
   const context = await browser.newContext({
     viewport: { width: 1365, height: 950 },
   });
+  // While window.detailedPdfPage is set, tall canvases report an oversized JPEG.
+  await context.addInitScript(() => {
+    const toBlob = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function (done, ...options) {
+      if (!window.detailedPdfPage || this.height <= 1800)
+        return toBlob.call(this, done, ...options);
+      window.detailedPdfPage.push(this.height);
+      done(new Blob([new Uint8Array(3 * 1048576)], { type: 'image/jpeg' }));
+    };
+  });
   const page = await context.newPage();
   await context.route(
     'https://go.dallasai.club/test-published-event',
@@ -404,6 +414,55 @@ try {
     );
     await page.getByRole('button', { name: 'Remove image' }).nth(1).click();
   }
+  // Japanese, Chinese or Korean text often uses a predefined character map,
+  // which PDF.js must fetch from /admin/pdfjs/cmaps/.
+  const characterMaps = [];
+  const watchMaps = (response) => {
+    if (response.url().includes('/admin/pdfjs/cmaps/'))
+      characterMaps.push(
+        response.status() + ' ' + response.url().split('/cmaps/')[1],
+      );
+  };
+  page.on('response', watchMaps);
+  await page.locator('#event-image-upload').setInputFiles({
+    name: 'cjk-flyer.pdf',
+    mimeType: 'application/pdf',
+    buffer: await readFile(
+      new URL('./fixtures/cjk-flyer.pdf', import.meta.url),
+    ),
+  });
+  await expect(imageStatus).toHaveText(/^Page 1 of cjk-flyer\.pdf was added/, {
+    timeout: 20000,
+  });
+  page.off('response', watchMaps);
+  assert.ok(characterMaps.includes('200 UniJIS-UCS2-H.bcmap'));
+  await page.getByRole('button', { name: 'Remove image' }).nth(1).click();
+  // A page too detailed to fit 2 MB at full size is retried smaller: here every
+  // canvas taller than 1800 px reports an oversized JPEG.
+  await page.evaluate(() => (window.detailedPdfPage = []));
+  await page.locator('#event-image-upload').setInputFiles({
+    name: 'detailed.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from(flyer.output('arraybuffer')),
+  });
+  await expect(imageStatus).toHaveText(
+    /^Page 1 of detailed\.pdf \(2 pages\) was added/,
+    { timeout: 20000 },
+  );
+  assert.deepEqual(
+    await page.evaluate(() => window.detailedPdfPage.splice(0)),
+    [2400, 2400, 2400, 2400],
+  );
+  await page.evaluate(() => delete window.detailedPdfPage);
+  assert.equal(
+    (
+      await db.query(
+        'SELECT height FROM club_forms.event_images ORDER BY created_at DESC LIMIT 1',
+      )
+    ).rows[0].height,
+    1800,
+  );
+  await page.getByRole('button', { name: 'Remove image' }).nth(1).click();
   await page
     .getByLabel('Image 1 description (optional)', { exact: true })
     .fill('Workshop illustration');

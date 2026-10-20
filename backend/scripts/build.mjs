@@ -73,14 +73,25 @@ await build({
   // optional libraries external.
   external: ['canvg', 'dompurify', 'html2canvas'],
 });
-// PDF.js runs its parser in a worker that admin/pdf-flyer.js loads by URL,
-// and imports its JavaScript JPEG 2000 and JBIG2 decoders, with their
-// license notices, from pdfjs/.
+// PDF.js (legacy build) runs its parser in a worker that admin/pdf-flyer.js
+// loads by URL, and reads its JavaScript JPEG 2000 and JBIG2 decoders and its
+// character maps from pdfjs/, alongside the license notices.
+const pdfjs = path.join(root, 'node_modules/pdfjs-dist');
 await cp(
-  path.join(root, 'node_modules/pdfjs-dist/build/pdf.worker.min.mjs'),
+  path.join(pdfjs, 'legacy/build/pdf.worker.min.mjs'),
   path.join(root, 'public/admin/pdf.worker.js'),
 );
-await mkdir(path.join(root, 'public/admin/pdfjs'));
+await cp(
+  path.join(pdfjs, 'cmaps'),
+  path.join(root, 'public/admin/pdfjs/cmaps'),
+  {
+    recursive: true,
+  },
+);
+await cp(
+  path.join(pdfjs, 'LICENSE'),
+  path.join(root, 'public/admin/pdfjs/LICENSE_PDFJS'),
+);
 for (const decoder of ['openjpeg', 'jbig2'])
   for (const file of [
     decoder + '_nowasm_fallback.js',
@@ -88,7 +99,7 @@ for (const decoder of ['openjpeg', 'jbig2'])
     'LICENSE_PDFJS_' + decoder.toUpperCase(),
   ])
     await cp(
-      path.join(root, 'node_modules/pdfjs-dist/wasm', file),
+      path.join(pdfjs, 'wasm', file),
       path.join(root, 'public/admin/pdfjs', file),
     );
 await mkdir(path.join(root, 'public/surveys'), { recursive: true });

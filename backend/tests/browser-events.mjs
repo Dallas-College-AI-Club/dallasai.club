@@ -965,6 +965,47 @@ try {
       .count(),
     0,
   );
+  // An outside sign-up link replaces "RSVPs are closed" with a Sign up button.
+  if (!(await page.locator('#event-form').isVisible()))
+    await page.locator('#edit-selected-event').click();
+  await page
+    .locator('[name="signupUrl"]')
+    .fill('https://tinyurl.com/ai-programmin-for-all');
+  await page
+    .getByRole('button', { name: 'Publish event', exact: true })
+    .click();
+  await page
+    .locator('#event-status')
+    .getByText(
+      'Published successfully — live on the website. Editing is complete.',
+      { exact: true },
+    )
+    .waitFor();
+  assert.equal(
+    await page
+      .locator('#event-overview a', { hasText: 'Open sign-up link ↗' })
+      .getAttribute('href'),
+    'https://tinyurl.com/ai-programmin-for-all',
+  );
+  await publicPage.evaluate(async () => {
+    await (await import('/content/events.js')).refreshEvents();
+  });
+  const signup = publicPage.getByRole('link', {
+    name: 'Sign up ↗',
+    exact: true,
+  });
+  await signup.waitFor();
+  assert.equal(
+    await signup.getAttribute('href'),
+    'https://tinyurl.com/ai-programmin-for-all',
+  );
+  assert.equal(await signup.getAttribute('target'), '_blank');
+  assert.equal(
+    await publicPage
+      .getByText('RSVPs are closed for this event.', { exact: true })
+      .count(),
+    0,
+  );
   // Native feedback replaces RSVP from the event start, while it is still running.
   const feedbackUrl = eventFeedbackURL(id);
   const refreshPublicEvents = () =>
@@ -979,6 +1020,33 @@ try {
     0,
   );
   const upcoming = (await liveEvents(db, []))[0];
+  // When a timed event starts, even without feedback, Sign up goes away on an
+  // open page without a reload or a change in the event data.
+  const startsAt = new Date(Date.now() + 4000).toISOString();
+  const underway = (route) =>
+    route.fulfill({
+      json: {
+        events: [
+          {
+            ...upcoming,
+            feedbackEnabled: false,
+            date: startsAt,
+            end: new Date(Date.now() + 3600000).toISOString(),
+          },
+        ],
+      },
+    });
+  await publicPage.route(
+    'https://dallasai-leaderboard.vercel.app/api/events',
+    underway,
+  );
+  await refreshPublicEvents();
+  await expect(signup).toHaveCount(1);
+  await expect(signup).toHaveCount(0, { timeout: 10000 });
+  await publicPage.unroute(
+    'https://dallasai-leaderboard.vercel.app/api/events',
+    underway,
+  );
   for (const unsafeUrl of [
     'http://example.test/feedback',
     'https://owner@example.test/feedback',

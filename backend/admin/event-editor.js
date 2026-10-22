@@ -24,6 +24,7 @@ const blank = () => ({
   endTime: '',
   location: '',
   meetingUrl: '',
+  signupUrl: '',
   summary: '',
   agenda: [],
   preparation: [],

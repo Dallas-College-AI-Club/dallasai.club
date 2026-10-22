@@ -41,6 +41,9 @@ export function monthCells(year, month) {
 }
 const parts = (e) =>
   (e.date || new Date().toISOString()).slice(0, 10).split('-').map(Number);
+// A timed event has started once its start time passes; date-only never does.
+const eventStarted = (e) =>
+  Boolean(e.date?.includes('T') && new Date(e.date) <= new Date());
 export function eventsMarkup() {
   return /* HTML */ `<header class="space-masthead">
       <div class="space-title-row">
@@ -234,6 +237,12 @@ export function mountEvents(root) {
       !feedbackStarted &&
       !privatePreview &&
       selected.registrationOpen !== false;
+    // An outside sign-up form, such as a college registration, until the event
+    // starts (until its day ends when no time is set).
+    const signupUrl =
+      !past && !feedbackStarted && !eventStarted(selected)
+        ? selected.signupUrl
+        : '';
     const feedbackUrl =
       responseState.status === 'open' && !privatePreview
         ? selected.feedbackUrl ||
@@ -284,6 +293,7 @@ export function mountEvents(root) {
           : ''
       }
       <div class="event-detail-actions">
+        ${signupUrl ? '<a id="event-signup-action" class="solid-link" target="_blank" rel="noopener" href="' + escapeHTML(signupUrl) + '">Sign up ↗</a>' : ''}
         ${selected.meetingUrl ? '<a class="outline-link" target="_blank" rel="noopener" href="' + escapeHTML(selected.meetingUrl) + '">Open meeting link ↗</a>' : ''}
         ${feedbackUrl ? '<a id="event-feedback-action" class="solid-link" href="' + escapeHTML(feedbackUrl) + '">Event feedback</a>' : ''}
         ${past || privatePreview ? '' : /* HTML */ `${canRSVP ? '<button id="event-rsvp-action" class="solid-link">RSVP for this event</button>' : ''}${selected.date ? '<button id="save-event" class="outline-link">Add to calendar ↓</button>' : ''}`}${privatePreview ? '' : '<button id="ask-event-question" class="outline-link">Ask about this event</button>'}
@@ -317,7 +327,7 @@ export function mountEvents(root) {
           '</button>',
       );
       q('#open-rsvp').onclick = () => rsvp.open(selected);
-    } else if (!privatePreview) {
+    } else if (!privatePreview && !signupUrl) {
       panel.insertAdjacentHTML(
         'beforeend',
         feedbackStarted && responseState.status === 'expired'
@@ -565,9 +575,16 @@ export function mountEvents(root) {
     draw();
     freshness();
   };
+  // Redraw when an event starts (the Sign up button goes), ends, or its
+  // feedback opens or closes.
   const timeState = () =>
     EVENTS.map(
-      (event) => eventIsPast(event) + ':' + eventFeedbackState(event).status,
+      (event) =>
+        eventStarted(event) +
+        ':' +
+        eventIsPast(event) +
+        ':' +
+        eventFeedbackState(event).status,
     ).join(',');
   let previousTimeState = timeState();
   const checkTime = () => {

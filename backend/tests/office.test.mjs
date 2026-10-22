@@ -401,6 +401,50 @@ test('uploaded images are decoded, resized, private in drafts, public only while
     200,
   );
 });
+test('print-resolution flyers upload and resize; images over 100 megapixels (PNG 40) are refused, with that reason', async () => {
+  const flyer = await sharp({
+    create: { width: 5227, height: 7000, channels: 3, background: '#f4f1ec' },
+  })
+    .jpeg()
+    .toBuffer();
+  assert.ok(flyer.length < 2097152);
+  const upload = await request('/api/events?upload=1', {
+    content: flyer.toString('base64'),
+  });
+  assert.equal(upload.status, 200);
+  const { image } = await upload.json();
+  assert.equal(image.height, 1800);
+  assert.equal(image.width, 1344);
+  // PNG decodes in full, so its ceiling is lower: 36 MP passes, 49 MP does not.
+  const png = (size) =>
+    sharp({
+      create: { width: size, height: size, channels: 3, background: 'white' },
+    })
+      .png()
+      .toBuffer();
+  assert.equal(
+    (
+      await request('/api/events?upload=1', {
+        content: (await png(6000)).toString('base64'),
+      })
+    ).status,
+    200,
+  );
+  for (const huge of [
+    await sharp({
+      create: { width: 12000, height: 12000, channels: 3, background: 'white' },
+    })
+      .jpeg()
+      .toBuffer(),
+    await png(7000),
+  ]) {
+    const refused = await request('/api/events?upload=1', {
+      content: huge.toString('base64'),
+    });
+    assert.equal(refused.status, 400);
+    assert.match((await refused.json()).error, /too many pixels/);
+  }
+});
 test('image uploads reject unauthenticated clients and non-images; failed storage metadata removes the orphan', async () => {
   assert.equal(
     (await request('/api/events?upload=1', { content: 'abc' }, false)).status,

@@ -27,7 +27,8 @@ skills sessions, project workshops, and user testing to Workshop. Event details
 and original history remain intact. Adding an old label reuses its standard group.
 
 **Upload event images** accepts up to three still JPG, PNG, or WebP images, each
-under 2 MB and 25 megapixels. Images are decoded, resized to fit 1800 pixels,
+under 2 MB and 100 megapixels (PNG 40), so print-resolution flyers fit. Images
+are decoded, resized to fit 1800 pixels,
 converted to WebP, and stripped of metadata. Image descriptions are optional;
 an event-title fallback labels images when blank. Public posters use about half
 the detail column on desktop, full width on phones, and open larger when clicked. Removing an image from a draft does not alter the published event.

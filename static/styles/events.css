@@ -591,6 +591,12 @@ body:not(.reading) .content .potential-events h2 {
   font-weight: 600;
   color: var(--ink);
 }
+/* site.css turns synthesis off and DM Sans ships no italic face, so officers'
+   *italic* text needs a synthesized slant to show at all. */
+.event-detail em,
+.event-richtext em {
+  font-synthesis-style: auto;
+}
 .content .event-detail .event-agenda-list {
   list-style: none;
   padding: 0;

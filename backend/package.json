@@ -26,6 +26,7 @@
     "@playwright/test": "1.63.0",
     "esbuild": "0.28.2",
     "jspdf": "4.2.1",
+    "pdfjs-dist": "6.4.299",
     "prettier": "3.9.8"
   }
 }

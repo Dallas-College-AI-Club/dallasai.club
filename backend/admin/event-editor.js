@@ -746,19 +746,44 @@ export function mountEventEditor(api) {
       button.disabled = false;
     }
   };
+  // By type or, when the browser reports none, by file extension.
+  const fileKind = (file) =>
+    file.type === 'application/pdf' || /\.pdf$/i.test(file.name)
+      ? 'pdf'
+      : ['image/jpeg', 'image/png', 'image/webp'].includes(file.type) ||
+          (!file.type && /\.(jpe?g|jfif|png|webp)$/i.test(file.name))
+        ? 'image'
+        : '';
+  function refusal(files) {
+    if (files.length + images.length > 3)
+      return (
+        'An event can have up to three images; this one has ' +
+        images.length +
+        '. Remove one or choose fewer files.'
+      );
+    for (const file of files) {
+      const kind = fileKind(file);
+      if (!kind) return file.name + ' is not a JPG, PNG, WebP, or PDF file.';
+      if (kind === 'image' && file.size > 2097152)
+        return (
+          file.name +
+          ' is ' +
+          (file.size / 1048576).toFixed(1) +
+          ' MB. Images must be under 2 MB; export a smaller copy.'
+        );
+      if (kind === 'pdf' && file.size > 20971520)
+        return (
+          file.name + ' is over 20 MB. Export page 1 as a JPG or PNG instead.'
+        );
+    }
+    return '';
+  }
   q('#event-image-upload').onchange = async (event) => {
     if (busy) return;
     const files = [...event.target.files];
-    if (
-      files.length + images.length > 3 ||
-      files.some(
-        (file) =>
-          file.size > 2097152 ||
-          !['image/jpeg', 'image/png', 'image/webp'].includes(file.type),
-      )
-    ) {
-      q('#image-status').textContent =
-        'Choose up to three JPG, PNG, or WebP images under 2 MB each.';
+    const refused = refusal(files);
+    if (refused) {
+      q('#image-status').textContent = refused;
       event.target.value = '';
       return;
     }
@@ -766,16 +791,46 @@ export function mountEventEditor(api) {
     const version = generation;
     const unlock = lock(form);
     q('#image-status').textContent = 'Uploading images…';
+    const notes = [];
     try {
       for (const file of files) {
+        let upload = file;
+        if (fileKind(file) === 'pdf') {
+          q('#image-status').textContent = 'Converting ' + file.name + '…';
+          let converted;
+          try {
+            const { pdfFlyerImage } = await import('./pdf-flyer.js');
+            converted = await pdfFlyerImage(file);
+          } catch (error) {
+            throw Error(
+              file.name +
+                ' could not be converted' +
+                (error?.name === 'PasswordException'
+                  ? ' because it is password-protected'
+                  : '') +
+                '. Export page 1 as a JPG or PNG and attach that.',
+            );
+          }
+          if (version !== generation) return;
+          upload = converted.blob;
+          notes.push(
+            'Page 1 of ' +
+              file.name +
+              (converted.pages > 1 ? ' (' + converted.pages + ' pages)' : '') +
+              ' was added as an image.',
+          );
+          q('#image-status').textContent = 'Uploading images…';
+        }
         const result = await api('/api/events?upload=1', {
-          content: (await dataUrl(file)).split(',')[1],
+          content: (await dataUrl(upload)).split(',')[1],
         });
         if (version !== generation) return;
         images.push({ ...result.image, alt: '' });
       }
-      q('#image-status').textContent =
-        'Uploaded. Save your draft to keep these images. Descriptions are optional.';
+      q('#image-status').textContent = [
+        ...notes,
+        'Uploaded. Save your draft to keep these images. Descriptions are optional.',
+      ].join(' ');
     } catch (error) {
       q('#image-status').textContent = error.message;
     } finally {

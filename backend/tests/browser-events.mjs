@@ -2,7 +2,7 @@ import { testDatabase } from './helpers/db.mjs';
 import { chromium, expect } from '@playwright/test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { readFile, mkdir } from 'node:fs/promises';
+import { readFile, readdir, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { eventHandler } from '../api/events.mjs';
@@ -15,6 +15,7 @@ import {
   eventFeedbackURL,
 } from '../lib/event-feedback-definition.mjs';
 import sharp from 'sharp';
+import { jsPDF } from 'jspdf';
 const backend = fileURLToPath(new URL('../', import.meta.url));
 const site = path.resolve(backend, '../public');
 const screens = path.resolve(backend, '../.preview/event-checks');
@@ -66,6 +67,12 @@ const feedback = eventFeedbackHandler({
   rateLimit: async () => {},
 });
 process.env.BLOB_READ_WRITE_TOKEN = 'test-only';
+// Club Office runs under vercel.json's CSP in production; serve it the same way.
+const adminPolicy = JSON.parse(
+  await readFile(path.join(backend, 'vercel.json'), 'utf8'),
+)
+  .headers.find((rule) => rule.source === '/admin/(.*)')
+  .headers.find((header) => header.key === 'Content-Security-Policy').value;
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   if (url.pathname === '/api/events') return events(req, res);
@@ -127,6 +134,14 @@ const server = http.createServer(async (req, res) => {
   );
   try {
     if (!file.startsWith(root + path.sep)) throw Error();
+    if (root !== site)
+      res.setHeader(
+        'Content-Security-Policy',
+        adminPolicy.replace(
+          'https://dallasai.club',
+          'http://127.0.0.1:' + server.address().port,
+        ),
+      );
     res.setHeader(
       'Content-Type',
       file.endsWith('.js')
@@ -168,6 +183,16 @@ const errors = [];
 try {
   const context = await browser.newContext({
     viewport: { width: 1365, height: 950 },
+  });
+  // While window.detailedPdfPage is set, tall canvases report an oversized JPEG.
+  await context.addInitScript(() => {
+    const toBlob = HTMLCanvasElement.prototype.toBlob;
+    HTMLCanvasElement.prototype.toBlob = function (done, ...options) {
+      if (!window.detailedPdfPage || this.height <= 1800)
+        return toBlob.call(this, done, ...options);
+      window.detailedPdfPage.push(this.height);
+      done(new Blob([new Uint8Array(3 * 1048576)], { type: 'image/jpeg' }));
+    };
   });
   const page = await context.newPage();
   await context.route(
@@ -325,6 +350,197 @@ try {
       { exact: true },
     )
     .waitFor();
+  // Each refusal names the file and the reason before anything uploads.
+  const imageStatus = page.locator('#image-status');
+  await page.locator('#event-image-upload').setInputFiles({
+    name: 'notes.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('notes'),
+  });
+  await expect(imageStatus).toHaveText(
+    'notes.txt is not a JPG, PNG, WebP, or PDF file.',
+  );
+  await page.locator('#event-image-upload').setInputFiles({
+    name: 'big.png',
+    mimeType: 'image/png',
+    buffer: Buffer.alloc(3 * 1048576),
+  });
+  await expect(imageStatus).toHaveText(
+    'big.png is 3.0 MB. Images must be under 2 MB; export a smaller copy.',
+  );
+  // A PDF flyer becomes a portrait image from its first page, under the CSP.
+  const flyer = new jsPDF({ unit: 'pt', format: [612, 792] });
+  flyer.setFillColor('#123456').rect(40, 40, 532, 300, 'F');
+  flyer.text('AI + Programming for All', 60, 400);
+  flyer.addPage().text('Second page', 60, 60);
+  // The second PDF's panel is a JPEG 2000 image, as in scanned flyers; it
+  // needs PDF.js's JavaScript decoder, since the CSP rules out WebAssembly.
+  for (const [name, buffer, note] of [
+    ['flyer.pdf', Buffer.from(flyer.output('arraybuffer')), ' (2 pages)'],
+    [
+      'jpx-flyer.pdf',
+      await readFile(new URL('./fixtures/jpx-flyer.pdf', import.meta.url)),
+      '',
+    ],
+  ]) {
+    await page
+      .locator('#event-image-upload')
+      .setInputFiles({ name, mimeType: 'application/pdf', buffer });
+    await expect(imageStatus).toHaveText(
+      'Page 1 of ' +
+        name +
+        note +
+        ' was added as an image. Uploaded. Save your draft to keep these images. Descriptions are optional.',
+      { timeout: 20000 },
+    );
+    const converted = (
+      await db.query(
+        'SELECT pathname, width, height FROM club_forms.event_images ORDER BY created_at DESC LIMIT 1',
+      )
+    ).rows[0];
+    assert.deepEqual(
+      { width: converted.width, height: converted.height },
+      { width: 1391, height: 1800 },
+    );
+    // The page was drawn, not left blank: the dark panel is where page 1 has it.
+    const panel = await sharp(
+      await sharp(imageFiles.get(converted.pathname))
+        .extract({ left: 200, top: 200, width: 100, height: 100 })
+        .toBuffer(),
+    ).stats();
+    assert.ok(
+      panel.channels[0].mean < 40 && panel.channels[2].mean > 70,
+      name + ' was drawn',
+    );
+    await page.getByRole('button', { name: 'Remove image' }).nth(1).click();
+  }
+  // Japanese, Chinese or Korean text often uses a predefined character map,
+  // which PDF.js must fetch from /admin/pdfjs/cmaps/.
+  const characterMaps = [];
+  const watchMaps = (response) => {
+    if (response.url().includes('/admin/pdfjs/cmaps/'))
+      characterMaps.push(
+        response.status() + ' ' + response.url().split('/cmaps/')[1],
+      );
+  };
+  // The PDF.js worker fetches these, so watch the whole context.
+  context.on('response', watchMaps);
+  await page.locator('#event-image-upload').setInputFiles({
+    name: 'cjk-flyer.pdf',
+    mimeType: 'application/pdf',
+    buffer: await readFile(
+      new URL('./fixtures/cjk-flyer.pdf', import.meta.url),
+    ),
+  });
+  await expect(imageStatus).toHaveText(/^Page 1 of cjk-flyer\.pdf was added/, {
+    timeout: 20000,
+  });
+  context.off('response', watchMaps);
+  assert.ok(characterMaps.includes('200 UniJIS-UCS2-H.bcmap'));
+  await page.getByRole('button', { name: 'Remove image' }).nth(1).click();
+  // A page too detailed to fit 2 MB at full size is retried smaller: here every
+  // canvas taller than 1800 px reports an oversized JPEG.
+  await page.evaluate(() => (window.detailedPdfPage = []));
+  await page.locator('#event-image-upload').setInputFiles({
+    name: 'detailed.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from(flyer.output('arraybuffer')),
+  });
+  await expect(imageStatus).toHaveText(
+    /^Page 1 of detailed\.pdf \(2 pages\) was added/,
+    { timeout: 20000 },
+  );
+  assert.deepEqual(
+    await page.evaluate(() => window.detailedPdfPage.splice(0)),
+    [2400, 2400, 2400, 2400],
+  );
+  await page.evaluate(() => delete window.detailedPdfPage);
+  assert.equal(
+    (
+      await db.query(
+        'SELECT height FROM club_forms.event_images ORDER BY created_at DESC LIMIT 1',
+      )
+    ).rows[0].height,
+    1800,
+  );
+  await page.getByRole('button', { name: 'Remove image' }).nth(1).click();
+  // An embedded image over 50 megapixels is left out instead of being decoded
+  // at full size; the rest of the page still converts.
+  const huge = new jsPDF({ unit: 'pt', format: [612, 792] });
+  huge.addImage(
+    new Uint8Array(
+      await sharp({
+        create: {
+          width: 7100,
+          height: 7100,
+          channels: 3,
+          background: '#123456',
+        },
+      })
+        .jpeg()
+        .toBuffer(),
+    ),
+    'JPEG',
+    40,
+    40,
+    532,
+    300,
+  );
+  await page.locator('#event-image-upload').setInputFiles({
+    name: 'huge-image.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from(huge.output('arraybuffer')),
+  });
+  await expect(imageStatus).toHaveText(/^Page 1 of huge-image\.pdf was added/, {
+    timeout: 20000,
+  });
+  const hugePanel = await sharp(
+    await sharp(
+      imageFiles.get(
+        (
+          await db.query(
+            'SELECT pathname FROM club_forms.event_images ORDER BY created_at DESC LIMIT 1',
+          )
+        ).rows[0].pathname,
+      ),
+    )
+      .extract({ left: 200, top: 200, width: 100, height: 100 })
+      .toBuffer(),
+  ).stats();
+  assert.ok(hugePanel.channels[0].mean > 240, 'oversized image left out');
+  await page.getByRole('button', { name: 'Remove image' }).nth(1).click();
+  // On Android, PDF.js's packaged standard fonts replace system substitutes.
+  const android = await browser.newContext({
+    userAgent:
+      'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Mobile Safari/537.36',
+  });
+  const androidFonts = [];
+  android.on('response', (response) => {
+    if (response.url().includes('/admin/pdfjs/standard_fonts/'))
+      androidFonts.push(response.status());
+  });
+  const androidPage = await android.newPage();
+  await androidPage.goto(origin + '/admin/');
+  const chunk = (await readdir(path.join(backend, 'public/admin'))).find(
+    (name) => name.startsWith('pdf-flyer-'),
+  );
+  const helvetica = new jsPDF({ unit: 'pt', format: [612, 792] });
+  helvetica.setFontSize(48).text('Helvetica flyer', 60, 200);
+  assert.equal(
+    await androidPage.evaluate(
+      async ({ chunk, bytes }) => {
+        const { pdfFlyerImage } = await import('/admin/' + chunk);
+        const { pages } = await pdfFlyerImage(
+          new File([new Uint8Array(bytes)], 'helvetica.pdf'),
+        );
+        return pages;
+      },
+      { chunk, bytes: [...new Uint8Array(helvetica.output('arraybuffer'))] },
+    ),
+    1,
+  );
+  assert.deepEqual(androidFonts, [200]);
+  await android.close();
   await page
     .getByLabel('Image 1 description (optional)', { exact: true })
     .fill('Workshop illustration');

@@ -73,6 +73,37 @@ await build({
   // optional libraries external.
   external: ['canvg', 'dompurify', 'html2canvas'],
 });
+// PDF.js (legacy build) runs its parser in a worker that admin/pdf-flyer.js
+// loads by URL, and reads its JavaScript JPEG 2000 and JBIG2 decoders, its
+// character maps and its standard fonts (with their Foxit and Liberation
+// licenses) from pdfjs/, alongside the license notices.
+const pdfjs = path.join(root, 'node_modules/pdfjs-dist');
+await cp(
+  path.join(pdfjs, 'legacy/build/pdf.worker.min.mjs'),
+  path.join(root, 'public/admin/pdf.worker.js'),
+);
+for (const folder of ['cmaps', 'standard_fonts'])
+  await cp(
+    path.join(pdfjs, folder),
+    path.join(root, 'public/admin/pdfjs', folder),
+    {
+      recursive: true,
+    },
+  );
+await cp(
+  path.join(pdfjs, 'LICENSE'),
+  path.join(root, 'public/admin/pdfjs/LICENSE_PDFJS'),
+);
+for (const decoder of ['openjpeg', 'jbig2'])
+  for (const file of [
+    decoder + '_nowasm_fallback.js',
+    'LICENSE_' + decoder.toUpperCase(),
+    'LICENSE_PDFJS_' + decoder.toUpperCase(),
+  ])
+    await cp(
+      path.join(pdfjs, 'wasm', file),
+      path.join(root, 'public/admin/pdfjs', file),
+    );
 await mkdir(path.join(root, 'public/surveys'), { recursive: true });
 for (const file of ['index.html', 'style.css', 'availability.css'])
   await cp(

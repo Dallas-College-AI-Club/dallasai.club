@@ -496,10 +496,18 @@ try {
       () => document.querySelector('.event-gallery img')?.naturalWidth > 0,
     );
     const imageBox = await gallery.boundingBox(),
-      detailBox = await page.locator('#event-detail').boundingBox();
+      descriptionBox = await page
+        .locator('#event-detail .event-description')
+        .boundingBox();
     assert.ok(
-      imageBox.width >= detailBox.width * (width <= 600 ? 0.9 : 0.45),
-      'Poster uses a substantial share of the details width',
+      imageBox.width >= descriptionBox.width - 1,
+      'A single poster is as wide as the description',
+    );
+    assert.ok(
+      imageBox.y > descriptionBox.y + descriptionBox.height &&
+        imageBox.y <
+          (await page.locator('#event-detail .event-venue').boundingBox()).y,
+      'The poster sits between the description and the location',
     );
     await page.locator('.event-image-open').click();
     await page.locator('.event-image-viewer[open]').waitFor();

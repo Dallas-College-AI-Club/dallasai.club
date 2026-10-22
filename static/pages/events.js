@@ -270,7 +270,7 @@ export function mountEvents(root) {
       ${selected.potential ? '<p class="potential-notice">Potential event · Share your interest while we plan. Final details and seats are not yet confirmed.</p>' : ''}
       ${selected.targetAudience ? '<section class="event-richtext"><h3>Who is this for?</h3>' + eventText(selected.targetAudience) + '</section>' : ''}
       ${selected.learningOutcomes?.length ? '<section class="event-richtext"><h3>Learning outcomes</h3>' + eventList(selected.learningOutcomes) + '</section>' : ''}
-      ${selected.summary ? /* HTML */ `<div class="event-description event-richtext">${eventText(selected.summary)}</div>` : ''}${
+      ${selected.summary ? /* HTML */ `<div class="event-description event-richtext">${eventText(selected.summary)}</div>` : ''}<div class="event-gallery-slot"></div>${
         selected.location
           ? /* HTML */ `<div class="event-venue">
               <span>WHERE</span>
@@ -375,8 +375,9 @@ export function mountEvents(root) {
         }
         gallery.append(figure);
       });
-      panel.append(gallery);
-    }
+      // Flyers sit with the description, not below the agenda and actions.
+      q('.event-gallery-slot').replaceWith(gallery);
+    } else q('.event-gallery-slot').remove();
     q('.event-calendar-back').onclick = () => {
       q('.events-browser').scrollIntoView({ block: 'start' });
       q(`[data-event="${selected.id}"]`)?.focus({ preventScroll: true });

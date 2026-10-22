@@ -30,8 +30,10 @@ and original history remain intact. Adding an old label reuses its standard grou
 under 2 MB and 100 megapixels (PNG 40), so print-resolution flyers fit. Images
 are decoded, resized to fit 1800 pixels,
 converted to WebP, and stripped of metadata. Image descriptions are optional;
-an event-title fallback labels images when blank. Public posters use about half
-the detail column on desktop, full width on phones, and open larger when clicked. Removing an image from a draft does not alter the published event.
+an event-title fallback labels images when blank. On the event page, images sit
+right after the description; a single poster uses the full width, two or three
+share two columns on desktop, and each opens larger when clicked. Removing an
+image from a draft does not alter the published event.
 Images remain private until referenced by a published event, and become private
 again on unpublish or archive. Stored files remain available for edit history.
 

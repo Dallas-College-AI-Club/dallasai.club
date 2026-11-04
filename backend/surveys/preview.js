@@ -34,12 +34,13 @@ export function renderPreview({ definition, expiresAt }, link) {
 
   const expiry = document.createElement('p');
   expiry.className = 'micro';
-  expiry.textContent =
-    'Private link expires ' +
-    new Date(expiresAt).toLocaleString('en-US', {
-      timeZone: 'America/Chicago',
-    }) +
-    ' Central.';
+  expiry.textContent = expiresAt
+    ? 'Private link expires ' +
+      new Date(expiresAt).toLocaleString('en-US', {
+        timeZone: 'America/Chicago',
+      }) +
+      ' Central.'
+    : 'This survey does not expire.';
   const answer = document.createElement('a');
   answer.href = '/surveys/#' + new URLSearchParams({ invite: link });
   answer.textContent = 'Sign in to answer →';

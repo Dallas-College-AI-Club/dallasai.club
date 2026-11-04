@@ -1,5 +1,13 @@
 import { confirmDialog, copyText, download as save, lock, node } from './ui.js';
-import { actionLabel, actorLabel, dateTime, isoDay, plural } from './format.js';
+import {
+  actionLabel,
+  actorLabel,
+  centralDateTimeInput,
+  centralDateTimeInstant,
+  dateTime,
+  isoDay,
+  plural,
+} from './format.js';
 import { currentOfficer } from './session.js';
 import { mountRespondents } from './survey-respondents.js';
 import { mountSurveyBuilder } from './survey-builder.js';
@@ -86,9 +94,15 @@ function surveySummary(survey) {
     title.append(
       node('p', 'Published ' + dateTime(survey.published_at), 'hint'),
     );
-  if (survey.status !== 'draft' && survey.expires_at)
+  if (survey.status !== 'draft')
     title.append(
-      node('p', 'Ends ' + dateTime(survey.expires_at), 'event-deadline'),
+      node(
+        'p',
+        survey.expires_at
+          ? 'Ends ' + dateTime(survey.expires_at)
+          : 'Never expires',
+        'hint',
+      ),
     );
   const status = survey.expired
     ? 'Expired'
@@ -207,6 +221,62 @@ function rowLifecycleActions(summary, survey, api, isCurrent, onChange) {
     : ['archive'])
     actions.append(lifecycleControl(survey, action, api, isCurrent, onChange));
   summary.append(actions);
+}
+function expirationControl(survey, api, isCurrent, onSuccess) {
+  const details = node('details', undefined, 'entry survey-expiration'),
+    form = node('form'),
+    neverLabel = node('label', undefined, 'checkbox'),
+    never = node('input'),
+    dateLabel = node('label', 'Expiration date and time (Central)'),
+    date = node('input'),
+    save = node('button', 'Save expiration', 'secondary'),
+    status = node('p');
+  details.append(node('summary', 'Change expiration'));
+  never.type = 'checkbox';
+  never.checked = survey.expires_at === null;
+  neverLabel.append(never, 'Never expires');
+  date.type = 'datetime-local';
+  date.value = centralDateTimeInput(survey.expires_at);
+  date.required = true;
+  date.disabled = never.checked;
+  never.onchange = () => {
+    date.disabled = never.checked;
+  };
+  dateLabel.append(date);
+  status.setAttribute('role', 'status');
+  let pending;
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    if (save.disabled || !isCurrent()) return;
+    status.textContent = '';
+    let unlock;
+    try {
+      const expiresAt = never.checked
+        ? null
+        : centralDateTimeInstant(date.value);
+      if (!pending || pending.expiresAt !== expiresAt) {
+        if (expiresAt && Date.parse(expiresAt) <= Date.now())
+          throw new Error('Choose a future date and time, or Never expires.');
+        pending = {
+          id: survey.id,
+          action: 'expiration',
+          expiresAt,
+          expectedRevision: survey.edit_revision,
+          requestId: crypto.randomUUID(),
+        };
+      }
+      unlock = lock(form);
+      await api('/api/custom-surveys?action=lifecycle', pending);
+      if (isCurrent()) await onSuccess();
+    } catch (error) {
+      if (isCurrent()) status.textContent = error.message;
+    } finally {
+      unlock?.();
+    }
+  };
+  form.append(neverLabel, dateLabel, save, status);
+  details.append(form);
+  return details;
 }
 export function mountFeedbackGroups(
   root,
@@ -413,7 +483,8 @@ export function mountCustomSurveys(root, api, options = {}) {
             );
             content.prepend(related);
           }
-          const lifecycleButton = (action) =>
+          const lifecycleButton = (action) => {
+            if (options.inline && action !== 'edit') return;
             content.append(
               lifecycleControl(survey, action, api, isCurrent, async () => {
                 options.onChange?.();
@@ -433,6 +504,7 @@ export function mountCustomSurveys(root, api, options = {}) {
                 } else await load();
               }),
             );
+          };
           if (survey.status === 'archived') {
             lifecycleButton('restore');
             lifecycleButton('delete');
@@ -441,6 +513,13 @@ export function mountCustomSurveys(root, api, options = {}) {
               lifecycleButton('edit');
             lifecycleButton('archive');
           }
+          if (survey.status === 'open')
+            content.append(
+              expirationControl(survey, api, isCurrent, async () => {
+                await load();
+                options.onChange?.();
+              }),
+            );
           if (survey.definition) {
             const duplicate = node('a', 'Duplicate survey', 'button-link');
             duplicate.href = '#/surveys/new?copy=' + survey.id;
@@ -525,9 +604,11 @@ export function mountCustomSurveys(root, api, options = {}) {
                     ? 'This survey is closed. Saved responses remain available.'
                     : survey.expired
                       ? 'This survey has expired. Saved responses remain available.'
-                      : 'Private link expires ' +
-                        dateTime(survey.expires_at) +
-                        '.',
+                      : survey.expires_at === null
+                        ? 'This survey does not expire.'
+                        : 'Private link expires ' +
+                          dateTime(survey.expires_at) +
+                          '.',
               ),
             );
           if (survey.privateLink || survey.previewLink) {

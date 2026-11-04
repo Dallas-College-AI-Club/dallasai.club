@@ -82,7 +82,7 @@ export async function homeSummary(db, published, upcoming) {
         FROM club_forms.custom_surveys s
         LEFT JOIN club_forms.custom_survey_members m ON m.survey_id=s.id
         LEFT JOIN club_forms.custom_survey_responses r ON r.survey_id=m.survey_id AND r.advisor_id=m.advisor_id
-        WHERE s.status='open' AND s.expires_at>now()
+        WHERE s.status='open' AND (s.expires_at IS NULL OR s.expires_at>now())
           AND (coalesce(s.definition->>'eventId','')='' OR s.definition->>'eventId'=ANY($1::text[]))
         GROUP BY s.id ORDER BY s.created_at DESC,s.id LIMIT 1`,
         [

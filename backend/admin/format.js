@@ -55,6 +55,33 @@ export function fullDateTime(value) {
   const date = valid(value);
   return date ? plain(fullYear.format(date)) + ' CT' : '';
 }
+const inputTime = formatter(
+  {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  },
+  'sv-SE',
+);
+export function centralDateTimeInput(value) {
+  const date = valid(value);
+  return date ? inputTime.format(date).replace(' ', 'T') : '';
+}
+export function centralDateTimeInstant(value) {
+  if (!/^\d{4}-\d{2}-\d{2}T([01]\d|2[0-3]):[0-5]\d$/.test(value))
+    throw new Error('Choose a valid expiration date and time.');
+  const candidates = ['-05:00', '-06:00']
+    .map((offset) => new Date(value + ':00' + offset))
+    .filter((date) => centralDateTimeInput(date) === value);
+  if (candidates.length !== 1)
+    throw new Error(
+      'That Central time is invalid, skipped or repeated when clocks change. Choose another time.',
+    );
+  return candidates[0].toISOString();
+}
 // '2026-10-02': the Central calendar day, for file names.
 export function isoDay(value) {
   const date = valid(value);
@@ -205,6 +232,7 @@ const actions = {
   published: 'Published survey',
   closed: 'Closed survey',
   editing: 'Editing survey',
+  expiration_changed: 'Changed survey expiration',
   archived: 'Archived survey',
   restored: 'Restored survey',
   response_deleted: 'Permanently deleted a survey response',

@@ -146,7 +146,9 @@ export function renderHome(root, data, actions) {
       node('p', 'Open · ' + plural(data.survey.responses, 'response'), 'hint'),
       node(
         'p',
-        'Link expires ' + dateTime(data.survey.expires_at),
+        data.survey.expires_at
+          ? 'Link expires ' + dateTime(data.survey.expires_at)
+          : 'Never expires',
         'event-deadline',
       ),
       ...(data.survey.latest

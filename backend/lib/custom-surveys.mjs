@@ -36,7 +36,7 @@ export async function linkedSurvey(db, token, lock = false) {
     );
   const survey = (
     await db.query(
-      `SELECT * FROM club_forms.custom_surveys WHERE link_digest=$1 AND status='open' AND expires_at>now() ${lock ? 'FOR UPDATE' : ''}`,
+      `SELECT * FROM club_forms.custom_surveys WHERE link_digest=$1 AND status='open' AND (expires_at IS NULL OR expires_at>now()) ${lock ? 'FOR UPDATE' : ''}`,
       [digest(token)],
     )
   ).rows[0];
@@ -58,7 +58,7 @@ export async function linkedPreview(db, token) {
     throw new RequestError(404, 'This preview link is unavailable.');
   const survey = (
     await db.query(
-      "SELECT * FROM club_forms.custom_surveys WHERE preview_digest=$1 AND status IN ('draft','open') AND expires_at>now()",
+      "SELECT * FROM club_forms.custom_surveys WHERE preview_digest=$1 AND status IN ('draft','open') AND (expires_at IS NULL OR expires_at>now())",
       [digest(token)],
     )
   ).rows[0];
@@ -97,7 +97,7 @@ export async function rememberDevice(db, survey, user) {
   return db.transaction(async (tx) => {
     const current = (
       await tx.query(
-        "SELECT * FROM club_forms.custom_surveys WHERE id=$1 AND status IN ('draft','open') AND expires_at>now() FOR UPDATE",
+        "SELECT * FROM club_forms.custom_surveys WHERE id=$1 AND status IN ('draft','open') AND (expires_at IS NULL OR expires_at>now()) FOR UPDATE",
         [survey.id],
       )
     ).rows[0];
@@ -148,17 +148,19 @@ export async function rememberDevice(db, survey, user) {
       [survey.id, member.advisor_id, user.id],
     );
     const token = randomBytes(32).toString('base64url');
+    const expiresAt = new Date(
+      Math.min(
+        Date.now() + 90 * 86400000,
+        current.expires_at === null
+          ? Infinity
+          : new Date(current.expires_at).getTime(),
+      ),
+    );
     await tx.query(
       'INSERT INTO club_forms.custom_survey_devices(token_digest,survey_id,advisor_id,user_id,expires_at) VALUES($1,$2,$3,$4,$5)',
-      [
-        digest(token),
-        survey.id,
-        member.advisor_id,
-        user.id,
-        current.expires_at,
-      ],
+      [digest(token), survey.id, member.advisor_id, user.id, expiresAt],
     );
-    return { token, member };
+    return { token, member, expiresAt };
   });
 }
 export async function currentResponses(

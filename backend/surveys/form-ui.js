@@ -200,12 +200,13 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
   document.querySelector('#who').textContent = previewOnly
     ? 'Preview · answering disabled'
     : 'Email verification required to answer';
-  const expiry =
-    'Expires ' +
-    new Date(welcome.expiresAt).toLocaleString('en-US', {
-      timeZone: 'America/Chicago',
-    }) +
-    ' Central.';
+  const expiry = welcome.expiresAt
+    ? 'Expires ' +
+      new Date(welcome.expiresAt).toLocaleString('en-US', {
+        timeZone: 'America/Chicago',
+      }) +
+      ' Central.'
+    : 'This survey does not expire.';
   const tools = document.querySelector('#survey-tools');
   tools.hidden = false;
   document.querySelector('#restart').hidden = true;
@@ -265,7 +266,7 @@ export async function mountCustomForm({ welcome, request, previewOnly }) {
       node('h2', 'Verify your email'),
       node(
         'p',
-        'This device is remembered until the survey expires, you sign out, or access is removed.',
+        'This device is remembered for up to 90 days, ending sooner if the survey expires, you sign out, or access is removed.',
       ),
     );
     const form = node('form', undefined, 'auth-panel'),

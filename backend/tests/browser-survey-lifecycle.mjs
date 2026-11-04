@@ -89,6 +89,181 @@ try {
     await page.locator('#confirm-dialog [data-confirm]').click();
   };
   await manage();
+  const expiration = () => page.locator('.survey-expiration');
+  const changeExpiration = async (value) => {
+    if ((await expiration().getAttribute('open')) === null)
+      await expiration().locator('summary').click();
+    await expiration()
+      .getByRole('checkbox', { name: 'Never expires', exact: true })
+      .setChecked(value === null);
+    if (value !== null)
+      await expiration()
+        .getByLabel('Expiration date and time (Central)', { exact: true })
+        .fill(value);
+    await expiration()
+      .getByRole('button', { name: 'Save expiration', exact: true })
+      .click();
+  };
+  const currentExpiration = async () =>
+    (
+      await f.db.query(
+        'SELECT expires_at FROM club_forms.custom_surveys WHERE id=$1',
+        [id],
+      )
+    ).rows[0].expires_at;
+  const deviceDeadline = (
+    await f.db.query(
+      'SELECT expires_at FROM club_forms.custom_survey_devices WHERE survey_id=$1',
+      [id],
+    )
+  ).rows[0].expires_at;
+  // Commit the first change but lose its acknowledgement; retry must reuse it.
+  const expirationRequests = [];
+  const lifecycleRoute = '**/api/custom-surveys?action=lifecycle';
+  await page.route(lifecycleRoute, async (route) => {
+    const body = route.request().postDataJSON();
+    expirationRequests.push(body);
+    if (expirationRequests.length === 1) {
+      const response = await route.fetch();
+      assert.equal(response.status(), 200);
+      await route.abort('failed');
+    } else await route.continue();
+  });
+  await changeExpiration(null);
+  await expect(expiration().getByRole('status')).not.toBeEmpty();
+  assert.equal(await currentExpiration(), null);
+  await expiration()
+    .getByRole('button', { name: 'Save expiration', exact: true })
+    .click();
+  await expect(page.locator('#custom-surveys-root')).toContainText(
+    'Never expires',
+  );
+  await expect(expiration()).not.toHaveAttribute('open', '');
+  await page.unroute(lifecycleRoute);
+  assert.equal(expirationRequests.length, 2);
+  assert.deepEqual(expirationRequests[0], expirationRequests[1]);
+  assert.equal(
+    (
+      await f.db.query(
+        "SELECT count(*)::int AS total FROM club_forms.custom_survey_changes WHERE survey_id=$1 AND action='expiration_changed'",
+        [id],
+      )
+    ).rows[0].total,
+    1,
+  );
+  assert.equal(await currentExpiration(), null);
+  await page.goto(f.origin + '/admin/#/home');
+  await expect(
+    page.locator('[aria-labelledby="tile-custom-survey"]'),
+  ).toContainText('Never expires');
+  await manage();
+  assert.equal(
+    +new Date(
+      (
+        await f.db.query(
+          'SELECT expires_at FROM club_forms.custom_survey_devices WHERE survey_id=$1',
+          [id],
+        )
+      ).rows[0].expires_at,
+    ),
+    +new Date(deviceDeadline),
+  );
+  const noExpiryPage = await context.newPage();
+  await noExpiryPage.goto(f.origin + '/surveys/#invite=' + token);
+  await expect(noExpiryPage.locator('.survey-deadline')).toHaveText(
+    'This survey does not expire.',
+  );
+  await noExpiryPage.goto(
+    f.origin + '/surveys/#invite=' + token + '&preview=1',
+  );
+  await expect(noExpiryPage.locator('.survey-deadline')).toHaveText(
+    'This survey does not expire.',
+  );
+  await noExpiryPage.close();
+  await changeExpiration('2099-07-04T12:30');
+  await expect
+    .poll(async () => +new Date(await currentExpiration()))
+    .toBe(Date.parse('2099-07-04T17:30:00Z'));
+  await expect(expiration()).not.toHaveAttribute('open', '');
+  await f.db.query(
+    'UPDATE club_forms.custom_surveys SET edit_revision=edit_revision+1 WHERE id=$1',
+    [id],
+  );
+  await changeExpiration(null);
+  await expect(expiration().getByRole('status')).toContainText('changed');
+  assert.equal(
+    +new Date(await currentExpiration()),
+    Date.parse('2099-07-04T17:30:00Z'),
+  );
+  // Expired surveys remain manageable and can reopen on the same invitation.
+  await f.db.query(
+    "UPDATE club_forms.custom_surveys SET expires_at=now()-interval '1 day' WHERE id=$1",
+    [id],
+  );
+  await manage();
+  await page.reload();
+  await changeExpiration(null);
+  await expect(page.locator('#custom-surveys-root')).toContainText(
+    'Never expires',
+  );
+  assert.equal(await currentExpiration(), null);
+  await page.goto(f.origin + '/admin/#/surveys');
+  const libraryRow = page.locator('details.custom-survey-group').filter({
+    has: page.locator(':scope > summary strong').getByText(definition.title, {
+      exact: true,
+    }),
+  });
+  await libraryRow.locator(':scope > summary').click();
+  await expect(libraryRow.locator('.custom-survey-group-body')).toContainText(
+    'Original preferred time',
+  );
+  await expect(
+    libraryRow.getByRole('button', { name: 'Archive survey', exact: true }),
+  ).toHaveCount(1);
+
+  // Advisor Studio's welcome, preview and verified question view all accept null.
+  await f.db.query(
+    'UPDATE club_forms.custom_surveys SET expires_at=NULL WHERE id=$1',
+    [f.id],
+  );
+  const advisorPage = await context.newPage();
+  await advisorPage.goto(f.origin + '/surveys/#invite=' + f.token);
+  await expect(advisorPage.locator('#survey-expiration')).toHaveText(
+    'This survey does not expire.',
+  );
+  await advisorPage
+    .getByRole('button', { name: 'Preview questions · no sign-in needed' })
+    .click();
+  await expect(advisorPage.locator('.sidebar')).toContainText(
+    'This survey does not expire.',
+  );
+  const advisorSurvey = await linkedSurvey(f.db, f.token);
+  const advisor = (
+    await f.db.query(
+      'SELECT advisor_id,email,display_name FROM club_forms.custom_survey_members WHERE survey_id=$1 LIMIT 1',
+      [f.id],
+    )
+  ).rows[0];
+  const advisorDevice = await rememberDevice(f.db, advisorSurvey, {
+    id: 'browser-null-expiry-advisor',
+    email: advisor.email,
+    name: advisor.display_name,
+    emailVerified: true,
+  });
+  await context.addCookies([
+    {
+      name: deviceCookie(advisorSurvey),
+      value: advisorDevice.token,
+      url: f.origin,
+    },
+  ]);
+  await advisorPage.goto(f.origin + '/surveys/#invite=' + f.token);
+  await advisorPage.getByRole('button', { name: 'Open my questions' }).click();
+  await expect(advisorPage.locator('.sidebar')).toContainText(
+    'This survey does not expire.',
+  );
+  await advisorPage.close();
+  await manage();
   await confirm('Edit survey');
   await expect(page.locator('.builder-steps')).toBeVisible();
   await page.getByRole('button', { name: '3. Questions', exact: true }).click();
@@ -184,10 +359,12 @@ try {
   await expect(
     page.getByRole('button', { name: 'Restore survey', exact: true }),
   ).toBeVisible();
+  await expect(expiration()).toHaveCount(0);
   await confirm('Restore survey');
   await expect(
     page.getByRole('button', { name: 'Edit survey', exact: true }),
   ).toBeVisible();
+  await expect(expiration()).toHaveCount(0);
   assert.equal(
     (
       await f.db.query(
@@ -257,7 +434,7 @@ try {
   );
   assert.deepEqual(errors, []);
   console.log(
-    'PASS survey edit, preview, republish, historical CSV, fresh public answers, archive, closed restore, archived response and survey deletion',
+    'PASS survey expiration changes, null-expiry respondent and advisor previews, edit, republish, historical CSV, fresh public answers, archive, closed restore, archived response and survey deletion',
   );
 } finally {
   await context.close();

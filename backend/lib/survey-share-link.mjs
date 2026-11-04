@@ -318,7 +318,7 @@ export async function generateSurveyShareLink(
       'ai-' + digest(invitation).slice(0, 24),
       fetchImpl,
     );
-    if (new Date(survey.expires_at) <= new Date())
+    if (survey.expires_at !== null && new Date(survey.expires_at) <= new Date())
       throw new RequestError(409, 'This survey has expired.');
     await tx.query(
       'UPDATE club_forms.custom_surveys SET short_link=$2 WHERE id=$1',

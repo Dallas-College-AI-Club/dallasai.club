@@ -5,6 +5,8 @@ import {
   actionLabel,
   actorLabel,
   clock,
+  centralDateTimeInput,
+  centralDateTimeInstant,
   dateTime,
   day,
   fieldLabel,
@@ -17,6 +19,33 @@ import {
 } from '../admin/format.js';
 // Noon Central on Saturday, Oct 3, 2026.
 const now = new Date('2026-10-03T17:00:00Z');
+test('expiration inputs use Central time and reject invalid or ambiguous times', () => {
+  assert.equal(
+    centralDateTimeInput('2030-07-10T17:45:00.000Z'),
+    '2030-07-10T12:45',
+  );
+  assert.equal(centralDateTimeInput(null), '');
+  assert.equal(
+    centralDateTimeInstant('2030-07-10T12:45'),
+    '2030-07-10T17:45:00.000Z',
+  );
+  assert.equal(
+    centralDateTimeInstant('2030-01-10T12:45'),
+    '2030-01-10T18:45:00.000Z',
+  );
+  assert.equal(
+    centralDateTimeInstant('2030-01-10T00:00'),
+    '2030-01-10T06:00:00.000Z',
+  );
+  for (const value of [
+    '',
+    '2030-02-30T12:00',
+    '2030-03-10T02:30',
+    '2030-11-03T01:30',
+    '2030-01-10T24:00',
+  ])
+    assert.throws(() => centralDateTimeInstant(value));
+});
 test('dateTime() is one Central format across daylight saving changes', () => {
   assert.equal(
     dateTime('2026-10-03T04:34:00Z', now),

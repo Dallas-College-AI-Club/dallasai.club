@@ -183,12 +183,13 @@ async function openQuestions() {
     q('#survey-tools').hidden = false;
     const expiry = document.createElement('p');
     expiry.className = 'micro';
-    expiry.textContent =
-      'Survey expires ' +
-      new Date(bootstrap.survey.expiresAt).toLocaleString('en-US', {
-        timeZone: 'America/Chicago',
-      }) +
-      ' Central.';
+    expiry.textContent = bootstrap.survey.expiresAt
+      ? 'Survey expires ' +
+        new Date(bootstrap.survey.expiresAt).toLocaleString('en-US', {
+          timeZone: 'America/Chicago',
+        }) +
+        ' Central.'
+      : 'This survey does not expire.';
     q('.sidebar').append(expiry);
     const welcome = q('#main .welcome').cloneNode(true);
     welcome.querySelector('.auth-panel').remove();
@@ -314,12 +315,13 @@ async function start() {
       });
       return;
     }
-    q('#survey-expiration').textContent =
-      'This private survey expires ' +
-      new Date(welcome.expiresAt).toLocaleString('en-US', {
-        timeZone: 'America/Chicago',
-      }) +
-      ' Central.';
+    q('#survey-expiration').textContent = welcome.expiresAt
+      ? 'This private survey expires ' +
+        new Date(welcome.expiresAt).toLocaleString('en-US', {
+          timeZone: 'America/Chicago',
+        }) +
+        ' Central.'
+      : 'This survey does not expire.';
     q('#survey-preview').hidden = false;
     if (new URLSearchParams(location.hash.slice(1)).get('preview') === '1') {
       const { renderPreview } = await import('./preview.js');

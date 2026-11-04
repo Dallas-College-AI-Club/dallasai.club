@@ -186,13 +186,15 @@ export function builderLinks(survey) {
     previewLink:
       survey.definition &&
       ['draft', 'open'].includes(survey.status) &&
-      new Date(survey.expires_at) > new Date() &&
+      (survey.expires_at === null ||
+        new Date(survey.expires_at) > new Date()) &&
       digest(previewToken(survey.id)) === survey.preview_digest
         ? new URL('/surveys/#preview=' + previewToken(survey.id), origin).href
         : null,
     privateLink:
       survey.status === 'open' &&
-      new Date(survey.expires_at) > new Date() &&
+      (survey.expires_at === null ||
+        new Date(survey.expires_at) > new Date()) &&
       digest(privateSurveyToken(survey.id)) === survey.link_digest
         ? new URL('/surveys/#invite=' + privateSurveyToken(survey.id), origin)
             .href
@@ -385,17 +387,40 @@ export async function changeDraft(db, actor, body) {
   });
 }
 export async function changeSurveyLifecycle(db, actor, body) {
-  object(body, ['id', 'requestId', 'expectedRevision', 'action']);
+  object(body, [
+    'id',
+    'requestId',
+    'expectedRevision',
+    'action',
+    ...(body?.action === 'expiration' ? ['expiresAt'] : []),
+  ]);
   if (
     !uuid.test(body.id) ||
     !uuid.test(body.requestId) ||
     !Number.isInteger(body.expectedRevision) ||
     body.expectedRevision < 0 ||
-    !['edit', 'archive', 'restore', 'delete'].includes(body.action)
+    !['edit', 'archive', 'restore', 'delete', 'expiration'].includes(
+      body.action,
+    )
   )
     invalid('Check the survey change.');
+  if (
+    body.action === 'expiration' &&
+    body.expiresAt !== null &&
+    (typeof body.expiresAt !== 'string' ||
+      !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(body.expiresAt) ||
+      !Number.isFinite(Date.parse(body.expiresAt)) ||
+      new Date(body.expiresAt).toISOString() !== body.expiresAt)
+  )
+    invalid('Choose a valid expiration date or no expiration.');
   const signature = digest(
-    JSON.stringify([body.id, body.action, body.expectedRevision, actor.email]),
+    JSON.stringify([
+      body.id,
+      body.action,
+      body.expectedRevision,
+      actor.email,
+      ...(body.action === 'expiration' ? [body.expiresAt] : []),
+    ]),
   );
   return db.transaction(async (tx) => {
     await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [body.id]);
@@ -429,6 +454,25 @@ export async function changeSurveyLifecycle(db, actor, body) {
         409,
         'Another admin changed this survey. Reload before saving.',
       );
+    if (body.action === 'expiration') {
+      if (row.status !== 'open')
+        throw new RequestError(
+          409,
+          'Only an open survey can change its expiration.',
+        );
+      if (body.expiresAt !== null && Date.parse(body.expiresAt) <= Date.now())
+        invalid('Choose an expiration date in the future.');
+      const revision = row.edit_revision + 1;
+      await tx.query(
+        'UPDATE club_forms.custom_surveys SET expires_at=$2,edit_revision=$3 WHERE id=$1',
+        [body.id, body.expiresAt, revision],
+      );
+      await tx.query(
+        "INSERT INTO club_forms.custom_survey_changes(id,survey_id,action,actor_email,revision,request_digest) VALUES($1,$2,'expiration_changed',$3,$4,$5)",
+        [body.requestId, body.id, actor.email, revision, signature],
+      );
+      return { id: body.id, revision };
+    }
     if (body.action === 'delete') {
       if (row.status !== 'archived')
         throw new RequestError(

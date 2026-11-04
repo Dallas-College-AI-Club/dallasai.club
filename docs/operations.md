@@ -19,8 +19,11 @@ Office; historical planning notes in this repository are not publication rules.
   upstream session lifetime at least 72 hours; the configured seven days meets this.
 - Cookies are HTTP-only and secure on HTTPS. Each API request verifies upstream
   authorization without relying on a cached browser session.
-- Survey devices have separate cookies scoped to the survey API. A device expires
-  with its round or is revoked on sign-out/removal. Daily maintenance deletes only
+- Survey devices have separate cookies scoped to the survey API. New devices expire
+  after at most 90 days, or at the survey deadline if sooner. Changing a survey's
+  expiration does not extend existing device deadlines. Surveys may have no
+  expiration; Advisor Studio does not expire. Sign-out/removal revokes access.
+  Daily maintenance deletes only
   expired/revoked device tokens, at most 1,000 per run. Responses and audit history
   remain stored.
 
@@ -94,6 +97,15 @@ Keep runtime connections restricted. The original leaderboard setup is retained 
 | 024 | Survey lifecycle, original response definitions, and archived survey/response deletion |
 | 025 | Independent RSVP survey archive/deletion state and request receipts |
 | 026 | Public event feedback with independent answer snapshots and idempotent submissions |
+| 027 | Optional custom-survey expiration and audited expiration changes |
+
+Apply `027_survey_expiration.sql` before deploying editable survey expiration.
+It allows a survey deadline to be null and adds the expiration-change receipt
+action. It does not alter existing survey deadlines or device deadlines; remove
+Advisor Studio's expiration through the authenticated officer control after
+deployment. Device deadlines remain finite. Before a code rollback, restore a
+finite deadline for every survey with no expiration, since earlier code requires
+one.
 
 Apply `026_event_feedback.sql` before deploying public event feedback. It creates
 one response table and two event lookup indexes, and grants the existing runtime

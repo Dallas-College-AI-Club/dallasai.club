@@ -44,6 +44,12 @@ Access permissions and the linked event remain fixed after first publication.
 Earlier answers retain their original question labels, choices and types in results,
 PDFs, summaries and CSV exports. A form loaded before the edit must be reopened.
 
+For an open or expired published survey, **Change expiration** sets a future date
+and time in Central Time or **Never expires**, without editing or republishing the
+questions. Saving a future date or removing expiration reopens an expired survey.
+The invitation, responses and short link stay the same. Advisor Studio does not
+expire. Closed and archived surveys must use their existing lifecycle controls.
+
 **Archive survey** keeps its questions, respondents and answers in **Archived**.
 Restoring a previously published survey leaves answering closed until it is edited
 and published again; an unpublished survey returns to Drafts. **Delete survey
@@ -167,9 +173,9 @@ consolidated answers and CSV use the same response view and name/email filter.
 The archived response view also loads ten responses per page. Invalid or closed
 invitations show a neutral unavailable screen with the club contact address.
 
-Advisor Studio is a private collection round with a 30-day deadline. The
-deadline appears in the welcome page, question preview, respondent navigation,
-and officer view. The invitation secret stays in the URL fragment and a
+Advisor Studio is a private survey with no expiration. Its welcome page,
+question preview, respondent navigation and officer view show that it does not
+expire. The invitation secret stays in the URL fragment and a
 same-origin request header, outside ordinary URL/access logs. Never add survey
 request bodies or private link headers to logs or analytics.
 
@@ -219,8 +225,10 @@ view opens. The respondent id is never an email address.
   email. The server verifies the Neon session and email verification, binds
   the account ID to the survey member, and issues a survey-scoped device token.
 - Device tokens are random, stored as SHA-256 digests, and carried in persistent
-  HttpOnly, SameSite=Strict cookies (Secure on HTTPS). They expire with the
-  collection round. Returning on the same browser needs no new code. Signing
+  HttpOnly, SameSite=Strict cookies (Secure on HTTPS). New devices expire after
+  at most 90 days, or sooner when the survey expires. Existing device deadlines
+  stay unchanged when a survey's expiration is extended or removed. Returning
+  before the device deadline needs no new code. Signing
   out, revoking a device/member, closing the survey, or expiry denies access.
 - Officers keep the existing ADMIN_EMAILS plus Neon admin-role check. Advisor
   survey membership grants no inbox or event-editor access. An account may

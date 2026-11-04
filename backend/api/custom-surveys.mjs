@@ -306,7 +306,7 @@ export function customSurveysHandler({
       }
       if (action === 'verify-device') {
         if (req.method !== 'POST') throw new RequestError(405, 'Use POST.');
-        const { token } = await rememberDevice(
+        const { token, expiresAt } = await rememberDevice(
           db,
           survey,
           (await getSession(req))?.user,
@@ -316,10 +316,7 @@ export function customSurveysHandler({
           deviceHeader(
             survey,
             token,
-            Math.max(
-              0,
-              Math.floor((new Date(survey.expires_at) - Date.now()) / 1000),
-            ),
+            Math.max(0, Math.floor((expiresAt - Date.now()) / 1000)),
           ),
         );
         return send(res, 200, { verified: true });

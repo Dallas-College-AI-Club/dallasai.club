@@ -6,7 +6,7 @@ export async function eventFeedbackLinks(db, eventIds) {
   const { rows } = await db.query(
     `SELECT id,status,expires_at,link_digest,short_link,definition->>'eventId' AS event_id
     FROM club_forms.custom_surveys
-    WHERE status='open' AND expires_at>now()
+    WHERE status='open' AND (expires_at IS NULL OR expires_at>now())
       AND definition->>'eventId'=ANY($1::text[])
       AND definition->>'template'='feedback'
       AND definition->>'audience'='public'
@@ -36,7 +36,9 @@ export async function surveyCatalog(db) {
   return rows.map(({ link_digest, preview_digest, ...survey }) => ({
     ...survey,
     expired:
-      survey.status === 'open' && new Date(survey.expires_at) <= new Date(),
+      survey.status === 'open' &&
+      survey.expires_at !== null &&
+      new Date(survey.expires_at) <= new Date(),
     ...builderLinks({ ...survey, link_digest, preview_digest }),
   }));
 }

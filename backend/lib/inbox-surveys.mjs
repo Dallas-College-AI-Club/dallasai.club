@@ -26,7 +26,7 @@ export const inboxSource = `WITH inbox_rows AS (
 export const currentInbox = (upcoming = '$5', recentEvents = '$6') => `CASE
   WHEN e.kind='rsvp' THEN coalesce(e.data->>'eventId','')=ANY(${upcoming}::text[])
   WHEN e.kind='feedback' THEN coalesce(e.data->>'eventId','')=ANY(${recentEvents}::text[])
-  WHEN e.kind='survey' THEN (e.data->>'expiresAt')::timestamptz>now() OR e.created_at>=now()-interval '14 days'
+  WHEN e.kind='survey' THEN (e.data ? 'expiresAt' AND e.data->>'expiresAt' IS NULL) OR (e.data->>'expiresAt')::timestamptz>now() OR e.created_at>=now()-interval '14 days'
   ELSE e.created_at>=now()-interval '14 days' END`;
 
 export const inboxCountsQuery = `${inboxSource}
